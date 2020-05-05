@@ -1,14 +1,8 @@
-if(EXISTS "$ENV{MV_COMMON_BASE}")
-    set(XLINK_ROOT_DIR "$ENV{MV_COMMON_BASE}/components/XLink")
-else()
-    set(XLINK_ROOT_DIR ${CMAKE_CURRENT_LIST_DIR})
-endif(EXISTS "$ENV{MV_COMMON_BASE}")
+set(XLINK_ROOT_DIR ${CMAKE_CURRENT_LIST_DIR})
 
-set(XLINK_INCLUDE
-        ${XLINK_ROOT_DIR}/shared/include
-        ${XLINK_ROOT_DIR}/pc/protocols)
+set(XLINK_INCLUDE ${XLINK_ROOT_DIR}/shared/include)
 
-set(XLINK_PRIVATE_INCLUDE)
+set(XLINK_PRIVATE_INCLUDE ${XLINK_ROOT_DIR}/pc/protocols)
 
 file(GLOB PC_SRC             "${XLINK_ROOT_DIR}/pc/*.c")
 file(GLOB PC_PROTO_SRC       "${XLINK_ROOT_DIR}/pc/protocols/*.c")
