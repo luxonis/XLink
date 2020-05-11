@@ -75,6 +75,15 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
 XLinkError_t XLinkConnect(XLinkHandler_t* handler);
 
 /**
+ * @brief Boots firmware binary from memory to the remote device
+ * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
+ * @param buffer - mvcmd file contents
+ * @param size - size of buffer
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size);
+
+/**
  * @brief Boots specified firmware binary to the remote device
  * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
  * @param binaryPath - path to the *.mvcmd file
