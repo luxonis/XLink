@@ -7,10 +7,10 @@
 //#define _CRT_SECURE_NO_WARNINGS
 
 #define INITGUID
-#include <Windows.h>
+#include <windows.h>
 #include <winusb.h>
-#include <Usbiodef.h>
-#include <SetupAPI.h>
+#include <usbiodef.h>
+#include <setupapi.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
