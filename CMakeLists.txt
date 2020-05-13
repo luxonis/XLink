@@ -20,6 +20,14 @@ if(NOT WIN32)
             ${LIBUSB_LIBRARY})
 endif()
 
+if(MINGW)
+    target_link_libraries(${TARGET_NAME}
+        PUBLIC  
+            libwinusb.a
+            libsetupapi.a
+    )
+endif()
+
 target_include_directories(${TARGET_NAME}
     PUBLIC
         $<INSTALL_INTERFACE:include>

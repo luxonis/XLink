@@ -6,15 +6,33 @@
 extern "C" {
 #endif
 
-#pragma once
+#ifndef _WIN_TIME_H
+#define _WIN_TIME_H
+
+#if __STDC_VERSION__ >= 199901L
+#define _XOPEN_SOURCE 600
+#else
+#define _XOPEN_SOURCE 500
+#endif /* __STDC_VERSION__ */
+
+#include "time.h"
 #include "windows.h"
+#ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME      0
+#endif
+
+#ifndef CLOCK_REALTIME
 #define CLOCK_MONOTONIC     0
+#endif
+
 #define sleep(x)            Sleep((DWORD)x)
 #define usleep(x)           Sleep((DWORD)(x/1000))
 
 
 int clock_gettime(int, struct timespec *);
+
+#endif // _WIN_TIME_H
+
 #ifdef __cplusplus
 }
 #endif

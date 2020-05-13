@@ -18,9 +18,9 @@
 #include "win_time.h"
 #include <windows.h>
 #include <setupapi.h>
-#include <strsafe.h>
 #include <cfgmgr32.h>
 #include <tchar.h>
+#include <strsafe.h>
 #else
 #include <sys/types.h>
 #include <sys/ioctl.h>
