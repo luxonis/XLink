@@ -21,7 +21,7 @@ extern "C" {
 #define CLOCK_REALTIME      0
 #endif
 
-#ifndef CLOCK_REALTIME
+#ifndef CLOCK_MONOTONIC
 #define CLOCK_MONOTONIC     0
 #endif
 
