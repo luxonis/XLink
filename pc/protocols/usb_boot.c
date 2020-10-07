@@ -332,14 +332,16 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                     *device = dev;
                     devs = 0;
 
+                    int speed = libusb_get_device_speed(dev);
+                    char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps"};
                     libusb_device_handle *dev_handle;
                     if (libusb_open(dev, &dev_handle) == 0) {
                         unsigned char sn[128];
                         if (libusb_get_string_descriptor_ascii(dev_handle, desc.iSerialNumber, sn, sizeof sn) < 0)
                             printf("Failed to get string descriptor\n");
                         else
-                            printf("VID:%04x PID:%04x address:%s serial:%s\n",
-                                    desc.idVendor, desc.idProduct, input_addr, sn);
+                            printf("VID:%04x PID:%04x address:%s serial:%s Speed:%s\n",
+                                    desc.idVendor, desc.idProduct, input_addr, sn, speed_str[speed]);
                         libusb_close(dev_handle);
                     }
 
