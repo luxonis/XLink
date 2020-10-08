@@ -73,8 +73,8 @@ XLinkError_t XLinkGetDeviceNameExtended(int index, char* name, int nameSize, int
     return getDeviceName(index, name, nameSize, platform, state);
 }
 
-XLinkError_t XLinkBootRemote(const char* deviceName, const char* binaryPath)
-{
+XLinkError_t XLinkBootRemote(const char* deviceName, const char* binaryPath, char* usb_speed)
+{ 
     XLINK_RET_IF(deviceName == NULL);
     XLINK_RET_IF(binaryPath == NULL);
 
@@ -82,7 +82,7 @@ XLinkError_t XLinkBootRemote(const char* deviceName, const char* binaryPath)
     deviceDesc.protocol = glHandler != NULL ? glHandler->protocol : USB_VSC;
     XLINK_RET_IF(mv_strcpy(deviceDesc.name, XLINK_MAX_NAME_SIZE, deviceName) != EOK);
 
-    return XLinkBoot(&deviceDesc, binaryPath);
+    return XLinkBoot(&deviceDesc, binaryPath, usb_speed);
 }
 
 XLinkError_t XLinkDisconnect(linkId_t id)

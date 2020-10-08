@@ -177,7 +177,7 @@ int XLinkPlatformBootMemoryRemote(deviceDesc_t* deviceDesc, uint8_t* buffer, lon
     }
 }
 
-int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath)
+int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath, char* usb_speed)
 {
     int rc = 0;
     FILE *file;
@@ -214,7 +214,7 @@ int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath)
     }
     fclose(file);
 
-    rc = XLinkPlatformBootMemoryRemote(deviceDesc, image_buffer, file_size);
+    rc = XLinkPlatformBootMemoryRemoteSpeed(deviceDesc, image_buffer, file_size, usb_speed);
     free(image_buffer);
 
     return rc;

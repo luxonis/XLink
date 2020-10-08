@@ -225,9 +225,9 @@ XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long siz
     return X_LINK_COMMUNICATION_FAIL;
 }
 
-XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath)
+XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath, char* usb_device)
 {
-    if (XLinkPlatformBootRemote(deviceDesc, binaryPath) == 0) {
+    if (XLinkPlatformBootRemote(deviceDesc, binaryPath, usb_device) == 0) {
         return X_LINK_SUCCESS;
     }
 
