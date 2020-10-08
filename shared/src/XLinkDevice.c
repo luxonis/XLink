@@ -216,9 +216,9 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size)
+XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size, char* usb_speed)
 {
-    if (XLinkPlatformBootMemoryRemote(deviceDesc, buffer, size) == 0) {
+    if (XLinkPlatformBootMemoryRemoteSpeed(deviceDesc, buffer, size, usb_speed) == 0) {
         return X_LINK_SUCCESS;
     }
 

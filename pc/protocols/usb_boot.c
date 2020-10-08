@@ -385,6 +385,145 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
     }
     return USB_BOOT_DEVICE_NOT_FOUND;
 }
+
+
+usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
+                                        unsigned addrsize, void **device, int vid, int pid, uint16_t* bcdusb, char* usb_speed) {
+    if (pthread_mutex_lock(&globalMutex)) {
+        fprintf(stderr, "Mutex lock failed\n");
+        return USB_BOOT_ERROR;
+    }
+    int searchByName = 0;
+    static libusb_device **devs = NULL;
+    libusb_device *dev = NULL;
+    struct libusb_device_descriptor desc;
+    int count = 0;
+    size_t i;
+    int res;
+
+    if (!initialized) {
+        if (usb_loglevel)
+            fprintf(stderr, "Library has not been initialized when loaded\n");
+        if (pthread_mutex_unlock(&globalMutex)) {
+            fprintf(stderr, "Mutex unlock failed\n");
+        }
+        return USB_BOOT_ERROR;
+    }
+
+    if (strlen(input_addr) > 1) {
+        searchByName = 1;
+    }
+
+    // Update device list if empty or if indx 0
+    if (!devs || idx == 0) {
+        if (devs) {
+            libusb_free_device_list(devs, 1);
+            devs = 0;
+        }
+        if ((res = libusb_get_device_list(NULL, &devs)) < 0) {
+            if (usb_loglevel)
+                fprintf(stderr, "Unable to get USB device list: %s\n", libusb_strerror(res));
+            if (pthread_mutex_unlock(&globalMutex)) {
+                fprintf(stderr, "Mutex unlock failed\n");
+            }
+            return USB_BOOT_ERROR;
+        }
+    }
+
+    // Loop over all usb devices, increase count only if myriad device
+    i = 0;
+    while ((dev = devs[i++]) != NULL) {
+        if ((res = libusb_get_device_descriptor(dev, &desc)) < 0) {
+            if (usb_loglevel)
+                fprintf(stderr, "Unable to get USB device descriptor: %s\n", libusb_strerror(res));
+            continue;
+        }
+
+        // If found device have the same id and vid as input
+        if ( (desc.idVendor == vid && desc.idProduct == pid)
+             // Any myriad device
+             || (vid == AUTO_VID && pid == AUTO_PID
+                 && isMyriadDevice(desc.idVendor, desc.idProduct))
+             // Any not booted myriad device
+             || (vid == AUTO_VID && (pid == AUTO_UNBOOTED_PID)
+                 && isNotBootedMyriadDevice(desc.idVendor, desc.idProduct))
+             // Any not booted with specific pid
+             || (vid == AUTO_VID && pid == desc.idProduct
+                 && isNotBootedMyriadDevice(desc.idVendor, desc.idProduct))
+             // Any booted device
+             || (vid == AUTO_VID && pid == DEFAULT_OPENPID
+                 && isBootedMyriadDevice(desc.idVendor, desc.idProduct)) )
+        {
+            if (device) {
+                const char *dev_addr = gen_addr(dev, get_pid_by_name(input_addr));
+                if (!strcmp(dev_addr, input_addr)) {
+                    if (usb_loglevel > 1) {
+                        fprintf(stderr, "Found Address: %s - VID/PID %04x:%04x\n",
+                                input_addr, desc.idVendor, desc.idProduct);
+                    }
+                    libusb_ref_device(dev);
+                    libusb_free_device_list(devs, 1);
+                    if (bcdusb)
+                        *bcdusb = desc.bcdUSB;
+                    *device = dev;
+                    devs = 0;
+
+                    int speed = libusb_get_device_speed(dev);
+                    char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps"};
+                    mv_strcpy(usb_speed, 15 ,speed_str[speed]);
+
+                    libusb_device_handle *dev_handle;
+                    if (libusb_open(dev, &dev_handle) == 0) {
+                        unsigned char sn[128];
+                        if (libusb_get_string_descriptor_ascii(dev_handle, desc.iSerialNumber, sn, sizeof sn) < 0)
+                            printf("Failed to get string descriptor\n");
+                        else
+                            printf("VID:%04x PID:%04x address:%s serial:%s Speed:%s\n",
+                                    desc.idVendor, desc.idProduct, input_addr, sn, speed_str[speed]);
+                        libusb_close(dev_handle);
+                    }
+                    printf("Speed is: %s \n", usb_speed );
+                    if (pthread_mutex_unlock(&globalMutex)) {
+                        fprintf(stderr, "Mutex unlock failed\n");
+                    }
+                    return USB_BOOT_SUCCESS;
+                }
+            } else if (searchByName) {
+                const char *dev_addr = gen_addr(dev, desc.idProduct);
+                // If the same add as input
+                if (!strcmp(dev_addr, input_addr)) {
+                    if (usb_loglevel > 1) {
+                        fprintf(stderr, "Found Address: %s - VID/PID %04x:%04x\n",
+                                input_addr, desc.idVendor, desc.idProduct);
+                    }
+
+                    if (pthread_mutex_unlock(&globalMutex)) {
+                        fprintf(stderr, "Mutex unlock failed\n");
+                    }
+                    return USB_BOOT_SUCCESS;
+                }
+            } else if (idx == count) {
+                const char *caddr = gen_addr(dev, desc.idProduct);
+                if (usb_loglevel > 1)
+                    fprintf(stderr, "Device %d Address: %s - VID/PID %04x:%04x\n",
+                            idx, caddr, desc.idVendor, desc.idProduct);
+                mv_strncpy(input_addr, addrsize, caddr, addrsize - 1);
+                if (pthread_mutex_unlock(&globalMutex)) {
+                    fprintf(stderr, "Mutex unlock failed\n");
+                }
+                return USB_BOOT_SUCCESS;
+            }
+            count++;
+        }
+    }
+    libusb_free_device_list(devs, 1);
+    devs = 0;
+    if (pthread_mutex_unlock(&globalMutex)) {
+        fprintf(stderr, "Mutex unlock failed\n");
+    }
+    return USB_BOOT_DEVICE_NOT_FOUND;
+}
+
 #endif
 
 #if (defined(_WIN32) || defined(_WIN64) )
@@ -540,7 +679,7 @@ static libusb_device_handle *usb_open_device(libusb_device *dev, uint8_t *endpoi
 
 
 #if (!defined(_WIN32) && !defined(_WIN64) )
-static int wait_findopen(const char *device_address, int timeout, libusb_device **dev, libusb_device_handle **devh, uint8_t *endpoint,uint16_t* bcdusb)
+static int wait_findopen(const char *device_address, int timeout, libusb_device **dev, libusb_device_handle **devh, uint8_t *endpoint,uint16_t* bcdusb, char* usb_speed)
 #else
 static int wait_findopen(const char *device_address, int timeout, libusb_device **dev, libusb_device_handle **devh, uint8_t *endpoint)
 #endif
@@ -570,8 +709,8 @@ static int wait_findopen(const char *device_address, int timeout, libusb_device 
         highres_gettime(&t1);
         int addr_size = strlen(device_address);
 #if (!defined(_WIN32) && !defined(_WIN64) )
-        rc = usb_find_device_with_bcd(0, (char*)device_address, addr_size, (void**)dev,
-                                      DEFAULT_VID, get_pid_by_name(device_address), bcdusb);
+        rc = usb_find_device_with_bcd_speed(0, (char*)device_address, addr_size, (void**)dev,
+                                      DEFAULT_VID, get_pid_by_name(device_address), bcdusb, usb_speed);
 #else
         rc = usb_find_device(0, (char *)device_address, addr_size, (void **)dev,
             DEFAULT_VID, get_pid_by_name(device_address));
@@ -678,7 +817,7 @@ static int send_file(libusb_device_handle *h, uint8_t endpoint, const uint8_t *t
     return 0;
 }
 
-int usb_boot(const char *addr, const void *mvcmd, unsigned size)
+int usb_boot(const char *addr, const void *mvcmd, unsigned size, char* usb_speed)
 {
     int rc = 0;
     uint8_t endpoint;
@@ -701,7 +840,7 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
     libusb_device_handle *h;
     uint16_t bcdusb=-1;
 
-    rc = wait_findopen(addr, connect_timeout, &dev, &h, &endpoint,&bcdusb);
+    rc = wait_findopen(addr, connect_timeout, &dev, &h, &endpoint,&bcdusb, usb_speed);
 
     if(rc) {
         return rc;

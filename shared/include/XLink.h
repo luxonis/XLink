@@ -81,7 +81,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler);
  * @param size - size of buffer
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size);
+XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size, char* usb_speed);
 
 /**
  * @brief Boots specified firmware binary to the remote device
