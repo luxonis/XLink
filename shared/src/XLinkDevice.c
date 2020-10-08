@@ -171,7 +171,7 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
 }
 
 //Called only from app - per device
-XLinkError_t XLinkConnect(XLinkHandler_t* handler)
+XLinkError_t XLinkConnect(XLinkHandler_t* handler, char* usb_speed)
 {
     XLINK_RET_IF(handler == NULL);
     if (strnlen(handler->devicePath, MAX_PATH_LENGTH) < 2) {
@@ -185,7 +185,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 
     link->deviceHandle.protocol = handler->protocol;
     int connectStatus = XLinkPlatformConnect(handler->devicePath2, handler->devicePath,
-                                             link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
+                                             link->deviceHandle.protocol, &link->deviceHandle.xLinkFD, usb_speed);
 
     if (connectStatus < 0) {
         /**
