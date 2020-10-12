@@ -352,6 +352,7 @@ usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
                             printf("VID:%04x PID:%04x address:%s serial:%s Speed:%s\n",
                                     desc.idVendor, desc.idProduct, input_addr, sn, speed_str[speed]);
                         libusb_close(dev_handle);
+                        mv_strcpy(usb_speed + 15, 128 ,sn);
                     }
                     printf("Speed is: %s \n", usb_speed );
                     if (pthread_mutex_unlock(&globalMutex)) {
