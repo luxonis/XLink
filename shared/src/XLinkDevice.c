@@ -216,18 +216,18 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler, char* usb_speed)
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size, char* usb_speed)
+XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size)
 {
-    if (XLinkPlatformBootMemoryRemoteSpeed(deviceDesc, buffer, size, usb_speed) == 0) {
+    if (XLinkPlatformBootMemoryRemote(deviceDesc, buffer, size) == 0) {
         return X_LINK_SUCCESS;
     }
 
     return X_LINK_COMMUNICATION_FAIL;
 }
 
-XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath, char* usb_device)
+XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath)
 {
-    if (XLinkPlatformBootRemote(deviceDesc, binaryPath, usb_device) == 0) {
+    if (XLinkPlatformBootRemote(deviceDesc, binaryPath) == 0) {
         return X_LINK_SUCCESS;
     }
 
