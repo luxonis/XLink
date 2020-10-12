@@ -259,7 +259,7 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
 
 
 usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
-                                        unsigned addrsize, void **device, int vid, int pid, uint16_t* bcdusb, char* usb_speed) {
+                                        unsigned addrsize, void **device, int vid, int pid, uint16_t* bcdusb, char* dev_conn_info) {
     if (pthread_mutex_lock(&globalMutex)) {
         fprintf(stderr, "Mutex lock failed\n");
         return USB_BOOT_ERROR;
@@ -353,10 +353,10 @@ usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
                             printf("VID:%04x PID:%04x address:%s serial:%s Speed:%s\n",
                                     desc.idVendor, desc.idProduct, input_addr, sn, speed_str[speed]);
                         libusb_close(dev_handle);
-                        if(usb_speed != NULL){
-                            mv_strcpy(usb_speed, 15 ,speed_str[speed]);
-                            mv_strcpy(usb_speed + 15, 128 ,sn);
-                            printf("Speed is: %s \n", usb_speed );
+                        if(dev_conn_info != NULL){
+                            mv_strcpy(dev_conn_info, 15 ,speed_str[speed]);
+                            mv_strcpy(dev_conn_info + 15, 128 ,sn);
+                            printf("Speed is: %s \n", dev_conn_info );
 
                         }
                     }

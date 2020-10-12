@@ -72,7 +72,7 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
  * @param[in,out] handler – XLink communication parameters (file path name for underlying layer)
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkConnect(XLinkHandler_t* handler, char* usb_speed);
+XLinkError_t XLinkConnect(XLinkHandler_t* handler, char* dev_conn_info);
 
 /**
  * @brief Boots firmware binary from memory to the remote device

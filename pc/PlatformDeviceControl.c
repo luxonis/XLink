@@ -49,7 +49,7 @@ static char* pciePlatformStateToStr(const pciePlatformState_t platformState);
 
 #ifdef USE_USB_VSC
 static double seconds();
-static libusb_device_handle *usbLinkOpen(const char *path, char* usb_speed);
+static libusb_device_handle *usbLinkOpen(const char *path, char* dev_conn_info);
 static void usbLinkClose(libusb_device_handle *f);
 #endif
 // ------------------------------------
@@ -178,9 +178,9 @@ int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath)
 }
 
 int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, 
-                XLinkProtocol_t protocol, void** fd, char* usb_speed)
+                XLinkProtocol_t protocol, void** fd, char* dev_conn_info)
 {
-    return open_fcts[protocol](devPathRead, devPathWrite, fd, usb_speed);
+    return open_fcts[protocol](devPathRead, devPathWrite, fd, dev_conn_info);
 }
 
 int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
@@ -226,7 +226,7 @@ char* pciePlatformStateToStr(const pciePlatformState_t platformState) {
 }
 
 #ifdef USE_USB_VSC
-libusb_device_handle *usbLinkOpen(const char *path, char* usb_speed)
+libusb_device_handle *usbLinkOpen(const char *path, char* dev_conn_info)
 {
     if (path == NULL) {
         return 0;
@@ -242,7 +242,7 @@ libusb_device_handle *usbLinkOpen(const char *path, char* usb_speed)
 #if (!defined(_WIN32) && !defined(_WIN64))
         uint16_t  bcdusb = -1;
         rc = usb_find_device_with_bcd_speed(0, (char *)path, size, (void **)&dev,
-                                     DEFAULT_OPENVID, DEFAULT_OPENPID, &bcdusb, usb_speed);
+                                     DEFAULT_OPENVID, DEFAULT_OPENPID, &bcdusb, dev_conn_info);
 #else
         rc = usb_find_device(0, (char *)path, size, (void **)&dev, DEFAULT_OPENVID, DEFAULT_OPENPID);
 #endif
@@ -306,7 +306,7 @@ void usbLinkClose(libusb_device_handle *f)
 // Wrappers implementation. Begin.
 // ------------------------------------
 
-int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd, char* usb_speed)
+int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd, char* dev_conn_info)
 {
 #if (!defined(USE_USB_VSC))
     #ifdef USE_LINK_JTAG
@@ -391,7 +391,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 #endif  /*USE_LINK_JTAG*/
 #else
-    *fd = usbLinkOpen(devPathWrite, usb_speed);
+    *fd = usbLinkOpen(devPathWrite, dev_conn_info);
     if (*fd == 0)
     {
         /* could fail due to port name change */
