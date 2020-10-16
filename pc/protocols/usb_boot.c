@@ -619,6 +619,7 @@ static int send_file(libusb_device_handle *h, uint8_t endpoint, const uint8_t *t
     elapsedTime = 0;
     twb = 0;
     p = tx_buf;
+    int send_zlp = ((filesize % 512) == 0);
 
 #if (!defined(_WIN32) && !defined(_WIN64) )
     if(bcdusb < 0x200) {
@@ -627,7 +628,7 @@ static int send_file(libusb_device_handle *h, uint8_t endpoint, const uint8_t *t
 #endif
     if(usb_loglevel > 1)
         fprintf(stderr, "Performing bulk write of %u bytes...\n", filesize);
-    while((unsigned)twb < filesize)
+    while(((unsigned)twb < filesize) || send_zlp)
     {
         highres_gettime(&t1);
         wb = filesize - twb;
@@ -639,7 +640,9 @@ static int send_file(libusb_device_handle *h, uint8_t endpoint, const uint8_t *t
 #else
         rc = usb_bulk_write(h, endpoint, (void *)p, wb, &wbr, write_timeout);
 #endif
-        if(rc || (wb != wbr))
+        if(usb_loglevel)
+            fprintf(stderr, " -write %d, written %d, status %s\n", wb, wbr, libusb_strerror(rc));
+        if((rc || (wb != wbr)) && (wb != 0)) // Don't check the return code for ZLP
         {
             if(rc == LIBUSB_ERROR_NO_DEVICE)
                 break;
@@ -654,6 +657,8 @@ static int send_file(libusb_device_handle *h, uint8_t endpoint, const uint8_t *t
         if (elapsedTime > DEFAULT_SEND_FILE_TIMEOUT) {
             return USB_BOOT_TIMEOUT;
         }
+        if(wb == 0) // ZLP just sent, last packet
+            break;
         twb += wbr;
         p += wbr;
     }
