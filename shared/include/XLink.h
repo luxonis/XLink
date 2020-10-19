@@ -108,7 +108,6 @@ XLinkError_t XLinkResetAll();
 UsbSpeed_t XLinkGetUSBSpeed();
 char* XLinkGetMxSerial();
 
-
 #endif // __PC__
 
 /**
