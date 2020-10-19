@@ -48,11 +48,11 @@ typedef enum{
 } XLinkPlatform_t;
 
 typedef enum{
-    USB_UNKNOWN = 0,
-    USB_0,
-    USB_1,
-    USB_2,
-    USB_3
+    X_LINK_USB_UNKNOWN = 0,
+    X_LINK_USB_0,
+    X_LINK_USB_1,
+    X_LINK_USB_2,
+    X_LINK_USB_3
 } UsbSpeed_t;
 
 typedef enum{

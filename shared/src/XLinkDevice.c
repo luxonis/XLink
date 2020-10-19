@@ -346,12 +346,16 @@ UsbSpeed_t XLinkGetUSBSpeed(){
     #if (!defined(_WIN32) && !defined(_WIN64) )
         return get_usb_speed();
     #else
-        return USB_UNKNOWN;
+        return X_LINK_USB_UNKNOWN;
     #endif
 }
 
 char* XLinkGetMxSerial(){
-    return get_mx_serial();
+    #if (!defined(_WIN32) && !defined(_WIN64) )
+        return get_mx_serial();
+    #else
+        return "UNKNOWN";
+    #endif
 }
 
 // ------------------------------------
