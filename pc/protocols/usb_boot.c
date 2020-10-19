@@ -45,7 +45,7 @@ static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int connect_timeout = DEFAULT_CONNECT_TIMEOUT;
 static int initialized;
-static UsbSpeed_t usb_speed_enum = USB_UNKNOWN;
+static UsbSpeed_t usb_speed_enum = X_LINK_USB_UNKNOWN;
 static char mx_serial[128] = { 0 };
 
 typedef struct {
