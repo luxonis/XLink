@@ -1,6 +1,7 @@
 // Copyright (C) 2018-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
+#include "XLinkPublicDefines.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,11 +32,22 @@ typedef enum usbBootError {
     USB_BOOT_TIMEOUT
 } usbBootError_t;
 
+
+// typedef enum{
+//     USB_UNKNOWN = 0,
+//     USB_0,
+//     USB_1,
+//     USB_2,
+//     USB_3
+// } UsbSpeed_t;
+
 #if (!defined(_WIN32) && !defined(_WIN64))
 usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                                         unsigned addrsize, void **device, int vid, int pid,unsigned short* bcdusb);
 usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
                                         unsigned addrsize, void **device, int vid, int pid,unsigned short* bcdusb, char* usb_speed);
+UsbSpeed_t get_usb_speed();
+
 #else
 usbBootError_t usb_find_device(unsigned idx, char *addr, unsigned addrsize,
    void **device, int vid, int pid);

@@ -20,6 +20,7 @@
 #endif
 #include "XLinkLog.h"
 #include "XLinkStringUtils.h"
+#include "usb_boot.h"
 
 #define MAX_PATH_LENGTH (255)
 
@@ -341,6 +342,13 @@ XLinkError_t XLinkProfPrint()
     return X_LINK_SUCCESS;
 }
 
+UsbSpeed_t XLinkGetUSBSpeed(){
+    #if (!defined(_WIN32) && !defined(_WIN64) )
+        return get_usb_speed();
+    #else
+        return USB_UNKNOWN;
+    #endif
+}
 // ------------------------------------
 // API implementation. End.
 // ------------------------------------

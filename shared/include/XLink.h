@@ -106,6 +106,7 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkResetAll();
+UsbSpeed_t XLinkGetUSBSpeed();
 
 #endif // __PC__
 
@@ -116,6 +117,7 @@ XLinkError_t XLinkResetAll();
 XLinkError_t XLinkProfStart();
 XLinkError_t XLinkProfStop();
 XLinkError_t XLinkProfPrint();
+
 
 // ------------------------------------
 // Device management. End.

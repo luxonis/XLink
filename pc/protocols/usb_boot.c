@@ -23,7 +23,6 @@
 #include "usb_boot.h"
 
 #include "XLinkStringUtils.h"
-#include "XLinkPublicDefines.h"
 
 
 #define DEFAULT_VID                 0x03E7
@@ -46,7 +45,7 @@ static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int connect_timeout = DEFAULT_CONNECT_TIMEOUT;
 static int initialized;
-
+static UsbSpeed_t usb_speed_enum = USB_UNKNOWN;
 typedef struct {
     int pid;
     char name[10];
@@ -257,6 +256,9 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
     return usb_find_device_with_bcd_speed(idx, input_addr, addrsize, device, vid, pid, bcdusb, speed);
 }
 
+UsbSpeed_t get_usb_speed(){
+    return usb_speed_enum;
+}
 
 usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
                                         unsigned addrsize, void **device, int vid, int pid, uint16_t* bcdusb, char* usb_speed) {
@@ -342,7 +344,7 @@ usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
                     int speed = libusb_get_device_speed(dev);
                     char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps"};
                     mv_strcpy(usb_speed, 15 ,speed_str[speed]);
-
+                    usb_speed_enum = speed;
                     libusb_device_handle *dev_handle;
                     if (libusb_open(dev, &dev_handle) == 0) {
                         unsigned char sn[128];

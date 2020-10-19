@@ -48,6 +48,14 @@ typedef enum{
 } XLinkPlatform_t;
 
 typedef enum{
+    USB_UNKNOWN = 0,
+    USB_0,
+    USB_1,
+    USB_2,
+    USB_3
+} UsbSpeed_t;
+
+typedef enum{
     X_LINK_ANY_STATE = 0,
     X_LINK_BOOTED,
     X_LINK_UNBOOTED,
