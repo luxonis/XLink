@@ -44,16 +44,18 @@ typedef enum usbBootError {
 #if (!defined(_WIN32) && !defined(_WIN64))
 usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                                         unsigned addrsize, void **device, int vid, int pid,unsigned short* bcdusb);
-usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
-                                        unsigned addrsize, void **device, int vid, int pid,unsigned short* bcdusb, char* usb_speed);
+// usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
+                                        // unsigned addrsize, void **device, int vid, int pid,unsigned short* bcdusb, char* usb_speed);
 UsbSpeed_t get_usb_speed();
+
+char* get_mx_serial();
 
 #else
 usbBootError_t usb_find_device(unsigned idx, char *addr, unsigned addrsize,
    void **device, int vid, int pid);
 void initialize_usb_boot();
 #endif
-int usb_boot(const char *addr, const void *mvcmd, unsigned size, char* usb_speed);
+int usb_boot(const char *addr, const void *mvcmd, unsigned size);
 int get_pid_by_name(const char* name);
 
 

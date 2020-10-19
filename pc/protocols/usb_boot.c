@@ -21,7 +21,7 @@
 #include <pthread.h>
 #endif
 #include "usb_boot.h"
-
+#include "XLinkLog.h"
 #include "XLinkStringUtils.h"
 
 
@@ -46,6 +46,8 @@ static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int connect_timeout = DEFAULT_CONNECT_TIMEOUT;
 static int initialized;
 static UsbSpeed_t usb_speed_enum = USB_UNKNOWN;
+static char mx_serial[128] = { 0 };
+
 typedef struct {
     int pid;
     char name[10];
@@ -251,17 +253,6 @@ static pthread_mutex_t globalMutex = PTHREAD_MUTEX_INITIALIZER;
  */
 usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                                         unsigned addrsize, void **device, int vid, int pid, uint16_t* bcdusb) {
-    
-    char speed = NULL;
-    return usb_find_device_with_bcd_speed(idx, input_addr, addrsize, device, vid, pid, bcdusb, speed);
-}
-
-UsbSpeed_t get_usb_speed(){
-    return usb_speed_enum;
-}
-
-usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
-                                        unsigned addrsize, void **device, int vid, int pid, uint16_t* bcdusb, char* usb_speed) {
     if (pthread_mutex_lock(&globalMutex)) {
         fprintf(stderr, "Mutex lock failed\n");
         return USB_BOOT_ERROR;
@@ -343,19 +334,19 @@ usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
 
                     int speed = libusb_get_device_speed(dev);
                     char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps"};
-                    mv_strcpy(usb_speed, 15 ,speed_str[speed]);
                     usb_speed_enum = speed;
+
                     libusb_device_handle *dev_handle;
                     if (libusb_open(dev, &dev_handle) == 0) {
                         unsigned char sn[128];
                         if (libusb_get_string_descriptor_ascii(dev_handle, desc.iSerialNumber, sn, sizeof sn) < 0)
-                            printf("Failed to get string descriptor\n");
+                            mvLog(MVLOG_INFO,"Failed to get string descriptor\n");
                         else
-                            printf("VID:%04x PID:%04x address:%s serial:%s Speed:%s\n",
+                            mvLog(MVLOG_INFO, "VID:%04x PID:%04x address:%s serial:%s Speed:%s\n", 
                                     desc.idVendor, desc.idProduct, input_addr, sn, speed_str[speed]);
                         libusb_close(dev_handle);
+                        mv_strcpy(mx_serial, 128 ,sn);
                     }
-                    printf("Speed is: %s \n", usb_speed );
                     if (pthread_mutex_unlock(&globalMutex)) {
                         fprintf(stderr, "Mutex unlock failed\n");
                     }
@@ -397,6 +388,27 @@ usbBootError_t usb_find_device_with_bcd_speed(unsigned idx, char *input_addr,
     return USB_BOOT_DEVICE_NOT_FOUND;
 }
 
+/** 
+ * getter to obtain the connected usb speed which was stored by 
+ * usb_find_device_with_bcd() during XLinkconnect().
+ * @note:
+ *  getter will return empty or different value
+ *  if called before XLinkConnect.
+ */ 
+UsbSpeed_t get_usb_speed(){
+    return usb_speed_enum;
+}
+
+/** 
+ * getter to obtain the Mx serial id which was received by 
+ * usb_find_device_with_bcd() during XLinkconnect().
+ * @note:
+ *  getter will return empty or different value
+ *  if called before XLinkConnect.
+ */
+char* get_mx_serial(){
+    return mx_serial;
+}
 #endif
 
 #if (defined(_WIN32) || defined(_WIN64) )
@@ -552,7 +564,7 @@ static libusb_device_handle *usb_open_device(libusb_device *dev, uint8_t *endpoi
 
 
 #if (!defined(_WIN32) && !defined(_WIN64) )
-static int wait_findopen(const char *device_address, int timeout, libusb_device **dev, libusb_device_handle **devh, uint8_t *endpoint,uint16_t* bcdusb, char* usb_speed)
+static int wait_findopen(const char *device_address, int timeout, libusb_device **dev, libusb_device_handle **devh, uint8_t *endpoint,uint16_t* bcdusb)
 #else
 static int wait_findopen(const char *device_address, int timeout, libusb_device **dev, libusb_device_handle **devh, uint8_t *endpoint)
 #endif
@@ -582,8 +594,8 @@ static int wait_findopen(const char *device_address, int timeout, libusb_device 
         highres_gettime(&t1);
         int addr_size = strlen(device_address);
 #if (!defined(_WIN32) && !defined(_WIN64) )
-        rc = usb_find_device_with_bcd_speed(0, (char*)device_address, addr_size, (void**)dev,
-                                      DEFAULT_VID, get_pid_by_name(device_address), bcdusb, usb_speed);
+        rc = usb_find_device_with_bcd(0, (char*)device_address, addr_size, (void**)dev,
+                                      DEFAULT_VID, get_pid_by_name(device_address), bcdusb);
 #else
         rc = usb_find_device(0, (char *)device_address, addr_size, (void **)dev,
             DEFAULT_VID, get_pid_by_name(device_address));
@@ -690,7 +702,7 @@ static int send_file(libusb_device_handle *h, uint8_t endpoint, const uint8_t *t
     return 0;
 }
 
-int usb_boot(const char *addr, const void *mvcmd, unsigned size, char* usb_speed)
+int usb_boot(const char *addr, const void *mvcmd, unsigned size)
 {
     int rc = 0;
     uint8_t endpoint;
@@ -713,7 +725,7 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size, char* usb_speed
     libusb_device_handle *h;
     uint16_t bcdusb=-1;
 
-    rc = wait_findopen(addr, connect_timeout, &dev, &h, &endpoint,&bcdusb, usb_speed);
+    rc = wait_findopen(addr, connect_timeout, &dev, &h, &endpoint,&bcdusb);
 
     if(rc) {
         return rc;

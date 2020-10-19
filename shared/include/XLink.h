@@ -72,7 +72,7 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
  * @param[in,out] handler – XLink communication parameters (file path name for underlying layer)
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkConnect(XLinkHandler_t* handler, char* usb_speed);
+XLinkError_t XLinkConnect(XLinkHandler_t* handler);
 
 /**
  * @brief Boots firmware binary from memory to the remote device
@@ -81,7 +81,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler, char* usb_speed);
  * @param size - size of buffer
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size, char* usb_speed);
+XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size);
 
 /**
  * @brief Boots specified firmware binary to the remote device
@@ -89,8 +89,7 @@ XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long siz
  * @param binaryPath - path to the *.mvcmd file
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath, char* usb_speed);
-
+XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath);
 
 /**
  * @brief Resets the remote device and close all open local handles for this device
@@ -107,6 +106,8 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  */
 XLinkError_t XLinkResetAll();
 UsbSpeed_t XLinkGetUSBSpeed();
+char* XLinkGetMxSerial();
+
 
 #endif // __PC__
 
@@ -199,7 +200,7 @@ XLinkError_t XLinkGetFillLevel(streamId_t streamId, int isRemote, int* fillLevel
 XLinkError_t XLinkGetDeviceName(int index, char* name, int nameSize);
 XLinkError_t XLinkGetDeviceNameExtended(int index, char* name, int nameSize, int pid);
 
-XLinkError_t XLinkBootRemote(const char* deviceName, const char* binaryPath, char* usb_speed);
+XLinkError_t XLinkBootRemote(const char* deviceName, const char* binaryPath);
 XLinkError_t XLinkDisconnect(linkId_t id);
 
 XLinkError_t XLinkGetAvailableStreams(linkId_t id);

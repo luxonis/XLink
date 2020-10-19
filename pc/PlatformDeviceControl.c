@@ -49,7 +49,7 @@ static char* pciePlatformStateToStr(const pciePlatformState_t platformState);
 
 #ifdef USE_USB_VSC
 static double seconds();
-static libusb_device_handle *usbLinkOpen(const char *path, char* usb_speed);
+static libusb_device_handle *usbLinkOpen(const char *path);
 static void usbLinkClose(libusb_device_handle *f);
 #endif
 // ------------------------------------
@@ -63,14 +63,14 @@ static void usbLinkClose(libusb_device_handle *f);
 // ------------------------------------
 
 static int usbPlatformConnect(const char *devPathRead,
-                              const char *devPathWrite, void **fd, char* usb_speed);
+                              const char *devPathWrite, void **fd);
 static int pciePlatformConnect(UNUSED const char *devPathRead,
-                               const char *devPathWrite, void **fd, char* speed);
+                               const char *devPathWrite, void **fd);
 
 static int usbPlatformClose(void *fd);
 static int pciePlatformClose(void *f);
 
-static int (*open_fcts[X_LINK_NMB_OF_PROTOCOLS])(const char*, const char*, void**, char*) = \
+static int (*open_fcts[X_LINK_NMB_OF_PROTOCOLS])(const char*, const char*, void**) = \
                             {usbPlatformConnect, usbPlatformConnect, pciePlatformConnect};
 static int (*close_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*) = \
                             {usbPlatformClose, usbPlatformClose, pciePlatformClose};
@@ -92,55 +92,12 @@ void XLinkPlatformInit()
 #endif
 }
 
-int XLinkPlatformBootMemoryRemoteSpeed(deviceDesc_t* deviceDesc, uint8_t* buffer, long size, char* usb_speed)
-{
-    int rc = 0;
-    long file_size = size;
-    void *image_buffer = (void *) buffer;
-
-    if (deviceDesc->protocol == X_LINK_PCIE) {
-        // Temporary open fd to boot device and then close it
-        int* pcieFd = NULL;
-        rc = pcie_init(deviceDesc->name, (void**)&pcieFd);
-        if (rc) {
-            return rc;
-        }
-#if (!defined(_WIN32) && !defined(_WIN64))
-        rc = pcie_boot_device(*(int*)pcieFd, image_buffer, file_size);
-#else
-        rc = pcie_boot_device(pcieFd, image_buffer, file_size);
-#endif
-
-        pcie_close(pcieFd); // Will not check result for now
-        return rc;
-    } else if (deviceDesc->protocol == X_LINK_USB_VSC) {
-
-        char subaddr[28+2];
-        // This will be the string to search for in /sys/dev/char links
-        int chars_to_write = snprintf(subaddr, 28, "-%s:", deviceDesc->name);
-        if(chars_to_write >= 28) {
-            printf("Path to your boot util is too long for the char array here!\n");
-        }
-        // Boot it
-        rc = usb_boot(deviceDesc->name, image_buffer, file_size, usb_speed);
-
-        if(!rc && usb_loglevel > 1) {
-            fprintf(stderr, "Boot successful, device address %s\n", deviceDesc->name);
-        }
-        return rc;
-    } else {
-        printf("Selected protocol not supported\n");
-        return -1;
-    }
-}
-
 
 int XLinkPlatformBootMemoryRemote(deviceDesc_t* deviceDesc, uint8_t* buffer, long size)
 {
     int rc = 0;
     long file_size = size;
     void *image_buffer = (void *) buffer;
-    char usb_speed[18] = {0};
     if (deviceDesc->protocol == X_LINK_PCIE) {
         // Temporary open fd to boot device and then close it
         int* pcieFd = NULL;
@@ -165,7 +122,7 @@ int XLinkPlatformBootMemoryRemote(deviceDesc_t* deviceDesc, uint8_t* buffer, lon
             printf("Path to your boot util is too long for the char array here!\n");
         }
         // Boot it
-        rc = usb_boot(deviceDesc->name, image_buffer, file_size, usb_speed);
+        rc = usb_boot(deviceDesc->name, image_buffer, file_size);
 
         if(!rc && usb_loglevel > 1) {
             fprintf(stderr, "Boot successful, device address %s\n", deviceDesc->name);
@@ -177,7 +134,7 @@ int XLinkPlatformBootMemoryRemote(deviceDesc_t* deviceDesc, uint8_t* buffer, lon
     }
 }
 
-int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath, char* usb_speed)
+int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath)
 {
     int rc = 0;
     FILE *file;
@@ -214,16 +171,16 @@ int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath, ch
     }
     fclose(file);
 
-    rc = XLinkPlatformBootMemoryRemoteSpeed(deviceDesc, image_buffer, file_size, usb_speed);
+    rc = XLinkPlatformBootMemoryRemote(deviceDesc, image_buffer, file_size);
     free(image_buffer);
 
     return rc;
 }
 
 int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, 
-                XLinkProtocol_t protocol, void** fd, char* usb_speed)
+                XLinkProtocol_t protocol, void** fd)
 {
-    return open_fcts[protocol](devPathRead, devPathWrite, fd, usb_speed);
+    return open_fcts[protocol](devPathRead, devPathWrite, fd);
 }
 
 int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
@@ -269,7 +226,7 @@ char* pciePlatformStateToStr(const pciePlatformState_t platformState) {
 }
 
 #ifdef USE_USB_VSC
-libusb_device_handle *usbLinkOpen(const char *path, char* usb_speed)
+libusb_device_handle *usbLinkOpen(const char *path)
 {
     if (path == NULL) {
         return 0;
@@ -284,8 +241,8 @@ libusb_device_handle *usbLinkOpen(const char *path, char* usb_speed)
 
 #if (!defined(_WIN32) && !defined(_WIN64))
         uint16_t  bcdusb = -1;
-        rc = usb_find_device_with_bcd_speed(0, (char *)path, size, (void **)&dev,
-                                     DEFAULT_OPENVID, DEFAULT_OPENPID, &bcdusb, usb_speed);
+        rc = usb_find_device_with_bcd(0, (char *)path, size, (void **)&dev,
+                                     DEFAULT_OPENVID, DEFAULT_OPENPID, &bcdusb);
 #else
         rc = usb_find_device(0, (char *)path, size, (void **)&dev, DEFAULT_OPENVID, DEFAULT_OPENPID);
 #endif
@@ -349,7 +306,7 @@ void usbLinkClose(libusb_device_handle *f)
 // Wrappers implementation. Begin.
 // ------------------------------------
 
-int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd, char* usb_speed)
+int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if (!defined(USE_USB_VSC))
     #ifdef USE_LINK_JTAG
@@ -434,7 +391,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 #endif  /*USE_LINK_JTAG*/
 #else
-    *fd = usbLinkOpen(devPathWrite, usb_speed);
+    *fd = usbLinkOpen(devPathWrite);
     if (*fd == 0)
     {
         /* could fail due to port name change */
@@ -450,7 +407,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 
 int pciePlatformConnect(UNUSED const char *devPathRead,
                         const char *devPathWrite,
-                        void **fd, UNUSED char* usb_speed)
+                        void **fd)
 {
     return pcie_init(devPathWrite, fd);
 }
