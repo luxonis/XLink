@@ -25,7 +25,8 @@ typedef enum {
     X_LINK_USB_SPEED_LOW,
     X_LINK_USB_SPEED_FULL,
     X_LINK_USB_SPEED_HIGH,
-    X_LINK_USB_SPEED_SUPER
+    X_LINK_USB_SPEED_SUPER,
+    X_LINK_USB_SPEED_SUPER_PLUS
 } UsbSpeed_t;
 
 typedef enum{
