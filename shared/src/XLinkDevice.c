@@ -215,7 +215,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
         link->usbConnSpeed = get_usb_speed();
         mv_strcpy(link->mxSerialId, XLINK_MAX_MXID, get_mx_serial());
     #else
-        link->usbConnSpeed = XLINK_USB_SPEED_UNKNOWN;
+        link->usbConnSpeed = X_LINK_USB_SPEED_UNKNOWN;
         mv_strcpy(link->mxSerialId, XLINK_MAX_MXID, "UNKNOWN");
     #endif
 
