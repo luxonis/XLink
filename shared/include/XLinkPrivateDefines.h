@@ -11,6 +11,7 @@
 #define _XLINKPRIVATEDEFINES_H
 
 #include "XLinkStream.h"
+#include "XLinkPublicDefines.h"
 
 #if !defined(XLINK_ALIGN_TO_BOUNDARY)
 # if defined(_WIN32) && !defined(__GNUC__)
@@ -46,14 +47,6 @@ typedef struct xLinkDeviceHandle_t {
     XLinkProtocol_t protocol;
     void* xLinkFD;
 } xLinkDeviceHandle_t;
-
-typedef enum{
-    X_LINK_USB_UNKNOWN = 0,
-    X_LINK_USB_0,
-    X_LINK_USB_1,
-    X_LINK_USB_2,
-    X_LINK_USB_3
-} UsbSpeed_t;
 
 /**
  * @brief XLink primitive for each device

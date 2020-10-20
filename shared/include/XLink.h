@@ -10,7 +10,7 @@
 #ifndef _XLINK_H
 #define _XLINK_H
 #include "XLinkPublicDefines.h"
-#include "XLinkPrivateDefines.h"
+// #include "XLinkPrivateDefines.h"
 
 #ifdef __cplusplus
 extern "C"

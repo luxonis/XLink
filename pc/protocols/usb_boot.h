@@ -1,11 +1,6 @@
 // Copyright (C) 2018-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
-#include "XLinkPrivateDefines.h"
-
-#if (!defined(_WIN32) && !defined(_WIN64) )
-#include <libusb.h>
-#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,8 +34,6 @@ typedef enum usbBootError {
 #if (!defined(_WIN32) && !defined(_WIN64))
 usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                                         unsigned addrsize, void **device, int vid, int pid,unsigned short* bcdusb);
-enum libusb_speed get_usb_speed();
-char* get_mx_serial();
 #else
 usbBootError_t usb_find_device(unsigned idx, char *addr, unsigned addrsize,
    void **device, int vid, int pid);

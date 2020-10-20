@@ -15,6 +15,7 @@
 #include "win_time.h"
 #include "win_pthread.h"
 #else
+#include <libusb.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <pthread.h>
@@ -44,8 +45,6 @@ static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int connect_timeout = DEFAULT_CONNECT_TIMEOUT;
 static int initialized;
-static enum libusb_speed usb_speed_enum = X_LINK_USB_UNKNOWN;
-static char mx_serial[128] = { 0 };
 
 typedef struct {
     int pid;
@@ -331,20 +330,20 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                     *device = dev;
                     devs = 0;
 
-                    usb_speed_enum = libusb_get_device_speed(dev);
-                    char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps"};
+                    // usb_speed_enum = libusb_get_device_speed(dev);
+                    // char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps"};
 
-                    libusb_device_handle *dev_handle;
-                    if (libusb_open(dev, &dev_handle) == 0) {
-                        unsigned char sn[128];
-                        if (libusb_get_string_descriptor_ascii(dev_handle, desc.iSerialNumber, sn, sizeof sn) < 0)
-                            mvLog(MVLOG_INFO,"Failed to get string descriptor\n");
-                        else
-                            mvLog(MVLOG_INFO, "VID:%04x PID:%04x address:%s serial:%s Speed:%s\n", 
-                                    desc.idVendor, desc.idProduct, input_addr, sn, speed_str[usb_speed_enum]);
-                        libusb_close(dev_handle);
-                        mv_strcpy(mx_serial, 128 ,sn);
-                    }
+                    // libusb_device_handle *dev_handle;
+                    // if (libusb_open(dev, &dev_handle) == 0) {
+                    //     unsigned char sn[128];
+                    //     if (libusb_get_string_descriptor_ascii(dev_handle, desc.iSerialNumber, sn, sizeof sn) < 0)
+                    //         mvLog(MVLOG_INFO,"Failed to get string descriptor\n");
+                    //     else
+                    //         mvLog(MVLOG_INFO, "VID:%04x PID:%04x address:%s serial:%s Speed:%s\n", 
+                    //                 desc.idVendor, desc.idProduct, input_addr, sn, speed_str[usb_speed_enum]);
+                    //     libusb_close(dev_handle);
+                    //     mv_strcpy(mx_serial, 128 ,sn);
+                    // }
                     if (pthread_mutex_unlock(&globalMutex)) {
                         fprintf(stderr, "Mutex unlock failed\n");
                     }
@@ -386,27 +385,27 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
     return USB_BOOT_DEVICE_NOT_FOUND;
 }
 
-/** 
- * getter to obtain the connected usb speed which was stored by 
- * usb_find_device_with_bcd() during XLinkconnect().
- * @note:
- *  getter will return empty or different value
- *  if called before XLinkConnect.
- */ 
-enum libusb_speed get_usb_speed(){
-    return usb_speed_enum;
-}
+// /** 
+//  * getter to obtain the connected usb speed which was stored by 
+//  * usb_find_device_with_bcd() during XLinkconnect().
+//  * @note:
+//  *  getter will return empty or different value
+//  *  if called before XLinkConnect.
+//  */ 
+// UsbSpeed_t get_usb_speed(){
+//     return usb_speed_enum;
+// }
 
-/** 
- * getter to obtain the Mx serial id which was received by 
- * usb_find_device_with_bcd() during XLinkconnect().
- * @note:
- *  getter will return empty or different value
- *  if called before XLinkConnect.
- */
-char* get_mx_serial(){
-    return mx_serial;
-}
+// /** 
+//  * getter to obtain the Mx serial id which was received by 
+//  * usb_find_device_with_bcd() during XLinkconnect().
+//  * @note:
+//  *  getter will return empty or different value
+//  *  if called before XLinkConnect.
+//  */
+// char* get_mx_serial(){
+//     return mx_serial;
+// }
 #endif
 
 #if (defined(_WIN32) || defined(_WIN64) )

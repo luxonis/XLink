@@ -35,9 +35,14 @@ int usbFdWrite = -1;
 int usbFdRead = -1;
 #endif  /*USE_USB_VSC*/
 
+#include "XLinkPublicDefines.h"
+
 #define USB_LINK_SOCKET_PORT 5678
 #define UNUSED __attribute__((unused))
 
+
+static UsbSpeed_t usb_speed_enum = X_LINK_USB_SPEED_UNKNOWN;
+static char mx_serial[128] = { 0 };
 #ifdef USE_USB_VSC
 static int statuswaittimeout = 5;
 #endif
@@ -51,6 +56,7 @@ static char* pciePlatformStateToStr(const pciePlatformState_t platformState);
 static double seconds();
 static libusb_device_handle *usbLinkOpen(const char *path);
 static void usbLinkClose(libusb_device_handle *f);
+
 #endif
 // ------------------------------------
 // Helpers declaration. End.
@@ -267,11 +273,30 @@ libusb_device_handle *usbLinkOpen(const char *path)
     }
     usb_free_device(dev);
 #else
+    struct libusb_device_descriptor desc;
+    int res;
+    if ((res = libusb_get_device_descriptor(dev, &desc)) < 0) {
+                printf("Unable to get USB device descriptor: %s\n", libusb_strerror(res));
+        }
+
+    usb_speed_enum = libusb_get_device_speed(dev);
+    char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps"};
+
     int libusb_rc = libusb_open(dev, &h);
     if (libusb_rc < 0)
     {
         libusb_unref_device(dev);
         return 0;
+    }
+    unsigned char sn[128];
+    if (libusb_get_string_descriptor_ascii(h, desc.iSerialNumber, sn, sizeof sn) < 0){
+        mvLog(MVLOG_INFO,"Failed to get string descriptor\n");
+    }
+    else{
+        mvLog(MVLOG_INFO,"VID:%04x PID:%04x serial:%s Speed:%s in usb open\n", 
+                desc.idVendor, desc.idProduct, sn, speed_str[usb_speed_enum]);
+        mv_strcpy(mx_serial, 128 ,sn);
+        // printf("mx_serial : -> %s\n",mx_serial);
     }
     libusb_unref_device(dev);
     libusb_detach_kernel_driver(h, 0);
@@ -295,6 +320,32 @@ void usbLinkClose(libusb_device_handle *f)
 #endif
 }
 #endif
+
+/** 
+ * getter to obtain the connected usb speed which was stored by 
+ * usb_find_device_with_bcd() during XLinkconnect().
+ * @note:
+ *  getter will return empty or different value
+ *  if called before XLinkConnect.
+ */ 
+UsbSpeed_t get_usb_speed(){
+    return usb_speed_enum;
+}
+
+/** 
+ * getter to obtain the Mx serial id which was received by 
+ * usb_find_device_with_bcd() during XLinkconnect().
+ * @note:
+ *  getter will return empty or different value
+ *  if called before XLinkConnect.
+ */
+char* get_mx_serial(){
+    #ifdef USE_USB_VSC 
+        return mx_serial;  
+    #else
+        return "UNKNOWN";
+    #endif
+}
 
 // ------------------------------------
 // Helpers implementation. End.

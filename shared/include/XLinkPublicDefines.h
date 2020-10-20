@@ -20,6 +20,13 @@ extern "C"
 #define XLINK_MAX_PACKETS_PER_STREAM 64
 #define XLINK_MAX_MXID 128
 
+typedef enum {
+    X_LINK_USB_SPEED_UNKNOWN = 0,
+    X_LINK_USB_SPEED_LOW,
+    X_LINK_USB_SPEED_FULL,
+    X_LINK_USB_SPEED_HIGH,
+    X_LINK_USB_SPEED_SUPER
+} UsbSpeed_t;
 
 typedef enum{
     X_LINK_SUCCESS = 0,
