@@ -47,6 +47,14 @@ typedef struct xLinkDeviceHandle_t {
     void* xLinkFD;
 } xLinkDeviceHandle_t;
 
+typedef enum{
+    X_LINK_USB_UNKNOWN = 0,
+    X_LINK_USB_0,
+    X_LINK_USB_1,
+    X_LINK_USB_2,
+    X_LINK_USB_3
+} UsbSpeed_t;
+
 /**
  * @brief XLink primitive for each device
  */
@@ -58,7 +66,9 @@ typedef struct xLinkDesc_t {
     xLinkDeviceHandle_t deviceHandle;
     linkId_t id;
     sem_t dispatcherClosedSem;
-
+    UsbSpeed_t usbConnSpeed;
+    char mxSerialId[XLINK_MAX_MXID];
+    
     //Deprecated fields. Begin.
     int hostClosedFD;
     //Deprecated fields. End.

@@ -18,6 +18,8 @@ extern "C"
 #define XLINK_MAX_NAME_SIZE 28
 #define XLINK_MAX_STREAMS 32
 #define XLINK_MAX_PACKETS_PER_STREAM 64
+#define XLINK_MAX_MXID 128
+
 
 typedef enum{
     X_LINK_SUCCESS = 0,
@@ -46,14 +48,6 @@ typedef enum{
     X_LINK_MYRIAD_2 = 2450,
     X_LINK_MYRIAD_X = 2480,
 } XLinkPlatform_t;
-
-typedef enum{
-    X_LINK_USB_UNKNOWN = 0,
-    X_LINK_USB_0,
-    X_LINK_USB_1,
-    X_LINK_USB_2,
-    X_LINK_USB_3
-} UsbSpeed_t;
 
 typedef enum{
     X_LINK_ANY_STATE = 0,

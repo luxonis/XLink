@@ -10,6 +10,7 @@
 #ifndef _XLINK_H
 #define _XLINK_H
 #include "XLinkPublicDefines.h"
+#include "XLinkPrivateDefines.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -105,8 +106,9 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkResetAll();
-UsbSpeed_t XLinkGetUSBSpeed();
-char* XLinkGetMxSerial();
+
+UsbSpeed_t XLinkGetUSBSpeed(linkId_t id);
+char* XLinkGetMxSerial(linkId_t id);
 
 #endif // __PC__
 
