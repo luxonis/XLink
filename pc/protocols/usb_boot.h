@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 #include "XLinkPrivateDefines.h"
+
+#if (!defined(_WIN32) && !defined(_WIN64) )
 #include <libusb.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {

@@ -220,7 +220,6 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     #endif
 
     #if (!defined(_WIN32) && !defined(_WIN64) )
-         
         mv_strcpy(link->mxSerialId, XLINK_MAX_MXID, get_mx_serial());
     #else
         link->mxSerialId = "UNKNOWN";
