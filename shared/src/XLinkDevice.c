@@ -354,7 +354,7 @@ UsbSpeed_t XLinkGetUSBSpeed(linkId_t id){
     return link->usbConnSpeed;
 }
 
-char* XLinkGetMxSerial(linkId_t id){
+const char* XLinkGetMxSerial(linkId_t id){
     xLinkDesc_t* link = getLinkById(id);
     return link->mxSerialId;
 }

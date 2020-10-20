@@ -57,7 +57,7 @@ int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
                          XLinkProtocol_t protocol, void** fd);
 
 UsbSpeed_t get_usb_speed();
-char* get_mx_serial();
+const char* get_mx_serial();
 #endif // __PC__
 
 int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle);

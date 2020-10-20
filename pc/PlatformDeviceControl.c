@@ -339,7 +339,7 @@ UsbSpeed_t get_usb_speed(){
  *  getter will return empty or different value
  *  if called before XLinkConnect.
  */
-char* get_mx_serial(){
+const char* get_mx_serial(){
     #ifdef USE_USB_VSC 
         return mx_serial;  
     #else
