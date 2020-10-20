@@ -384,28 +384,6 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
     }
     return USB_BOOT_DEVICE_NOT_FOUND;
 }
-
-// /** 
-//  * getter to obtain the connected usb speed which was stored by 
-//  * usb_find_device_with_bcd() during XLinkconnect().
-//  * @note:
-//  *  getter will return empty or different value
-//  *  if called before XLinkConnect.
-//  */ 
-// UsbSpeed_t get_usb_speed(){
-//     return usb_speed_enum;
-// }
-
-// /** 
-//  * getter to obtain the Mx serial id which was received by 
-//  * usb_find_device_with_bcd() during XLinkconnect().
-//  * @note:
-//  *  getter will return empty or different value
-//  *  if called before XLinkConnect.
-//  */
-// char* get_mx_serial(){
-//     return mx_serial;
-// }
 #endif
 
 #if (defined(_WIN32) || defined(_WIN64) )
