@@ -15,6 +15,7 @@
 #include "stdint.h"
 #include "stdlib.h"
 #include "string.h"
+#include "errno.h"
 #include <assert.h>
 #include <stdlib.h>
 
@@ -392,6 +393,46 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle)
 
     return rc;
 }
+
+int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct timespec abstime)
+{
+    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+    ASSERT_XLINK(curr != NULL);
+
+    sem_t* id = getAndRefSem(pthread_self(), curr, 0);
+    if (id == NULL) {
+        return -1;
+    }
+
+    printf("abstime s: %lld nsec: %lld\n", abstime.tv_sec, abstime.tv_nsec);
+    int rc = sem_timedwait(id, &abstime);
+    int err = errno;
+#ifdef __PC__
+    if (rc) {
+        printf("XLINK | this happend: errno = %d\n", err);
+        if(err == ETIMEDOUT){
+            return X_LINK_TIMEOUT;
+        } else {
+            xLinkEvent_t event = {0};
+            event.header.type = XLINK_RESET_REQ;
+            event.deviceHandle = *deviceHandle;
+            mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
+            DispatcherAddEvent(EVENT_LOCAL, &event);
+            id = getAndRefSem(pthread_self(), curr, 0);
+            if (id == NULL || sem_wait(id)) {
+                dispatcherReset(curr);
+            }
+        }
+    }
+#endif
+
+    if ((XLinkError_t)unrefSem(id, curr) == X_LINK_ERROR) {
+        mvLog(MVLOG_WARN, "Failed to unref sem");
+    }
+
+    return rc;
+}
+
 
 char* TypeToStr(int type)
 {

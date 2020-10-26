@@ -156,12 +156,32 @@ XLinkError_t XLinkCloseStream(streamId_t streamId);
 XLinkError_t XLinkWriteData(streamId_t streamId, const uint8_t* buffer, int size);
 
 /**
+ * @brief Sends a package to initiate the writing of data to a remote stream
+ * @warning Actual size of the written data is ALIGN_UP(size, 64)
+ * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
+ * @param[in] buffer – data buffer to be transmitted
+ * @param[in] size – size of the data to be transmitted
+ * @param[in] msTimeout – time in milliseconds after which operation times out
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success,  X_LINK_TIMEOUT when msTimeout time passes
+ */
+XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int msTimeout);
+
+/**
  * @brief Reads data from local stream. Will only have something if it was written to by the remote
  * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet – structure containing output data buffer and received size
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReadData(streamId_t streamId, streamPacketDesc_t** packet);
+
+/**
+ * @brief Reads data from local stream. Will only have something if it was written to by the remote
+ * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
+ * @param[out]  packet – structure containing output data buffer and received size
+ * @param[out]  msTimeout – time in milliseconds after which operation times out
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT when msTimeout time passes
+ */
+XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** packet, unsigned int msTimeout);
 
 /**
  * @brief Releases data from stream - This should be called after the data obtained from
@@ -201,10 +221,7 @@ XLinkError_t XLinkDisconnect(linkId_t id);
 
 XLinkError_t XLinkGetAvailableStreams(linkId_t id);
 
-XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int timeout);
 XLinkError_t XLinkAsyncWriteData();
-
-XLinkError_t XLinkReadDataWithTimeOut(streamId_t streamId, streamPacketDesc_t** packet, unsigned int timeout);
 
 XLinkError_t XLinkSetDeviceOpenTimeOutMsec(unsigned int msec);
 XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);

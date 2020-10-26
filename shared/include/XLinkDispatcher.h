@@ -11,6 +11,7 @@
 #define _XLINKDISPATCHER_H
 
 #include "XLinkPrivateDefines.h"
+#include "time.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -33,6 +34,7 @@ int DispatcherClean(xLinkDeviceHandle_t *deviceHandle);
 
 xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event);
 int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle);
+int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct timespec abstime);
 
 char* TypeToStr(int type);
 int DispatcherUnblockEvent(eventId_t id,
