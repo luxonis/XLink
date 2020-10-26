@@ -65,6 +65,10 @@ static deviceBootInfo_t supportedDevices[] = {
         //To support the case where the port name change, or it's already booted
         .pid = DEFAULT_OPENPID,
         .name = ""
+    },
+    {
+        .pid = DEFAULT_BOOTLOADER_PID,
+        .name = "bootloader"
     }
 };
 // for now we'll only use the loglevel for usb boot. can bring it into
@@ -174,6 +178,9 @@ static int isMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad and device booted
     if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_OPENPID)
         return 1;
+    // Device is Myriad and in bootloader
+    if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_BOOTLOADER_PID)
+        return 1;
     return 0;
 }
 
@@ -184,14 +191,23 @@ static int isBootedMyriadDevice(const int idVendor, const int idProduct) {
     }
     return 0;
 }
+
+static isBootloaderMyriadDevice(const int idVendor, const int idProduct) {
+    // Device is Myriad and in bootloader
+    if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_BOOTLOADER_PID)
+        return 1;
+    return 0;
+}
+
 static int isNotBootedMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad, pid supported and it's is not booted device
     if (idVendor == DEFAULT_VID && is_pid_supported(idProduct) == 1
-        && idProduct != DEFAULT_OPENPID) {
+        && idProduct != DEFAULT_OPENPID && idProduct != DEFAULT_BOOTLOADER_PID) {
         return 1;
     }
     return 0;
 }
+
 
 #if (!defined(_WIN32) && !defined(_WIN64) )
 static const char *gen_addr(libusb_device *dev, int pid)
@@ -315,8 +331,11 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                  && isNotBootedMyriadDevice(desc.idVendor, desc.idProduct))
              // Any booted device
              || (vid == AUTO_VID && pid == DEFAULT_OPENPID
-                 && isBootedMyriadDevice(desc.idVendor, desc.idProduct)) )
-        {
+                 && isBootedMyriadDevice(desc.idVendor, desc.idProduct))
+             // Any bootloader device
+             || (vid == AUTO_VID && pid == DEFAULT_BOOTLOADER_PID
+                 && isBootloaderMyriadDevice(desc.idVendor, desc.idProduct)) 
+        ) {
             if (device) {
                 const char *dev_addr = gen_addr(dev, get_pid_by_name(input_addr));
                 if (!strcmp(dev_addr, input_addr)) {
@@ -430,8 +449,11 @@ usbBootError_t usb_find_device(unsigned idx, char *addr, unsigned addrsize, void
                         && isNotBootedMyriadDevice(idVendor, idProduct))
                 // Any booted device
                 || (vid == AUTO_VID && pid == DEFAULT_OPENPID
-                        && isBootedMyriadDevice(idVendor, idProduct)) )
-        {
+                        && isBootedMyriadDevice(idVendor, idProduct))
+                // Any bootloader device
+                || (vid == AUTO_VID && pid == DEFAULT_BOOTLOADER_PID
+                    && isBootloaderMyriadDevice(desc.idVendor, desc.idProduct)) 
+        ) {
             if (device) {
                 const char *caddr = &devs[res][4];
                 if (strncmp(addr, caddr, XLINK_MAX_NAME_SIZE) == 0)

@@ -236,14 +236,22 @@ libusb_device_handle *usbLinkOpen(const char *path)
     libusb_device_handle *h = NULL;
     libusb_device *dev = NULL;
     double waittm = seconds() + statuswaittimeout;
+
+    // Change PID for bootloader device
+    int vid = DEFAULT_OPENVID;
+    int pid = DEFAULT_OPENPID;
+    if(strstr(path, "bootloader") != NULL) {
+        pid = DEFAULT_BOOTLOADER_PID;
+    }
+
     while(seconds() < waittm){
         int size = strlen(path);
 
 #if (!defined(_WIN32) && !defined(_WIN64))
         uint16_t  bcdusb = -1;
-        rc = usb_find_device_with_bcd(0, (char *)path, size, (void **)&dev, DEFAULT_OPENVID, DEFAULT_OPENPID, &bcdusb);
+        rc = usb_find_device_with_bcd(0, (char *)path, size, (void **)&dev, vid, pid, &bcdusb);
 #else
-        rc = usb_find_device(0, (char *)path, size, (void **)&dev, DEFAULT_OPENVID, DEFAULT_OPENPID);
+        rc = usb_find_device(0, (char *)path, size, (void **)&dev, vid, pid);
 #endif
         if(rc == USB_BOOT_SUCCESS)
             break;

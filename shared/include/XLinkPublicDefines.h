@@ -51,6 +51,7 @@ typedef enum{
     X_LINK_ANY_STATE = 0,
     X_LINK_BOOTED,
     X_LINK_UNBOOTED,
+    X_LINK_BOOTLOADER,
 } XLinkDeviceState_t;
 
 typedef enum{
