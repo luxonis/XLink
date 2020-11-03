@@ -280,7 +280,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         }
 
     usb_speed_enum = libusb_get_device_speed(dev);
-    char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps"};
+    const char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps"};
 
     int libusb_rc = libusb_open(dev, &h);
     if (libusb_rc < 0)
@@ -293,8 +293,12 @@ libusb_device_handle *usbLinkOpen(const char *path)
         mvLog(MVLOG_INFO,"Failed to get string descriptor\n");
     }
     else{
+        const char* speed = speed_str[0];
+        if(usb_speed_enum >= 0 && usb_speed_enum < sizeof(speed_str)){
+            speed = speed_str[usb_speed_enum];
+        }
         mvLog(MVLOG_INFO,"VID:%04x PID:%04x serial:%s Speed:%s in usb open\n", 
-                desc.idVendor, desc.idProduct, sn, speed_str[usb_speed_enum]);
+                desc.idVendor, desc.idProduct, sn, speed);
         mv_strcpy(mx_serial, 128 ,sn);
         // printf("mx_serial : -> %s\n",mx_serial);
     }
