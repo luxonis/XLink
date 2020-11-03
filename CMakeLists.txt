@@ -43,7 +43,6 @@ target_compile_definitions(${TARGET_NAME}
         HAVE_STRUCT_TIMESPEC
         _CRT_SECURE_NO_WARNINGS
         USE_USB_VSC
-        XLINK_USE_BUS
     )
 
 if (ENABLE_MYRIAD_NO_BOOT)
