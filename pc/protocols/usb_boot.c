@@ -192,7 +192,7 @@ static int isBootedMyriadDevice(const int idVendor, const int idProduct) {
     return 0;
 }
 
-static isBootloaderMyriadDevice(const int idVendor, const int idProduct) {
+static int isBootloaderMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad and in bootloader
     if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_BOOTLOADER_PID)
         return 1;
