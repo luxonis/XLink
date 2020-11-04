@@ -183,8 +183,7 @@ int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath)
     return rc;
 }
 
-int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, 
-                XLinkProtocol_t protocol, void** fd)
+int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
 {
     return open_fcts[protocol](devPathRead, devPathWrite, fd);
 }
@@ -247,8 +246,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
 
 #if (!defined(_WIN32) && !defined(_WIN64))
         uint16_t  bcdusb = -1;
-        rc = usb_find_device_with_bcd(0, (char *)path, size, (void **)&dev,
-                                     DEFAULT_OPENVID, DEFAULT_OPENPID, &bcdusb);
+        rc = usb_find_device_with_bcd(0, (char *)path, size, (void **)&dev, DEFAULT_OPENVID, DEFAULT_OPENPID, &bcdusb);
 #else
         rc = usb_find_device(0, (char *)path, size, (void **)&dev, DEFAULT_OPENVID, DEFAULT_OPENPID);
 #endif
@@ -280,7 +278,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         }
 
     usb_speed_enum = libusb_get_device_speed(dev);
-    const char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps"};
+    const char *speed_str[] = {"Unknown", "Low/1.5Mbps", "Full/12Mbps", "High/480Mbps", "Super/5000Mbps", "Super+/10000Mbps"};
 
     int libusb_rc = libusb_open(dev, &h);
     if (libusb_rc < 0)
@@ -288,13 +286,13 @@ libusb_device_handle *usbLinkOpen(const char *path)
         libusb_unref_device(dev);
         return 0;
     }
-    unsigned char sn[128];
+    unsigned char sn[XLINK_MAX_MXID];
     if (libusb_get_string_descriptor_ascii(h, desc.iSerialNumber, sn, sizeof sn) < 0){
         mvLog(MVLOG_INFO,"Failed to get string descriptor\n");
     }
     else{
         const char* speed = speed_str[0];
-        if(usb_speed_enum >= 0 && usb_speed_enum < sizeof(speed_str)){
+        if(usb_speed_enum >= 0 && usb_speed_enum < sizeof(speed_str)/sizeof(speed_str[0])){
             speed = speed_str[usb_speed_enum];
         }
         mvLog(MVLOG_INFO,"VID:%04x PID:%04x serial:%s Speed:%s in usb open\n", 
