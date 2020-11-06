@@ -452,7 +452,7 @@ usbBootError_t usb_find_device(unsigned idx, char *addr, unsigned addrsize, void
                         && isBootedMyriadDevice(idVendor, idProduct))
                 // Any bootloader device
                 || (vid == AUTO_VID && pid == DEFAULT_BOOTLOADER_PID
-                    && isBootloaderMyriadDevice(desc.idVendor, desc.idProduct)) 
+                    && isBootloaderMyriadDevice(idVendor, idProduct)) 
         ) {
             if (device) {
                 const char *caddr = &devs[res][4];
