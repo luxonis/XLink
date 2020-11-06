@@ -15,16 +15,15 @@
 #include "win_time.h"
 #include "win_pthread.h"
 #else
+#include <libusb.h>
 #include <unistd.h>
 #include <getopt.h>
-#include <libusb.h>
 #include <pthread.h>
 #endif
 #include "usb_boot.h"
-
+#include "XLinkLog.h"
 #include "XLinkStringUtils.h"
 #include "XLinkPublicDefines.h"
-
 
 #define DEFAULT_VID                 0x03E7
 
@@ -324,7 +323,6 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                         fprintf(stderr, "Found Address: %s - VID/PID %04x:%04x\n",
                                 input_addr, desc.idVendor, desc.idProduct);
                     }
-
                     libusb_ref_device(dev);
                     libusb_free_device_list(devs, 1);
                     if (bcdusb)

@@ -35,9 +35,14 @@ int usbFdWrite = -1;
 int usbFdRead = -1;
 #endif  /*USE_USB_VSC*/
 
+#include "XLinkPublicDefines.h"
+
 #define USB_LINK_SOCKET_PORT 5678
 #define UNUSED __attribute__((unused))
 
+
+static UsbSpeed_t usb_speed_enum = X_LINK_USB_SPEED_UNKNOWN;
+static char mx_serial[XLINK_MAX_MXID] = { 0 };
 #ifdef USE_USB_VSC
 static int statuswaittimeout = 5;
 #endif
@@ -51,6 +56,7 @@ static char* pciePlatformStateToStr(const pciePlatformState_t platformState);
 static double seconds();
 static libusb_device_handle *usbLinkOpen(const char *path);
 static void usbLinkClose(libusb_device_handle *f);
+
 #endif
 // ------------------------------------
 // Helpers declaration. End.
@@ -98,7 +104,6 @@ int XLinkPlatformBootMemoryRemote(deviceDesc_t* deviceDesc, uint8_t* buffer, lon
     int rc = 0;
     long file_size = size;
     void *image_buffer = (void *) buffer;
-
     if (deviceDesc->protocol == X_LINK_PCIE) {
         // Temporary open fd to boot device and then close it
         int* pcieFd = NULL;
@@ -266,11 +271,41 @@ libusb_device_handle *usbLinkOpen(const char *path)
     }
     usb_free_device(dev);
 #else
+    struct libusb_device_descriptor desc;
+    int res;
+    if ((res = libusb_get_device_descriptor(dev, &desc)) < 0) {
+        mvLog(MVLOG_WARN, "Unable to get USB device descriptor: %s\n", libusb_strerror(res));
+    }
+
+    usb_speed_enum = libusb_get_device_speed(dev);
+
+    const char *speed_str_map[] = {
+        [X_LINK_USB_SPEED_UNKNOWN] = "Unknown", 
+        [X_LINK_USB_SPEED_LOW] = "Low/1.5Mbps", 
+        [X_LINK_USB_SPEED_FULL] = "Full/12Mbps", 
+        [X_LINK_USB_SPEED_HIGH] = "High/480Mbps", 
+        [X_LINK_USB_SPEED_SUPER] = "Super/5000Mbps",
+        [X_LINK_USB_SPEED_SUPER_PLUS] = "Super+/10000Mbps"
+    };
+
     int libusb_rc = libusb_open(dev, &h);
     if (libusb_rc < 0)
     {
         libusb_unref_device(dev);
         return 0;
+    }
+    unsigned char sn[XLINK_MAX_MXID];
+    if (res < 0 || libusb_get_string_descriptor_ascii(h, desc.iSerialNumber, sn, sizeof sn) < 0){
+        mvLog(MVLOG_INFO,"Failed to get string descriptor\n");
+    }
+    else{
+        const char* speed = speed_str_map[X_LINK_USB_SPEED_UNKNOWN];
+        if(usb_speed_enum >= 0 && usb_speed_enum < sizeof(speed_str_map)/sizeof(speed_str_map[0])){
+            speed = speed_str_map[usb_speed_enum];
+        }
+        mvLog(MVLOG_INFO,"VID:%04x PID:%04x serial:%s Speed:%s in usb open\n", 
+                desc.idVendor, desc.idProduct, sn, speed);
+        mv_strcpy(mx_serial, XLINK_MAX_MXID ,sn);
     }
     libusb_unref_device(dev);
     libusb_detach_kernel_driver(h, 0);
@@ -294,6 +329,32 @@ void usbLinkClose(libusb_device_handle *f)
 #endif
 }
 #endif
+
+/** 
+ * getter to obtain the connected usb speed which was stored by 
+ * usb_find_device_with_bcd() during XLinkconnect().
+ * @note:
+ *  getter will return empty or different value
+ *  if called before XLinkConnect.
+ */ 
+UsbSpeed_t get_usb_speed(){
+    return usb_speed_enum;
+}
+
+/** 
+ * getter to obtain the Mx serial id which was received by 
+ * usb_find_device_with_bcd() during XLinkconnect().
+ * @note:
+ *  getter will return empty or different value
+ *  if called before XLinkConnect.
+ */
+const char* get_mx_serial(){
+    #ifdef USE_USB_VSC 
+        return mx_serial;  
+    #else
+        return "UNKNOWN";
+    #endif
+}
 
 // ------------------------------------
 // Helpers implementation. End.

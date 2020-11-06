@@ -106,6 +106,9 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  */
 XLinkError_t XLinkResetAll();
 
+UsbSpeed_t XLinkGetUSBSpeed(linkId_t id);
+const char* XLinkGetMxSerial(linkId_t id);
+
 #endif // __PC__
 
 /**
@@ -115,6 +118,7 @@ XLinkError_t XLinkResetAll();
 XLinkError_t XLinkProfStart();
 XLinkError_t XLinkProfStop();
 XLinkError_t XLinkProfPrint();
+
 
 // ------------------------------------
 // Device management. End.
