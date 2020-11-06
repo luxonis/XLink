@@ -216,7 +216,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size)
+XLinkError_t XLinkBootMemory(const deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size)
 {
     if (XLinkPlatformBootFirmware(deviceDesc, (const char*) buffer, size) == 0) {
         return X_LINK_SUCCESS;
@@ -225,7 +225,7 @@ XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, const uint8_t* buffer, un
     return X_LINK_COMMUNICATION_FAIL;
 }
 
-XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath)
+XLinkError_t XLinkBoot(const deviceDesc_t* deviceDesc, const char* binaryPath)
 {
     if (XLinkPlatformBootRemote(deviceDesc, binaryPath) == 0) {
         return X_LINK_SUCCESS;
@@ -234,7 +234,7 @@ XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath)
     return X_LINK_COMMUNICATION_FAIL;
 }
 
-XLinkError_t XLinkBootFirmware(deviceDesc_t* deviceDesc, const char* firmware, unsigned long length) {
+XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, unsigned long length) {
     if (!XLinkPlatformBootFirmware(deviceDesc, firmware, length)) {
         return X_LINK_SUCCESS;
     }

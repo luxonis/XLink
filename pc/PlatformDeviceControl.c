@@ -93,7 +93,7 @@ void XLinkPlatformInit()
 }
 
 
-int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath)
+int XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath)
 {
     FILE *file;
     long file_size;
@@ -135,7 +135,7 @@ int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath)
     return 0;
 }
 
-int XLinkPlatformBootFirmware(deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
+int XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
     if (deviceDesc->protocol == X_LINK_PCIE) {
         // Temporary open fd to boot device and then close it
         int* pcieFd = NULL;
