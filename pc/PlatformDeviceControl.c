@@ -93,25 +93,61 @@ void XLinkPlatformInit()
 }
 
 
-int XLinkPlatformBootMemoryRemote(deviceDesc_t* deviceDesc, uint8_t* buffer, long size)
+int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath)
 {
-    int rc = 0;
-    long file_size = size;
-    void *image_buffer = (void *) buffer;
+    FILE *file;
+    long file_size;
 
+    char *image_buffer;
+
+    /* Open the mvcmd file */
+    file = fopen(binaryPath, "rb");
+
+    if(file == NULL) {
+        mvLog(MVLOG_ERROR, "Cannot open file by path: %s", binaryPath);
+        return -7;
+    }
+
+    fseek(file, 0, SEEK_END);
+    file_size = ftell(file);
+    rewind(file);
+    if(file_size <= 0 || !(image_buffer = (char*)malloc(file_size)))
+    {
+        mvLog(MVLOG_ERROR, "cannot allocate image_buffer. file_size = %ld", file_size);
+        fclose(file);
+        return -3;
+    }
+    if(fread(image_buffer, 1, file_size, file) != file_size)
+    {
+        mvLog(MVLOG_ERROR, "cannot read file to image_buffer");
+        fclose(file);
+        free(image_buffer);
+        return -7;
+    }
+    fclose(file);
+
+    if(XLinkPlatformBootFirmware(deviceDesc, image_buffer, file_size)) {
+        free(image_buffer);
+        return -1;
+    }
+
+    free(image_buffer);
+    return 0;
+}
+
+int XLinkPlatformBootFirmware(deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
     if (deviceDesc->protocol == X_LINK_PCIE) {
         // Temporary open fd to boot device and then close it
         int* pcieFd = NULL;
-        rc = pcie_init(deviceDesc->name, (void**)&pcieFd);
+        int rc = pcie_init(deviceDesc->name, (void**)&pcieFd);
         if (rc) {
             return rc;
         }
 #if (!defined(_WIN32) && !defined(_WIN64))
-        rc = pcie_boot_device(*(int*)pcieFd, image_buffer, file_size);
+        rc = pcie_boot_device(*(int*)pcieFd, firmware, length);
 #else
-        rc = pcie_boot_device(pcieFd, image_buffer, file_size);
+        rc = pcie_boot_device(pcieFd, firmware, length);
 #endif
-
         pcie_close(pcieFd); // Will not check result for now
         return rc;
     } else if (deviceDesc->protocol == X_LINK_USB_VSC) {
@@ -123,60 +159,17 @@ int XLinkPlatformBootMemoryRemote(deviceDesc_t* deviceDesc, uint8_t* buffer, lon
             printf("Path to your boot util is too long for the char array here!\n");
         }
         // Boot it
-        rc = usb_boot(deviceDesc->name, image_buffer, file_size);
+        int rc = usb_boot(deviceDesc->name, firmware, (unsigned)length);
 
-        if(!rc && usb_loglevel > 1) {
-            fprintf(stderr, "Boot successful, device address %s\n", deviceDesc->name);
+        if(!rc) {
+            mvLog(MVLOG_DEBUG, "Boot successful, device address %s", deviceDesc->name);
         }
         return rc;
     } else {
-        printf("Selected protocol not supported\n");
         return -1;
     }
 }
 
-int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath)
-{
-    int rc = 0;
-    FILE *file;
-    long file_size;
-
-    void *image_buffer;
-
-    /* Open the mvcmd file */
-    file = fopen(binaryPath, "rb");
-
-    if(file == NULL) {
-        if(usb_loglevel)
-            perror(binaryPath);
-        return -7;
-    }
-
-    fseek(file, 0, SEEK_END);
-    file_size = ftell(file);
-    rewind(file);
-    if(file_size <= 0 || !(image_buffer = (char*)malloc(file_size)))
-    {
-        if(usb_loglevel)
-            perror("buffer");
-        fclose(file);
-        return -3;
-    }
-    if(fread(image_buffer, 1, file_size, file) != file_size)
-    {
-        if(usb_loglevel)
-            perror(binaryPath);
-        fclose(file);
-        free(image_buffer);
-        return -7;
-    }
-    fclose(file);
-
-    rc = XLinkPlatformBootMemoryRemote(deviceDesc, image_buffer, file_size);
-    free(image_buffer);
-
-    return rc;
-}
 
 int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
 {
@@ -245,7 +238,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
     }
 
     while(seconds() < waittm){
-        int size = strlen(path);
+        int size = (int)strlen(path);
 
 #if (!defined(_WIN32) && !defined(_WIN64))
         uint16_t  bcdusb = -1;
@@ -266,7 +259,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
     if (libusb_rc < 0)
     {
         if(last_open_dev_err[0])
-            fprintf(stderr, "%s\n", last_open_dev_err);
+            mvLog(MVLOG_DEBUG, "Last opened device name: %s", last_open_dev_err);
 
         usb_close_device(h);
         usb_free_device(dev);

@@ -50,8 +50,8 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
     const unsigned int devicesArraySize,
     unsigned int *out_amountOfFoundDevices);
 
-int XLinkPlatformBootMemoryRemote(deviceDesc_t* deviceDesc, uint8_t* buffer, long size);
 int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath);
+int XLinkPlatformBootFirmware(deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
                          XLinkProtocol_t protocol, void** fd);
 #endif // __PC__

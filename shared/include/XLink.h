@@ -81,7 +81,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler);
  * @param size - size of buffer
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size);
+XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size);
 
 /**
  * @brief Boots specified firmware binary to the remote device
@@ -90,6 +90,15 @@ XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long siz
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath);
+
+/**
+ * @brief Boots specified firmware binary to the remote device
+ * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
+ * @param firmware - firmware buffer
+ * @param length - firmware buffer length
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkBootFirmware(deviceDesc_t* deviceDesc, const char* firmware, unsigned long length);
 
 /**
  * @brief Resets the remote device and close all open local handles for this device
