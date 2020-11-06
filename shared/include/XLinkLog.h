@@ -86,7 +86,7 @@ inline void mvLogLevelSet(mvLog_t lvl){
 // Set the global log level. Can be used to prevent modules from hiding messages (enable all of them with a single change)
 // This should be an application setting, not a per module one
 inline void mvLogDefaultLevelSet(mvLog_t lvl){
-    if(lvl < MVLOG_LAST){
+    if(lvl <= MVLOG_LAST){
         MVLOGLEVEL(default) = lvl;
     }
 }
