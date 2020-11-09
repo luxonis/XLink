@@ -211,6 +211,14 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 
     link->id = getNextAvailableLinkUniqueId();
     link->peerState = XLINK_UP;
+    #if (!defined(_WIN32) && !defined(_WIN64) )
+        link->usbConnSpeed = get_usb_speed();
+        mv_strcpy(link->mxSerialId, XLINK_MAX_MXID, get_mx_serial());
+    #else
+        link->usbConnSpeed = X_LINK_USB_SPEED_UNKNOWN;
+        mv_strcpy(link->mxSerialId, XLINK_MAX_MXID, "UNKNOWN");
+    #endif
+
     link->hostClosedFD = 0;
     handler->linkId = link->id;
     return X_LINK_SUCCESS;
@@ -347,6 +355,16 @@ XLinkError_t XLinkProfPrint()
                glHandler->profilingData.totalBootCount);
     }
     return X_LINK_SUCCESS;
+}
+
+UsbSpeed_t XLinkGetUSBSpeed(linkId_t id){
+    xLinkDesc_t* link = getLinkById(id);
+    return link->usbConnSpeed;
+}
+
+const char* XLinkGetMxSerial(linkId_t id){
+    xLinkDesc_t* link = getLinkById(id);
+    return link->mxSerialId;
 }
 
 // ------------------------------------

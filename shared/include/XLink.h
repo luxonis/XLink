@@ -115,6 +115,18 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  */
 XLinkError_t XLinkResetAll();
 
+/**
+ * @brief Retrieves USB speed of certain connected device
+ * @return UsbSpeed_t enum describing the usb connection speed
+ */
+UsbSpeed_t XLinkGetUSBSpeed(linkId_t id);
+
+/**
+ * @brief Returns mx serial of current connected device
+ * @return pointer to mx serial string
+ */
+const char* XLinkGetMxSerial(linkId_t id);
+
 
 
 // MX ID API - This API support finding, booting and connecting to MyriadX devices using unique MX ID in devices
@@ -148,6 +160,7 @@ XLinkError_t XLinkMxIdFindAllDevices(XLinkDeviceState_t state,
 XLinkError_t XLinkProfStart();
 XLinkError_t XLinkProfStop();
 XLinkError_t XLinkProfPrint();
+
 
 // ------------------------------------
 // Device management. End.

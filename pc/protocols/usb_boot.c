@@ -15,16 +15,15 @@
 #include "win_time.h"
 #include "win_pthread.h"
 #else
+#include <libusb.h>
 #include <unistd.h>
 #include <getopt.h>
-#include <libusb.h>
 #include <pthread.h>
 #endif
 #include "usb_boot.h"
-
+#include "XLinkLog.h"
 #include "XLinkStringUtils.h"
 #include "XLinkPublicDefines.h"
-
 
 #define DEFAULT_VID                 0x03E7
 

@@ -54,6 +54,9 @@ int XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPa
 int XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
                          XLinkProtocol_t protocol, void** fd);
+
+UsbSpeed_t get_usb_speed();
+const char* get_mx_serial();
 #endif // __PC__
 
 int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle);
