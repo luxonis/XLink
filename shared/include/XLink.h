@@ -115,6 +115,30 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  */
 XLinkError_t XLinkResetAll();
 
+
+
+// MX ID API - This API support finding, booting and connecting to MyriadX devices using unique MX ID in devices
+
+/**
+ * @brief Returns all Myriad devices description which meets the requirements
+ * @param[in]      state - state of device enum (booted, not booted or any state)
+ * @param[in]      in_deviceRequirements - structure with device requirements (protocol, platform).
+ * @param[in,out]  out_foundDevicesPtr - pointer to array with all found devices descriptions
+ * @param[out]     devicesArraySize - size of out_foundDevicesPtr
+ * @param[out]     out_foundDevicesCount - amount of found devices
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkMxIdFindAllDevices(XLinkDeviceState_t state,
+                                         const deviceDesc_t in_deviceRequirements,
+                                         deviceDesc_t *out_foundDevicesPtr,
+                                         const unsigned int devicesArraySize,
+                                         unsigned int *out_foundDevicesCount);
+
+
+
+
+
+
 #endif // __PC__
 
 /**
