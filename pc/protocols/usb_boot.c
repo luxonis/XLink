@@ -21,7 +21,6 @@
 #include <pthread.h>
 #endif
 #include "usb_boot.h"
-#include "XLinkLog.h"
 #include "XLinkStringUtils.h"
 #include "XLinkPublicDefines.h"
 
