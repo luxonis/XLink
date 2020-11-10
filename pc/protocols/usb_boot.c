@@ -205,9 +205,20 @@ static int isNotBootedMyriadDevice(const int idVendor, const int idProduct) {
 }
 
 
+
 #if (!defined(_WIN32) && !defined(_WIN64) )
-static const char *gen_addr(libusb_device *dev, int pid)
+static double seconds()
 {
+    static double s;
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    if(!s)
+        s = ts.tv_sec + ts.tv_nsec * 1e-9;
+    return ts.tv_sec + ts.tv_nsec * 1e-9 - s;
+}
+static const char* gen_addr_compat(libusb_device *dev, int pid, uint8_t use_bus){
+
     static char buff[ADDRESS_BUFF_SIZE];
     uint8_t pnums[7];
     int pnum_cnt, i;
@@ -221,10 +232,10 @@ static const char *gen_addr(libusb_device *dev, int pid)
     }
     p = buff;
 
-#ifdef XLINK_USE_BUS
-    uint8_t bus = libusb_get_bus_number(dev);
-    p += snprintf(p, sizeof(buff), "%u.", bus);
-#endif
+    if(use_bus){
+        uint8_t bus = libusb_get_bus_number(dev);
+        p += snprintf(p, sizeof(buff), "%u.", bus);
+    }
 
     for (i = 0; i < pnum_cnt - 1; i++)
         p += snprintf(p, sizeof(buff),"%u.", pnums[i]);
@@ -240,6 +251,151 @@ static const char *gen_addr(libusb_device *dev, int pid)
     }
 
     return buff;
+
+}
+
+static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_device *dev, int pid)
+{
+
+#ifdef XLINK_USE_MX_ID_NAME
+
+
+    // TODO(themarpe)
+    // list of devices for which the serial was already resolved
+    // Some consts
+    #define LIST_SIZE 16
+    const double LIST_ENTRY_TIMEOUT_SEC = 3.0;
+    typedef struct {
+        char mx_id[XLINK_MAX_MX_ID_SIZE];
+        char compat_name[ADDRESS_BUFF_SIZE];
+        double timestamp;
+    } UnbootedMxIdListEntry;
+    static UnbootedMxIdListEntry list_unbooted_mx_id[LIST_SIZE] = {};
+    
+
+    // TODO(themarpe) - Add a way to get serial number without IO (https://github.com/pololu/libusbp) libudev or sysfs for Linux, ...
+
+    // MX ID
+    static char sn[XLINK_MAX_NAME_SIZE];
+    strncpy(sn, "<error>", sizeof(sn));
+    char* lastPointer = sn;
+
+    // if UNBOOTED state, perform mxId retrieval procedure
+    if(pid == DEFAULT_UNBOOTPID_2485 || pid == DEFAULT_UNBOOTPID_2150){
+
+        // TODO(themarpe/alex) - retrieve MX ID from the current unbooted device
+        
+
+
+
+        // TODO(themarpe) - cache results for a little while
+        /*
+        // first check if entry already exists in the list (and is still valid)
+        const char* compat_addr = gen_addr_compat(dev, pid, 1);
+        uint8_t found = 0;
+        for(int i = 0; i < LIST_SIZE; i++){
+            
+            // If entry still valid
+            if(seconds() - list_unbooted_mx_id[i].timestamp < LIST_ENTRY_TIMEOUT_SEC){
+                // if entry compat name matches
+                if(strncmp(compat_addr, list_unbooted_mx_id[i].compat_name, ADDRESS_BUFF_SIZE) == 0){
+                    // copy stored mx_id 
+                    lastPointer = strncpy(sn, list_unbooted_mx_id[i].mx_id, sizeof(sn));
+                    found = 1;
+                    break;
+                }
+            }
+        }
+
+        // if not available, then read id and store
+        if(!found){
+            // get serial from usb descriptor
+            libusb_device_handle *handle = NULL;
+            struct libusb_device_descriptor desc;
+
+            // Open device
+            int libusb_rc = libusb_open(dev, &handle);
+            if (libusb_rc < 0){
+                return sn;
+            }
+
+            int res = 0;
+            if( (res = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, sn, sizeof(sn))) < 0){
+                    mvLog(MVLOG_WARN, "Failed to get string descriptor: %s\n", libusb_strerror(res));
+            }
+            lastPointer += res;
+
+            // Close device
+            libusb_close(handle);
+
+            // Find empty space and store this entry
+            for(int i = 0; i < LIST_SIZE; i++){
+                // If entry an invalid
+                if(list_unbooted_mx_id[i].timestamp == 0.0 || seconds() - list_unbooted_mx_id[i].timestamp >= LIST_ENTRY_TIMEOUT_SEC){  
+                    strncpy(list_unbooted_mx_id[i].mx_id, sn, sizeof(sn));
+                    strncpy(list_unbooted_mx_id[i].compat_name, compat_addr, ADDRESS_BUFF_SIZE);
+                    list_unbooted_mx_id[i].timestamp = seconds();
+                }
+            }
+
+
+            // TMP UNBOOTED MX ID COUNTER
+            printf("unbooted device mxid retrieval call... %f\n", seconds());
+            
+        }
+        */
+
+
+    } else {
+
+        // get serial from usb descriptor
+        libusb_device_handle *handle = NULL;
+        struct libusb_device_descriptor desc;
+
+        // Open device
+        int libusb_rc = libusb_open(dev, &handle);
+        if (libusb_rc < 0){
+            return sn;
+        }
+
+        int res = 0;
+        if( (res = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, sn, sizeof(sn))) < 0){
+                mvLog(MVLOG_WARN, "Failed to get string descriptor: %s\n", libusb_strerror(res));
+        }
+        lastPointer += res;
+
+        // Close device
+        libusb_close(handle);
+        
+        /*
+        libusb_unref_device(dev);
+        libusb_detach_kernel_driver(h, 0);
+        libusb_rc = libusb_claim_interface(h, 0);
+        if(libusb_rc < 0)
+        {
+            libusb_close(h);
+            return 0;
+        }
+        */
+
+
+    }
+
+    // At the end add dev_name to retain compatibility with rest of the codebase
+    const char* dev_name = get_pid_name(pid);
+    if (dev_name != NULL) {
+        snprintf(lastPointer, sizeof(sn) - (lastPointer - sn) ,"-%s", dev_name);
+    }
+
+    return sn;
+
+#else
+
+    // return compatible addr
+    return gen_addr_compat(dev, pid, 0);
+
+#endif
+
 }
 
 static pthread_mutex_t globalMutex = PTHREAD_MUTEX_INITIALIZER;
@@ -330,7 +486,7 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                  && isBootloaderMyriadDevice(desc.idVendor, desc.idProduct)) 
         ) {
             if (device) {
-                const char *dev_addr = gen_addr(dev, get_pid_by_name(input_addr));
+                const char *dev_addr = gen_addr(&desc, dev, get_pid_by_name(input_addr));
                 if (!strcmp(dev_addr, input_addr)) {
 #if 0 // To avoid spam in Debug mode
                     mvLog(MVLOG_DEBUG, "Found Address: %s - VID/PID %04x:%04x",
@@ -350,7 +506,7 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                     return USB_BOOT_SUCCESS;
                 }
             } else if (searchByName) {
-                const char *dev_addr = gen_addr(dev, desc.idProduct);
+                const char *dev_addr = gen_addr(&desc, dev, desc.idProduct);
                 // If the same add as input
                 if (!strcmp(dev_addr, input_addr)) {
 #if 0 // To avoid spam in Debug mode
@@ -364,7 +520,7 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                     return USB_BOOT_SUCCESS;
                 }
             } else if (idx == count) {
-                const char *caddr = gen_addr(dev, desc.idProduct);
+                const char *caddr = gen_addr(&desc, dev, desc.idProduct);
 #if 0 // To avoid spam in Debug mode
                 mvLog(MVLOG_DEBUG, "Device %d Address: %s - VID/PID %04x:%04x",
                       idx, caddr, desc.idVendor, desc.idProduct);

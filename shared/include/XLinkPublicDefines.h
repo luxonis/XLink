@@ -15,10 +15,16 @@ extern "C"
 {
 #endif
 
+#define XLINK_MAX_MX_ID_SIZE 128
+
+#ifdef XLINK_USE_MX_ID_NAME
+#define XLINK_MAX_NAME_SIZE (XLINK_MAX_MX_ID_SIZE + 16) // additional space for device name (see supportedDevices)
+#else
 #define XLINK_MAX_NAME_SIZE 28
+#endif
+
 #define XLINK_MAX_STREAMS 32
 #define XLINK_MAX_PACKETS_PER_STREAM 64
-#define XLINK_MAX_MXID 128
 
 typedef enum {
     X_LINK_USB_SPEED_UNKNOWN = 0,

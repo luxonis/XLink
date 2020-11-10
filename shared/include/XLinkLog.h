@@ -22,6 +22,10 @@
 #ifndef MVLOG_H__
 #define MVLOG_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <inttypes.h>
@@ -91,4 +95,11 @@ inline void mvLogDefaultLevelSet(mvLog_t lvl){
     }
 }
 
+
+#ifdef __cplusplus
+}
 #endif
+
+#endif
+
+

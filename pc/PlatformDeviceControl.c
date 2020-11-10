@@ -42,7 +42,7 @@ int usbFdRead = -1;
 
 
 static UsbSpeed_t usb_speed_enum = X_LINK_USB_SPEED_UNKNOWN;
-static char mx_serial[XLINK_MAX_MXID] = { 0 };
+static char mx_serial[XLINK_MAX_MX_ID_SIZE] = { 0 };
 #ifdef USE_USB_VSC
 static int statuswaittimeout = 5;
 #endif
@@ -297,7 +297,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         libusb_unref_device(dev);
         return 0;
     }
-    unsigned char sn[XLINK_MAX_MXID];
+    unsigned char sn[XLINK_MAX_MX_ID_SIZE];
     if (res < 0 || libusb_get_string_descriptor_ascii(h, desc.iSerialNumber, sn, sizeof sn) < 0){
         mvLog(MVLOG_INFO,"Failed to get string descriptor\n");
     }
@@ -308,7 +308,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         }
         mvLog(MVLOG_INFO,"VID:%04x PID:%04x serial:%s Speed:%s in usb open\n", 
                 desc.idVendor, desc.idProduct, sn, speed);
-        mv_strcpy(mx_serial, XLINK_MAX_MXID ,sn);
+        mv_strcpy(mx_serial, XLINK_MAX_MX_ID_SIZE ,sn);
     }
     libusb_unref_device(dev);
     libusb_detach_kernel_driver(h, 0);

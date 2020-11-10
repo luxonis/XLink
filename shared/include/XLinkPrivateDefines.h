@@ -60,7 +60,7 @@ typedef struct xLinkDesc_t {
     linkId_t id;
     sem_t dispatcherClosedSem;
     UsbSpeed_t usbConnSpeed;
-    char mxSerialId[XLINK_MAX_MXID];
+    char mxSerialId[XLINK_MAX_MX_ID_SIZE];
     
     //Deprecated fields. Begin.
     int hostClosedFD;
