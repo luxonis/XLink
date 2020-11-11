@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <stdbool.h>
 #if (defined(_WIN32) || defined(_WIN64) )
 #include "win_usb.h"
 #include "win_time.h"
@@ -242,7 +243,7 @@ static double seconds()
         s = ts.tv_sec + ts.tv_nsec * 1e-9;
     return ts.tv_sec + ts.tv_nsec * 1e-9 - s;
 }
-static const char* gen_addr_compat(libusb_device *dev, int pid, uint8_t use_bus){
+static const char* gen_addr_compat(libusb_device *dev, int pid, bool use_bus){
 
     static char buff[ADDRESS_BUFF_SIZE];
     uint8_t pnums[7];
@@ -279,193 +280,264 @@ static const char* gen_addr_compat(libusb_device *dev, int pid, uint8_t use_bus)
 
 }
 
+
+
+
+
+// list of devices for which the mx_id was already resolved (with small timeout)
+// Some consts
+#define MX_ID_LIST_SIZE 16
+const double LIST_ENTRY_TIMEOUT_SEC = 0.5;
+typedef struct {
+    char mx_id[XLINK_MAX_MX_ID_SIZE];
+    char compat_name[ADDRESS_BUFF_SIZE];
+    double timestamp;
+} MxIdListEntry;
+static MxIdListEntry list_mx_id[MX_ID_LIST_SIZE] = {0};
+static bool list_initialized = false;
+
+static bool list_mx_id_is_entry_valid(MxIdListEntry* entry){
+    if(entry == NULL) return false;
+    if(entry->compat_name[0] == 0 || seconds() - entry->timestamp >= LIST_ENTRY_TIMEOUT_SEC) return false; 
+    
+    // otherwise entry ok
+    return true;
+}
+
+static int list_mx_id_store_entry(const char* mx_id, const char* compat_addr){
+    for(int i = 0; i < MX_ID_LIST_SIZE; i++){
+        // If entry an invalid (timedout - default)
+        if(!list_mx_id_is_entry_valid(&list_mx_id[i])){
+            strncpy(list_mx_id[i].mx_id, mx_id, sizeof(mx_id));
+            strncpy(list_mx_id[i].compat_name, compat_addr, ADDRESS_BUFF_SIZE);
+            list_mx_id[i].timestamp = seconds();
+            return i;
+        }            
+    }
+    return -1;
+}
+
+static bool list_mx_id_get_entry(const char* compat_addr, char* mx_id){
+    for(int i = 0; i < MX_ID_LIST_SIZE; i++){
+        // If entry still valid
+        if(list_mx_id[i].compat_name[0] != 0 && seconds() - list_mx_id[i].timestamp < LIST_ENTRY_TIMEOUT_SEC){
+            // if entry compat name matches
+            if(strncmp(compat_addr, list_mx_id[i].compat_name, ADDRESS_BUFF_SIZE) == 0){
+                // copy stored mx_id 
+                strncpy(mx_id, list_mx_id[i].mx_id, sizeof(mx_id));
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+
+
+
+
+
 static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_device *dev, int pid)
 {
 
 #ifdef XLINK_USE_MX_ID_NAME
 
-
-    // TODO(themarpe)
-    // list of devices for which the serial was already resolved
-    // Some consts
-    #define LIST_SIZE 16
-    const double LIST_ENTRY_TIMEOUT_SEC = 3.0;
-    typedef struct {
-        char mx_id[XLINK_MAX_MX_ID_SIZE];
-        char compat_name[ADDRESS_BUFF_SIZE];
-        double timestamp;
-    } UnbootedMxIdListEntry;
-    static UnbootedMxIdListEntry list_unbooted_mx_id[LIST_SIZE] = {};
-    
-
-    // TODO(themarpe) - Add a way to get serial number without IO (https://github.com/pololu/libusbp) libudev or sysfs for Linux, ...
-
-    // MX ID
-    static char sn[XLINK_MAX_NAME_SIZE];
-    strncpy(sn, "<error>", sizeof(sn));
-    char* lastPointer = sn;
-
-    // if UNBOOTED state, perform mxId retrieval procedure
-    if(pid == DEFAULT_UNBOOTPID_2485 || pid == DEFAULT_UNBOOTPID_2150){
-
-        // TODO(themarpe/alex) - retrieve MX ID from the current unbooted device
-        
-
-
-
-        // TODO(themarpe) - cache results for a little while
-
-        // first check if entry already exists in the list (and is still valid)
-        const char* compat_addr = gen_addr_compat(dev, pid, 1);
-        uint8_t found = 0;
-        for(int i = 0; i < LIST_SIZE; i++){
-            
-            // If entry still valid
-            if(seconds() - list_unbooted_mx_id[i].timestamp < LIST_ENTRY_TIMEOUT_SEC){
-                // if entry compat name matches
-                if(strncmp(compat_addr, list_unbooted_mx_id[i].compat_name, ADDRESS_BUFF_SIZE) == 0){
-                    // copy stored mx_id 
-                    lastPointer = strncpy(sn, list_unbooted_mx_id[i].mx_id, sizeof(sn));
-                    found = 1;
-                    break;
-                }
-            }
+    // initialize list
+    if(!list_initialized){
+        for (int i = 0; i < MX_ID_LIST_SIZE; i++) {
+            list_mx_id[i].timestamp = 0;
+            list_mx_id[i].mx_id[0] = 0;
+            list_mx_id[i].compat_name[0] = 0;
         }
+        list_initialized = true;
+    }
 
-        // if not available, then read id and store
-        if(!found){
-            // get serial from usb descriptor
-            libusb_device_handle *handle = NULL;
-            struct libusb_device_descriptor desc;
+    // Static variables
+    static char final_addr[XLINK_MAX_NAME_SIZE];
+    static char mx_id[XLINK_MAX_MX_ID_SIZE];
 
-            // Open device
-            int libusb_rc = libusb_open(dev, &handle);
-            if (libusb_rc < 0){
-                return sn;
-            }
-
-            int res = 0;
-            /*
-            if( (res = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, sn, sizeof(sn))) < 0){
-                    mvLog(MVLOG_WARN, "Failed to get string descriptor: %s\n", libusb_strerror(res));
-            }
-            lastPointer += res;
-
-            */
-            do {
-                if ((res = libusb_set_configuration(handle, 1)) < 0) {
-                    mvLog(MVLOG_ERROR, "libusb_set_configuration: %s\n", libusb_strerror(res));
-                    break;
-                }
-                if ((res = libusb_claim_interface(handle, 0)) < 0) {
-                    mvLog(MVLOG_ERROR, "libusb_claim_interface: %s\n", libusb_strerror(res));
-                    break;
-                }
-
-                int send_ep = 0x01;
-                int size = sizeof(mxid_read_cmd);
-                int transferred = 0;
-                if ((res = libusb_bulk_transfer(handle, send_ep, mxid_read_cmd, size, &transferred, write_timeout)) < 0) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer send: %s\n", libusb_strerror(res));
-                    break;
-                }
-                if (size != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer written %d, expected %d\n", transferred, size);
-                    break;
-                }
-
-                int recv_ep = 0x81;
-                uint8_t rbuf[128];
-                int expected = 9;
-                transferred = 0;
-                if ((res = libusb_bulk_transfer(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, write_timeout)) < 0) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer recv: %s\n", libusb_strerror(res));
-                    break;
-                }
-                if (expected != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer read %d, expected %d\n", transferred, expected);
-                    break;
-                }
-                rbuf[8] &= 0xF0; // There's a bug, it should be 0x0F, but setting as in MDK
-                for (int i = 0; i < transferred; i++) {
-                    sprintf(sn + 2*i, "%02X", rbuf[i]);
-                }
-                res = 0;
-            } while (0);
-
-            if (res != 0) {
-                // TODO
-                mvLog(MVLOG_ERROR, "FAILED\n");
-            }
-            // Close device
-            libusb_close(handle);
-
-            // Find empty space and store this entry
-            for(int i = 0; i < LIST_SIZE; i++){
-                // If entry an invalid
-                if(list_unbooted_mx_id[i].timestamp == 0.0 || seconds() - list_unbooted_mx_id[i].timestamp >= LIST_ENTRY_TIMEOUT_SEC){  
-                    strncpy(list_unbooted_mx_id[i].mx_id, sn, sizeof(sn));
-                    strncpy(list_unbooted_mx_id[i].compat_name, compat_addr, ADDRESS_BUFF_SIZE);
-                    list_unbooted_mx_id[i].timestamp = seconds();
-                    mvLog(MVLOG_DEBUG, "Stored MX ID %s at index %d\n", sn, i);
-                    break;
-                }
-            }
+    // Set final_addr as error first
+    strncpy(final_addr, "<error>", sizeof(final_addr));
 
 
-            // TMP UNBOOTED MX ID COUNTER
-            printf("unbooted device mxid retrieval call... %f\n", seconds());
-            
-        }
+    // generate unique (full) usb bus-port path 
+    const char* compat_addr = gen_addr_compat(dev, pid, true);
 
+    // first check if entry already exists in the list (and is still valid)
+    // if found, it stores it into mx_id variable
+    bool found = list_mx_id_get_entry(compat_addr, mx_id);
+
+    if(found){
+        mvLog(MVLOG_DEBUG, "Found cached MX ID: %s", mx_id);
 
     } else {
+        // If not found, retrieve mx_id
 
         // get serial from usb descriptor
         libusb_device_handle *handle = NULL;
-        struct libusb_device_descriptor desc;
+        int libusb_rc = 0;
 
         // Open device
-        int libusb_rc = libusb_open(dev, &handle);
+        libusb_rc = libusb_open(dev, &handle);
         if (libusb_rc < 0){
-            return sn;
+            // Some kind of error, either NO_MEM, ACCESS, NO_DEVICE or other
+            // In all these cases, return
+            // no cleanup needed
+            return final_addr;
         }
 
-        int res = 0;
-        if( (res = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, sn, sizeof(sn))) < 0){
-                mvLog(MVLOG_WARN, "Failed to get string descriptor: %s\n", libusb_strerror(res));
-        }
-        lastPointer += res;
 
-        // Close device
+        // Retry getting MX ID for 5ms
+        const double RETRY_TIMEOUT = 0.005; // 5ms
+        const int SLEEP_BETWEEN_RETRIES_USEC = 100; // 100us
+        double t_retry = seconds();
+        do {
+
+            // if UNBOOTED state, perform mx_id retrieval procedure using small program and a read command
+            if(pid == DEFAULT_UNBOOTPID_2485 || pid == DEFAULT_UNBOOTPID_2150){
+                
+                // Get configuration first (From OS cache)
+                int active_configuration = -1;
+                if( (libusb_rc = libusb_get_configuration(handle, &active_configuration)) == 0){
+                    if(active_configuration != 1){
+                        mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1\n", active_configuration);
+                        if ((libusb_rc = libusb_set_configuration(handle, 1)) < 0) {
+                            mvLog(MVLOG_ERROR, "libusb_set_configuration: %s", libusb_strerror(libusb_rc));
+
+                            // retry
+                            usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                            continue;
+                        }
+                    }
+                } else {
+                    // getting config failed...
+                    mvLog(MVLOG_ERROR, "libusb_set_configuration: %s", libusb_strerror(libusb_rc));
+                    
+                    // retry
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+
+
+                // Claim interface (as we'll be doing IO on endpoints)
+                if ((libusb_rc = libusb_claim_interface(handle, 0)) < 0) {
+                    if(libusb_rc != LIBUSB_ERROR_BUSY){
+                        mvLog(MVLOG_ERROR, "libusb_claim_interface: %s", libusb_strerror(libusb_rc));
+                    }
+                    // retry - most likely device busy by another app
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+
+
+                const int send_ep = 0x01;
+                const int size = sizeof(mxid_read_cmd);
+                int transferred = 0;
+                if ((libusb_rc = libusb_bulk_transfer(handle, send_ep, mxid_read_cmd, size, &transferred, write_timeout)) < 0) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer send: %s", libusb_strerror(libusb_rc));
+                    
+                    // retry
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+                // Transfer as mxid_read_cmd size is less than 512B it should transfer all 
+                if (size != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer written %d, expected %d", transferred, size);
+                    
+                    // retry
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+
+                const int recv_ep = 0x81;
+                const int expected = 9;
+                uint8_t rbuf[128];
+                transferred = 0;
+                if ((libusb_rc = libusb_bulk_transfer(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, write_timeout)) < 0) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer recv: %s", libusb_strerror(libusb_rc));
+                    
+                    // retry
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+                if (expected != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer read %d, expected %d", transferred, expected);
+                    
+                    // retry
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+                
+                // Release claimed interface
+                // ignore error as it doesn't matter
+                libusb_release_interface(handle, 0);
+
+                // Parse mx_id into HEX presentation
+                // There's a bug, it should be 0x0F, but setting as in MDK
+                rbuf[8] &= 0xF0; 
+
+                // Convert to HEX presentation and store into mx_id
+                for (int i = 0; i < transferred; i++) {
+                    sprintf(mx_id + 2*i, "%02X", rbuf[i]);
+                }
+
+                // Indicate no error
+                libusb_rc = 0;
+
+            } else {
+
+                if( (libusb_rc = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, mx_id, sizeof(mx_id))) < 0){
+                    mvLog(MVLOG_WARN, "Failed to get string descriptor");
+                    
+                    // retry
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+
+                // Indicate no error
+                libusb_rc = 0;
+
+            }
+
+        } while (libusb_rc != 0 && seconds() - t_retry < RETRY_TIMEOUT);
+
+        // Close opened device
         libusb_close(handle);
-        
-        /*
-        libusb_unref_device(dev);
-        libusb_detach_kernel_driver(h, 0);
-        libusb_rc = libusb_claim_interface(h, 0);
-        if(libusb_rc < 0)
-        {
-            libusb_close(h);
-            return 0;
+
+
+        // if mx_id couldn't be retrieved, exit by returning final_addr ("<error>")
+        if(libusb_rc != 0){
+            return final_addr;
         }
-        */
 
+        // Cache the retrieved mx_id
+        // Find empty space and store this entry
+        // If no empty space, don't cache (possible case: >16 devices)
+        int cache_index = list_mx_id_store_entry(mx_id, compat_addr);
+        if(cache_index >= 0){
+            // debug print
+            mvLog(MVLOG_DEBUG, "Cached MX ID %s at index %d", mx_id, cache_index);
+        } else {
+            // debug print
+            mvLog(MVLOG_DEBUG, "Couldn't cache MX ID %s", mx_id);
+        }
 
-    }
-
+    } 
+    
     // At the end add dev_name to retain compatibility with rest of the codebase
     const char* dev_name = get_pid_name(pid);
-    if (dev_name != NULL) {
-        snprintf(lastPointer, sizeof(sn) - (lastPointer - sn) ,"-%s", dev_name);
-    }
+    
+    // Create address [mx_id]-[dev_name]
+    snprintf(final_addr, sizeof(final_addr), "%s-%s", mx_id, dev_name);
 
-    return sn;
+    mvLog(MVLOG_DEBUG, "Returning generated name: %s", final_addr);
+
+    return final_addr;
 
 #else
 
     // return compatible addr
-    return gen_addr_compat(dev, pid, 0);
+    return gen_addr_compat(dev, pid, false);
 
 #endif
 
@@ -722,12 +794,26 @@ static libusb_device_handle *usb_open_device(libusb_device *dev, uint8_t *endpoi
         snprintf(err_string_buff, err_max_len, "cannot open device: %s\n", libusb_strerror(res));
         return 0;
     }
-    if((res = libusb_set_configuration(h, 1)) < 0)
-    {
+
+    // Get configuration first
+    int active_configuration = -1;
+    if((res = libusb_get_configuration(h, &active_configuration)) < 0){
         snprintf(err_string_buff, err_max_len, "setting config 1 failed: %s\n", libusb_strerror(res));
         libusb_close(h);
         return 0;
     }
+
+    // Check if set configuration call is needed
+    if(active_configuration != 1){
+        mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1\n", active_configuration);
+        if ((res = libusb_set_configuration(h, 1)) < 0) {
+            mvLog(MVLOG_ERROR, "libusb_set_configuration: %s\n", libusb_strerror(res));
+            snprintf(err_string_buff, err_max_len, "setting config 1 failed: %s\n", libusb_strerror(res));
+            libusb_close(h);
+            return 0;
+        }
+    }
+
     if((res = libusb_claim_interface(h, 0)) < 0)
     {
         snprintf(err_string_buff, err_max_len, "claiming interface 0 failed: %s\n", libusb_strerror(res));
@@ -782,11 +868,13 @@ static int wait_findopen(const char *device_address, int timeout, libusb_device 
 
     usleep(100000);
 
-    if(timeout == -1)
+    if(timeout == -1){
         mvLog(MVLOG_DEBUG, "Starting wait for connect, no timeout");
-    else if(timeout == 0)
+    } else if(timeout == 0){
         mvLog(MVLOG_DEBUG, "Trying to connect");
-    else mvLog(MVLOG_DEBUG, "Starting wait for connect with %ums timeout", timeout);
+    } else { 
+        mvLog(MVLOG_DEBUG, "Starting wait for connect with %ums timeout (device_address: %s)", timeout, device_address);
+    }
 
     last_open_dev_err[0] = 0;
     i = 0;
