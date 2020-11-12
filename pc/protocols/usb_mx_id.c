@@ -8,6 +8,7 @@
 #include "time.h"
 #endif
 
+#include "string.h"
 
 static double steady_seconds()
 {
@@ -59,7 +60,7 @@ const uint8_t* usb_mx_id_get_payload() {
     return mxid_read_cmd;
 }
 
-const uint8_t* usb_mx_id_get_payload_size() {
+int usb_mx_id_get_payload_size() {
     return sizeof(mxid_read_cmd);
 }
 

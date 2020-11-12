@@ -259,7 +259,15 @@ libusb_device_handle *usbLinkOpen(const char *path)
     }
     if (rc == USB_BOOT_TIMEOUT || rc == USB_BOOT_DEVICE_NOT_FOUND) // Timeout
         return 0;
+
+    // Retrieve mx id from name
+    for(int i = 0; i < XLINK_MAX_NAME_SIZE; i++){
+        if(path[i] == '-') break;
+        mx_serial[i] = path[i];
+    }
+        
 #if (defined(_WIN32) || defined(_WIN64) )
+
     char last_open_dev_err[OPEN_DEV_ERROR_MESSAGE_LENGTH] = {0};
     h = usb_open_device(dev, NULL, 0, last_open_dev_err, OPEN_DEV_ERROR_MESSAGE_LENGTH);
     int libusb_rc = ((h != NULL) ? (0) : (-1));
@@ -273,23 +281,13 @@ libusb_device_handle *usbLinkOpen(const char *path)
         return 0;
     }
     usb_free_device(dev);
+
+    // Get usb speed
+    usb_speed_enum = usb_get_usb_speed(h);
+
 #else
-    struct libusb_device_descriptor desc;
-    int res;
-    if ((res = libusb_get_device_descriptor(dev, &desc)) < 0) {
-        mvLog(MVLOG_WARN, "Unable to get USB device descriptor: %s\n", libusb_strerror(res));
-    }
 
     usb_speed_enum = libusb_get_device_speed(dev);
-
-    const char *speed_str_map[] = {
-        [X_LINK_USB_SPEED_UNKNOWN] = "Unknown", 
-        [X_LINK_USB_SPEED_LOW] = "Low/1.5Mbps", 
-        [X_LINK_USB_SPEED_FULL] = "Full/12Mbps", 
-        [X_LINK_USB_SPEED_HIGH] = "High/480Mbps", 
-        [X_LINK_USB_SPEED_SUPER] = "Super/5000Mbps",
-        [X_LINK_USB_SPEED_SUPER_PLUS] = "Super+/10000Mbps"
-    };
 
     int libusb_rc = libusb_open(dev, &h);
     if (libusb_rc < 0)
@@ -297,19 +295,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         libusb_unref_device(dev);
         return 0;
     }
-    unsigned char sn[XLINK_MAX_MX_ID_SIZE];
-    if (res < 0 || libusb_get_string_descriptor_ascii(h, desc.iSerialNumber, sn, sizeof sn) < 0){
-        mvLog(MVLOG_INFO,"Failed to get string descriptor\n");
-    }
-    else{
-        const char* speed = speed_str_map[X_LINK_USB_SPEED_UNKNOWN];
-        if(usb_speed_enum >= 0 && usb_speed_enum < sizeof(speed_str_map)/sizeof(speed_str_map[0])){
-            speed = speed_str_map[usb_speed_enum];
-        }
-        mvLog(MVLOG_INFO,"VID:%04x PID:%04x serial:%s Speed:%s in usb open\n", 
-                desc.idVendor, desc.idProduct, sn, speed);
-        mv_strcpy(mx_serial, XLINK_MAX_MX_ID_SIZE ,sn);
-    }
+    
     libusb_unref_device(dev);
     libusb_detach_kernel_driver(h, 0);
     libusb_rc = libusb_claim_interface(h, 0);

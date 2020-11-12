@@ -42,6 +42,7 @@ extern int usb_bulk_write(usb_hwnd han, uint8_t ep, const void *buffer, size_t s
 extern int usb_bulk_read(usb_hwnd han, uint8_t ep, void *buffer, size_t sz, uint32_t *read_bytes, int timeout_ms);
 extern void usb_free_device(usb_dev dev);
 extern void usb_close_device(usb_hwnd han);
+UsbSpeed_t usb_get_usb_speed(usb_hwnd han);
 
 extern const char *usb_last_bulk_errmsg(void);
 extern void usb_set_msgfile(FILE *file);

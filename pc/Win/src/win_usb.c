@@ -255,6 +255,35 @@ int usb_check_connected(usb_dev dev) {
     return 1;
 }
 
+
+UsbSpeed_t usb_get_usb_speed(usb_hwnd han){
+
+    // TODO winusb api doesn't support getting other device speeds
+    /*
+    uint8_t devSpeed = 0;
+    BOOL bResult = TRUE;
+    ULONG length = sizeof(UCHAR);
+    bResult = WinUsb_QueryDeviceInformation(han->winUsbHan, DEVICE_SPEED, &length, &devSpeed);
+    if(!bResult) {
+        printf("Error getting device speed: %d.\n", GetLastError());
+        return X_LINK_USB_SPEED_UNKNOWN;
+    }
+    switch (devSpeed){
+        case LowSpeed: return X_LINK_USB_SPEED_LOW;
+        case FullSpeed: return X_LINK_USB_SPEED_FULL;
+        case HighSpeed: return X_LINK_USB_SPEED_HIGH;        
+    }
+
+    */
+
+    // return UNKNOWN for now
+    return X_LINK_USB_SPEED_UNKNOWN;    
+
+}
+
+
+
+
 void * usb_open_device(usb_dev dev, uint8_t *ep, uint8_t intfaceno, char *err_string_buff, size_t err_max_len) {
     HANDLE devHan = INVALID_HANDLE_VALUE;
     WINUSB_INTERFACE_HANDLE winUsbHan = INVALID_HANDLE_VALUE;
