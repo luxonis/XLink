@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include <stdbool.h>
+#include "usb_mx_id.h"
 #if (defined(_WIN32) || defined(_WIN64) )
 #include "win_usb.h"
 #include "win_time.h"
@@ -49,6 +50,9 @@ static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int connect_timeout = DEFAULT_CONNECT_TIMEOUT;
 static int initialized;
 
+static int MX_ID_TIMEOUT = 100;
+
+
 typedef struct {
     int pid;
     char name[10];
@@ -76,28 +80,6 @@ static deviceBootInfo_t supportedDevices[] = {
     }
 };
 
-static const uint8_t mxid_read_cmd[] = {
-    0x4d, 0x41, 0x32, 0x78, 0x8a, 0x00, 0x00, 0x20, 0x70, 0x48, 0x00, 0x00, 0x0c, 0x08, 0x03, 0x64,
-    0x61, 0x10, 0x84, 0x6c, 0x61, 0x10, 0x82, 0x00, 0x80, 0x00, 0xc4, 0x00, 0x40, 0x00, 0xc6, 0x03,
-    0xa0, 0x08, 0x84, 0x00, 0x40, 0x00, 0xc6, 0x03, 0x80, 0x88, 0x80, 0xfe, 0xff, 0xbf, 0x12, 0x00,
-    0x00, 0x00, 0x01, 0x08, 0xe0, 0xc3, 0x81, 0x00, 0x00, 0x00, 0x01, 0xa0, 0xbf, 0xe3, 0x9d, 0x00,
-    0x0c, 0x08, 0x3b, 0x68, 0x61, 0x17, 0xb8, 0x00, 0x00, 0x27, 0xc0, 0xf0, 0xff, 0xff, 0x7f, 0x00,
-    0x00, 0x00, 0x01, 0x70, 0x61, 0x17, 0x82, 0x64, 0x61, 0x17, 0xba, 0x00, 0x40, 0x00, 0xc2, 0x28,
-    0x00, 0x00, 0x03, 0x00, 0x00, 0x27, 0xc2, 0xe9, 0xff, 0xff, 0x7f, 0x00, 0x00, 0x00, 0x01, 0x00,
-    0x40, 0x27, 0xc0, 0x08, 0xe0, 0xc7, 0x81, 0x00, 0x00, 0xe8, 0x81, 0xa0, 0xbf, 0xe3, 0x9d, 0x00,
-    0x0c, 0x08, 0x3b, 0x64, 0x61, 0x17, 0x82, 0x68, 0x61, 0x17, 0xb8, 0x03, 0x20, 0x10, 0x84, 0x04,
-    0x00, 0x00, 0x37, 0x00, 0x40, 0x20, 0xc4, 0xdd, 0xff, 0xff, 0x7f, 0x00, 0x00, 0x00, 0x01, 0x00,
-    0x00, 0x27, 0xf6, 0xda, 0xff, 0xff, 0x7f, 0x10, 0xe0, 0x16, 0xb6, 0x00, 0x00, 0x27, 0xf6, 0xd7,
-    0xff, 0xff, 0x7f, 0x00, 0x00, 0x00, 0x01, 0x08, 0x20, 0x10, 0x82, 0x00, 0x00, 0x27, 0xc2, 0xd3,
-    0xff, 0xff, 0x7f, 0x70, 0x61, 0x17, 0xba, 0x00, 0x40, 0x07, 0xc2, 0x00, 0x00, 0x26, 0xc2, 0x09,
-    0x20, 0x10, 0x82, 0x00, 0x00, 0x27, 0xc2, 0xcd, 0xff, 0xff, 0x7f, 0x00, 0x00, 0x00, 0x01, 0x00,
-    0x40, 0x07, 0xc2, 0x04, 0x20, 0x26, 0xc2, 0x0a, 0x20, 0x10, 0x82, 0x00, 0x00, 0x27, 0xc2, 0xc7,
-    0xff, 0xff, 0x7f, 0x00, 0x00, 0x00, 0x01, 0x00, 0x40, 0x07, 0xc2, 0x08, 0x20, 0x26, 0xc2, 0xcf,
-    0xff, 0xff, 0x7f, 0x00, 0x00, 0xe8, 0x81, 0xa0, 0xbf, 0xe3, 0x9d, 0x00, 0x00, 0x1c, 0x11, 0xdb,
-    0xff, 0xff, 0x7f, 0x00, 0x20, 0x10, 0xb0, 0x08, 0xe0, 0xc7, 0x81, 0x00, 0x00, 0xe8, 0x81, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xba, 0xfc, 0x00, 0x20, 0x70,
-    0x84, 0x00, 0x00, 0x00, 0x70, 0x09, 0x00,
-};
 
 // for now we'll only use the loglevel for usb boot. can bring it into
 // the rest of usblink later
@@ -193,7 +175,7 @@ static int is_pid_supported(int pid)
     return 0;
 }
 
-static int isMyriadDevice(const int idVendor, const int idProduct) {
+int isMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad and pid supported
     if (idVendor == DEFAULT_VID && is_pid_supported(idProduct) == 1)
         return 1;
@@ -206,7 +188,7 @@ static int isMyriadDevice(const int idVendor, const int idProduct) {
     return 0;
 }
 
-static int isBootedMyriadDevice(const int idVendor, const int idProduct) {
+int isBootedMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad, booted device pid
     if (idVendor == DEFAULT_VID && idProduct == DEFAULT_OPENPID) {
         return 1;
@@ -214,14 +196,14 @@ static int isBootedMyriadDevice(const int idVendor, const int idProduct) {
     return 0;
 }
 
-static int isBootloaderMyriadDevice(const int idVendor, const int idProduct) {
+int isBootloaderMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad and in bootloader
     if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_BOOTLOADER_PID)
         return 1;
     return 0;
 }
 
-static int isNotBootedMyriadDevice(const int idVendor, const int idProduct) {
+int isNotBootedMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad, pid supported and it's is not booted device
     if (idVendor == DEFAULT_VID && is_pid_supported(idProduct) == 1
         && idProduct != DEFAULT_OPENPID && idProduct != DEFAULT_BOOTLOADER_PID) {
@@ -233,6 +215,15 @@ static int isNotBootedMyriadDevice(const int idVendor, const int idProduct) {
 
 
 #if (!defined(_WIN32) && !defined(_WIN64) )
+
+static double steady_seconds()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
+
+
 static double seconds()
 {
     static double s;
@@ -281,76 +272,12 @@ static const char* gen_addr_compat(libusb_device *dev, int pid, bool use_bus){
 }
 
 
-
-
-
-// list of devices for which the mx_id was already resolved (with small timeout)
-// Some consts
-#define MX_ID_LIST_SIZE 16
-const double LIST_ENTRY_TIMEOUT_SEC = 0.5;
-typedef struct {
-    char mx_id[XLINK_MAX_MX_ID_SIZE];
-    char compat_name[ADDRESS_BUFF_SIZE];
-    double timestamp;
-} MxIdListEntry;
-static MxIdListEntry list_mx_id[MX_ID_LIST_SIZE] = {0};
-static bool list_initialized = false;
-
-static bool list_mx_id_is_entry_valid(MxIdListEntry* entry){
-    if(entry == NULL) return false;
-    if(entry->compat_name[0] == 0 || seconds() - entry->timestamp >= LIST_ENTRY_TIMEOUT_SEC) return false; 
-    
-    // otherwise entry ok
-    return true;
-}
-
-static int list_mx_id_store_entry(const char* mx_id, const char* compat_addr){
-    for(int i = 0; i < MX_ID_LIST_SIZE; i++){
-        // If entry an invalid (timedout - default)
-        if(!list_mx_id_is_entry_valid(&list_mx_id[i])){
-            strncpy(list_mx_id[i].mx_id, mx_id, sizeof(mx_id));
-            strncpy(list_mx_id[i].compat_name, compat_addr, ADDRESS_BUFF_SIZE);
-            list_mx_id[i].timestamp = seconds();
-            return i;
-        }            
-    }
-    return -1;
-}
-
-static bool list_mx_id_get_entry(const char* compat_addr, char* mx_id){
-    for(int i = 0; i < MX_ID_LIST_SIZE; i++){
-        // If entry still valid
-        if(list_mx_id[i].compat_name[0] != 0 && seconds() - list_mx_id[i].timestamp < LIST_ENTRY_TIMEOUT_SEC){
-            // if entry compat name matches
-            if(strncmp(compat_addr, list_mx_id[i].compat_name, ADDRESS_BUFF_SIZE) == 0){
-                // copy stored mx_id 
-                strncpy(mx_id, list_mx_id[i].mx_id, sizeof(mx_id));
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-
-
-
-
-
 static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_device *dev, int pid)
 {
 
 #ifdef XLINK_USE_MX_ID_NAME
 
-    // initialize list
-    if(!list_initialized){
-        for (int i = 0; i < MX_ID_LIST_SIZE; i++) {
-            list_mx_id[i].timestamp = 0;
-            list_mx_id[i].mx_id[0] = 0;
-            list_mx_id[i].compat_name[0] = 0;
-        }
-        list_initialized = true;
-    }
+    usb_mx_id_cache_init();
 
     // Static variables
     static char final_addr[XLINK_MAX_NAME_SIZE];
@@ -359,13 +286,12 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
     // Set final_addr as error first
     strncpy(final_addr, "<error>", sizeof(final_addr));
 
-
     // generate unique (full) usb bus-port path 
     const char* compat_addr = gen_addr_compat(dev, pid, true);
 
     // first check if entry already exists in the list (and is still valid)
     // if found, it stores it into mx_id variable
-    bool found = list_mx_id_get_entry(compat_addr, mx_id);
+    bool found = usb_mx_id_cache_get_entry(compat_addr, mx_id);
 
     if(found){
         mvLog(MVLOG_DEBUG, "Found cached MX ID: %s", mx_id);
@@ -433,7 +359,7 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
                 const int send_ep = 0x01;
                 const int size = sizeof(mxid_read_cmd);
                 int transferred = 0;
-                if ((libusb_rc = libusb_bulk_transfer(handle, send_ep, mxid_read_cmd, size, &transferred, write_timeout)) < 0) {
+                if ((libusb_rc = libusb_bulk_transfer(handle, send_ep, mxid_read_cmd, size, &transferred, MX_ID_TIMEOUT)) < 0) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer send: %s", libusb_strerror(libusb_rc));
                     
                     // retry
@@ -453,7 +379,7 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
                 const int expected = 9;
                 uint8_t rbuf[128];
                 transferred = 0;
-                if ((libusb_rc = libusb_bulk_transfer(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, write_timeout)) < 0) {
+                if ((libusb_rc = libusb_bulk_transfer(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT)) < 0) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer recv: %s", libusb_strerror(libusb_rc));
                     
                     // retry
@@ -513,7 +439,7 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
         // Cache the retrieved mx_id
         // Find empty space and store this entry
         // If no empty space, don't cache (possible case: >16 devices)
-        int cache_index = list_mx_id_store_entry(mx_id, compat_addr);
+        int cache_index = usb_mx_id_cache_store_entry(mx_id, compat_addr);
         if(cache_index >= 0){
             // debug print
             mvLog(MVLOG_DEBUG, "Cached MX ID %s at index %d", mx_id, cache_index);
@@ -693,90 +619,14 @@ usbBootError_t usb_find_device(unsigned idx, char *addr, unsigned addrsize, void
 {
     if (!addr)
         return USB_BOOT_ERROR;
-    int specificDevice = 0;
-    if (strlen(addr) > 1)
-        specificDevice = 1;
-
-    // TODO There is no global mutex as in linux version
-    int res;
-    // 2 => vid
-    // 2 => pid
-    // '255-' x 7 (also gives us nul-terminator for last entry)
-    // 7 => to add "-maXXXX"
-    static uint8_t devs[128][2 + 2 + 4 * 7 + 7] = { 0 };//to store ven_id,dev_id;
-    static int devs_cnt = 0;
-    int count = 0;
-    size_t i;
-
+   
     if(!initialized)
     {
         mvLog(MVLOG_ERROR, "Library has not been initialized when loaded");
         return USB_BOOT_ERROR;
     }
-    if (devs_cnt == 0 || idx == 0) {
-        devs_cnt = 0;
-        if (((res = usb_list_devices(vid, pid, devs)) < 0)) {
-            mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", libusb_strerror(res));
-            return USB_BOOT_ERROR;
-        }
-        devs_cnt = res;
-    } else {
-        res = devs_cnt;
-    }
-    i = 0;
-
-    while (res-- > 0) {
-        int idVendor = (int)(devs[res][0] << 8 | devs[res][1]);
-        int idProduct = (devs[res][2] << 8 | devs[res][3]);
-
-        // If found device have the same id and vid as input
-        if ( (idVendor == vid && idProduct == pid)
-                // Any myriad device
-                || (vid == AUTO_VID && pid == AUTO_PID
-                        && isMyriadDevice(idVendor, idProduct))
-                // Any unbooted myriad device
-                || (vid == AUTO_VID && (pid == AUTO_UNBOOTED_PID)
-                        && isNotBootedMyriadDevice(idVendor, idProduct))
-                // Any unbooted with same pid
-                || (vid == AUTO_VID && pid == idProduct
-                        && isNotBootedMyriadDevice(idVendor, idProduct))
-                // Any booted device
-                || (vid == AUTO_VID && pid == DEFAULT_OPENPID
-                        && isBootedMyriadDevice(idVendor, idProduct))
-                // Any bootloader device
-                || (vid == AUTO_VID && pid == DEFAULT_BOOTLOADER_PID
-                    && isBootloaderMyriadDevice(idVendor, idProduct)) 
-        ) {
-            if (device) {
-                const char *caddr = &devs[res][4];
-                if (strncmp(addr, caddr, XLINK_MAX_NAME_SIZE) == 0)
-                {
-                    mvLog(MVLOG_DEBUG, "Found Address: %s - VID/PID %04x:%04x", caddr, (int)(devs[res][0] << 8 | devs[res][1]), (int)(devs[res][2] << 8 | devs[res][3]));
-                    *device = enumerate_usb_device(vid, pid, caddr, 0);
-                    devs_cnt = 0;
-                    return USB_BOOT_SUCCESS;
-                }
-            }
-            else if (specificDevice) {
-                const char *caddr = &devs[res][4];
-                if (strncmp(addr, caddr, XLINK_MAX_NAME_SIZE) == 0)
-                {
-                    mvLog(MVLOG_DEBUG, "Found Address: %s - VID/PID %04x:%04x", caddr, (int)(devs[res][0] << 8 | devs[res][1]), (int)(devs[res][2] << 8 | devs[res][3]));
-                    return USB_BOOT_SUCCESS;
-                }
-            }
-            else if (idx == count)
-            {
-                const char *caddr = &devs[res][4];
-                mvLog(MVLOG_DEBUG, "Device %d Address: %s - VID/PID %04x:%04x", idx, caddr, (int)(devs[res][0] << 8 | devs[res][1]), (int)(devs[res][2] << 8 | devs[res][3]));
-                mv_strncpy(addr, addrsize, caddr, addrsize - 1);
-                return USB_BOOT_SUCCESS;
-            }
-            count++;
-        }
-    }
-    devs_cnt = 0;
-    return USB_BOOT_DEVICE_NOT_FOUND;
+    
+    return win_usb_find_device(idx, addr, addrsize, device, vid, pid);
 }
 #endif
 

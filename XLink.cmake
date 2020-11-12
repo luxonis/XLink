@@ -15,6 +15,7 @@ if(WIN32)
             ${XLINK_ROOT_DIR}/pc/Win/include)
 
     file(GLOB XLINK_PLATFORM_SRC "${XLINK_ROOT_DIR}/pc/Win/src/*.c")
+    list(APPEND XLINK_SOURCES "${XLINK_ROOT_DIR}/pc/protocols/usb_mx_id.c")
     list(APPEND XLINK_SOURCES ${XLINK_PLATFORM_SRC})
 else()
     find_package(Threads REQUIRED)
