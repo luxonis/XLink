@@ -558,6 +558,15 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
         ) {
             if (device) {
                 const char *dev_addr = gen_addr(&desc, dev, get_pid_by_name(input_addr));
+                // check if error
+                if(strcmp(dev_addr, "<error>") == 0){
+                    if (pthread_mutex_unlock(&globalMutex)) {
+                        mvLog(MVLOG_ERROR, "globalMutex unlock failed");
+                    }
+                    printf("returning error...\n");
+                    return USB_BOOT_ERROR;
+                }
+
                 if (!strcmp(dev_addr, input_addr)) {
 #if 0 // To avoid spam in Debug mode
                     mvLog(MVLOG_DEBUG, "Found Address: %s - VID/PID %04x:%04x",
@@ -578,6 +587,15 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                 }
             } else if (searchByName) {
                 const char *dev_addr = gen_addr(&desc, dev, desc.idProduct);
+                // check if error
+                if(strcmp(dev_addr, "<error>") == 0){
+                    printf("returning error...\n");
+                    if (pthread_mutex_unlock(&globalMutex)) {
+                        mvLog(MVLOG_ERROR, "globalMutex unlock failed");
+                    }
+                    return USB_BOOT_ERROR;
+                }
+
                 // If the same add as input
                 if (!strcmp(dev_addr, input_addr)) {
 #if 0 // To avoid spam in Debug mode
@@ -592,6 +610,15 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                 }
             } else if (idx == count) {
                 const char *caddr = gen_addr(&desc, dev, desc.idProduct);
+                
+                // check if error
+                if(strcmp(caddr, "<error>") == 0){
+                    printf("returning error...\n");
+                    if (pthread_mutex_unlock(&globalMutex)) {
+                        mvLog(MVLOG_ERROR, "globalMutex unlock failed");
+                    }
+                    return USB_BOOT_ERROR;
+                }
 #if 0 // To avoid spam in Debug mode
                 mvLog(MVLOG_DEBUG, "Device %d Address: %s - VID/PID %04x:%04x",
                       idx, caddr, desc.idVendor, desc.idProduct);
