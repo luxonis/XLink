@@ -359,7 +359,7 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
                 const int send_ep = 0x01;
                 const int size = usb_mx_id_get_payload_size();
                 int transferred = 0;
-                if ((libusb_rc = libusb_bulk_transfer(handle, send_ep, usb_mx_id_get_payload(), size, &transferred, MX_ID_TIMEOUT)) < 0) {
+                if ((libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), size, &transferred, MX_ID_TIMEOUT)) < 0) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer send: %s", libusb_strerror(libusb_rc));
                     
                     // retry
@@ -412,7 +412,7 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
 
             } else {
 
-                if( (libusb_rc = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, mx_id, sizeof(mx_id))) < 0){
+                if( (libusb_rc = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, ((uint8_t*) mx_id), sizeof(mx_id))) < 0){
                     mvLog(MVLOG_WARN, "Failed to get string descriptor");
                     
                     // retry

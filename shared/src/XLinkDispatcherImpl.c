@@ -552,7 +552,7 @@ int handleIncomingEvent(xLinkEvent_t* event) {
     ASSERT_XLINK(stream);
 
     stream->localFillLevel += event->header.size;
-    mvLog(MVLOG_DEBUG,"S%d: Got write of %ld, current local fill level is %ld out of %ld %ld\n",
+    mvLog(MVLOG_DEBUG,"S%u: Got write of %u, current local fill level is %u out of %u %u\n",
           event->header.streamId, event->header.size, stream->localFillLevel, stream->readSize, stream->writeSize);
 
     void* buffer = XLinkPlatformAllocateData(ALIGN_UP(event->header.size, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
