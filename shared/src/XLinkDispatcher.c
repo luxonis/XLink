@@ -8,7 +8,7 @@
 /// @brief     Application configuration Leon header
 ///
 #ifndef _GNU_SOURCE
-#define _GNU_SOURCE // fix for warning: implicit declaration of function ‘pthread_setname_np’
+#define _GNU_SOURCE // fix for warning: implicit declaration of function 'pthread_setname_np'
 #endif
 
 #include "stdio.h"

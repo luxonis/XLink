@@ -69,7 +69,7 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
 
 /**
  * @brief Connects to specific device, starts dispatcher and pings remote
- * @param[in,out] handler – XLink communication parameters (file path name for underlying layer)
+ * @param[in,out] handler - XLink communication parameters (file path name for underlying layer)
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkConnect(XLinkHandler_t* handler);
@@ -103,7 +103,7 @@ XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmw
 /**
  * @brief Resets the remote device and close all open local handles for this device
  * @warning This function should be used in a host application
- * @param[in] id – link Id obtained from XLinkConnect in the handler parameter
+ * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 
@@ -176,9 +176,9 @@ XLinkError_t XLinkProfPrint();
 /**
  * @brief Opens a stream in the remote that can be written to by the local
  *        Allocates stream_write_size (aligned up to 64 bytes) for that stream
- * @param[in] id – link Id obtained from XLinkConnect in the handler parameter
- * @param[in] name – stream name
- * @param[in] stream_write_size – stream buffer size
+ * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
+ * @param[in] name - stream name
+ * @param[in] stream_write_size - stream buffer size
  * @return Link Id: INVALID_STREAM_ID for failure
  */
 streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size);
@@ -194,17 +194,17 @@ XLinkError_t XLinkCloseStream(streamId_t streamId);
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream
  * @warning Actual size of the written data is ALIGN_UP(size, 64)
- * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
- * @param[in] buffer – data buffer to be transmitted
- * @param[in] size – size of the data to be transmitted
+ * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
+ * @param[in] buffer - data buffer to be transmitted
+ * @param[in] size - size of the data to be transmitted
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkWriteData(streamId_t streamId, const uint8_t* buffer, int size);
 
 /**
  * @brief Reads data from local stream. Will only have something if it was written to by the remote
- * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
- * @param[out]  packet – structure containing output data buffer and received size
+ * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
+ * @param[out]  packet - structure containing output data buffer and received size
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReadData(streamId_t streamId, streamPacketDesc_t** packet);
@@ -212,16 +212,16 @@ XLinkError_t XLinkReadData(streamId_t streamId, streamPacketDesc_t** packet);
 /**
  * @brief Releases data from stream - This should be called after the data obtained from
  *  XlinkReadData is processed
- * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
+ * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReleaseData(streamId_t streamId);
 
 /**
  * @brief Reads fill level of the local or remote queues
- * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
- * @param[in]   isRemote – 0 – local queue; any other value – remote queue
- * @param[out]  fillLevel – fill level of the selected queue
+ * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
+ * @param[in]   isRemote - 0 - local queue; any other value - remote queue
+ * @param[out]  fillLevel - fill level of the selected queue
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkGetFillLevel(streamId_t streamId, int isRemote, int* fillLevel);
