@@ -31,7 +31,7 @@ XLinkError_t getDeviceName(int index, char* name, int nameSize, XLinkPlatform_t 
     XLINK_RET_IF(nameSize <= 0);
 
     deviceDesc_t in_deviceRequirements = { 0 };
-    in_deviceRequirements.protocol = glHandler != NULL ? glHandler->protocol : USB_VSC;
+    in_deviceRequirements.protocol = glHandler != NULL ? glHandler->protocol : X_LINK_USB_VSC;
     in_deviceRequirements.platform = platform;
     memset(name, 0, nameSize);
 
@@ -79,7 +79,7 @@ XLinkError_t XLinkBootRemote(const char* deviceName, const char* binaryPath)
     XLINK_RET_IF(binaryPath == NULL);
 
     deviceDesc_t deviceDesc = { 0 };
-    deviceDesc.protocol = glHandler != NULL ? glHandler->protocol : USB_VSC;
+    deviceDesc.protocol = glHandler != NULL ? glHandler->protocol : X_LINK_USB_VSC;
     XLINK_RET_IF(mv_strcpy(deviceDesc.name, XLINK_MAX_NAME_SIZE, deviceName) != EOK);
 
     return XLinkBoot(&deviceDesc, binaryPath);
