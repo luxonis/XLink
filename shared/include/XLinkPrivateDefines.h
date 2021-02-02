@@ -58,7 +58,7 @@ typedef struct xLinkDesc_t {
     xLinkState_t peerState;
     xLinkDeviceHandle_t deviceHandle;
     linkId_t id;
-    sem_t dispatcherClosedSem;
+    XLink_sem_t dispatcherClosedSem;
     UsbSpeed_t usbConnSpeed;
     char mxSerialId[XLINK_MAX_MX_ID_SIZE];
     
