@@ -388,7 +388,6 @@ int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct
         return -1;
     }
 
-    printf("abstime s: %ld nsec: %ld\n", abstime.tv_sec, abstime.tv_nsec);
     int rc = XLink_sem_wait(id);
     int err = errno;
 
