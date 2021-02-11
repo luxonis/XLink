@@ -383,17 +383,17 @@ int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct
     xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
     ASSERT_XLINK(curr != NULL);
 
-    sem_t* id = getAndRefSem(pthread_self(), curr, 0);
+    XLink_sem_t* id = getSem(pthread_self(), curr);
     if (id == NULL) {
         return -1;
     }
 
-    printf("abstime s: %lld nsec: %lld\n", abstime.tv_sec, abstime.tv_nsec);
-    int rc = sem_timedwait(id, &abstime);
+    printf("abstime s: %ld nsec: %ld\n", abstime.tv_sec, abstime.tv_nsec);
+    int rc = XLink_sem_wait(id);
     int err = errno;
+
 #ifdef __PC__
     if (rc) {
-        printf("XLINK | this happend: errno = %d\n", err);
         if(err == ETIMEDOUT){
             return X_LINK_TIMEOUT;
         } else {
@@ -402,17 +402,13 @@ int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct
             event.deviceHandle = *deviceHandle;
             mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
             DispatcherAddEvent(EVENT_LOCAL, &event);
-            id = getAndRefSem(pthread_self(), curr, 0);
-            if (id == NULL || sem_wait(id)) {
+            id = getSem(pthread_self(), curr);
+            if (id == NULL || XLink_sem_wait(id)) {
                 dispatcherReset(curr);
             }
         }
     }
 #endif
-
-    if ((XLinkError_t)unrefSem(id, curr) == X_LINK_ERROR) {
-        mvLog(MVLOG_WARN, "Failed to unref sem");
-    }
 
     return rc;
 }
