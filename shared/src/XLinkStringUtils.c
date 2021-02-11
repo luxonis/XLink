@@ -38,7 +38,7 @@ int mv_strcpy(char *dest, size_t destsz, const char *src) {
        }
        return ESNULLP;
    }
-   // It’s ok if src and dest are in the same place. No action is needed.
+   // It's ok if src and dest are in the same place. No action is needed.
    if (dest == src) {
        return EOK;
    }

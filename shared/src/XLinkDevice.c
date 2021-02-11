@@ -211,23 +211,39 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 
     link->id = getNextAvailableLinkUniqueId();
     link->peerState = XLINK_UP;
+    #if (!defined(_WIN32) && !defined(_WIN64) )
+        link->usbConnSpeed = get_usb_speed();
+        mv_strcpy(link->mxSerialId, XLINK_MAX_MX_ID_SIZE, get_mx_serial());
+    #else
+        link->usbConnSpeed = X_LINK_USB_SPEED_UNKNOWN;
+        mv_strcpy(link->mxSerialId, XLINK_MAX_MX_ID_SIZE, "UNKNOWN");
+    #endif
+
     link->hostClosedFD = 0;
     handler->linkId = link->id;
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size)
+XLinkError_t XLinkBootMemory(const deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size)
 {
-    if (XLinkPlatformBootMemoryRemote(deviceDesc, buffer, size) == 0) {
+    if (XLinkPlatformBootFirmware(deviceDesc, (const char*) buffer, size) == 0) {
         return X_LINK_SUCCESS;
     }
 
     return X_LINK_COMMUNICATION_FAIL;
 }
 
-XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath)
+XLinkError_t XLinkBoot(const deviceDesc_t* deviceDesc, const char* binaryPath)
 {
     if (XLinkPlatformBootRemote(deviceDesc, binaryPath) == 0) {
+        return X_LINK_SUCCESS;
+    }
+
+    return X_LINK_COMMUNICATION_FAIL;
+}
+
+XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, unsigned long length) {
+    if (!XLinkPlatformBootFirmware(deviceDesc, firmware, length)) {
         return X_LINK_SUCCESS;
     }
 
@@ -254,7 +270,7 @@ XLinkError_t XLinkResetRemote(linkId_t id)
     XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&link->deviceHandle),
         X_LINK_TIMEOUT);
 
-    if(sem_wait(&link->dispatcherClosedSem)) {
+    if(XLink_sem_wait(&link->dispatcherClosedSem)) {
         mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
         return X_LINK_ERROR;
     }
@@ -341,6 +357,16 @@ XLinkError_t XLinkProfPrint()
     return X_LINK_SUCCESS;
 }
 
+UsbSpeed_t XLinkGetUSBSpeed(linkId_t id){
+    xLinkDesc_t* link = getLinkById(id);
+    return link->usbConnSpeed;
+}
+
+const char* XLinkGetMxSerial(linkId_t id){
+    xLinkDesc_t* link = getLinkById(id);
+    return link->mxSerialId;
+}
+
 // ------------------------------------
 // API implementation. End.
 // ------------------------------------
@@ -391,7 +417,7 @@ static xLinkDesc_t* getNextAvailableLink() {
 
     xLinkDesc_t* link = &availableXLinks[i];
 
-    if (sem_init(&link->dispatcherClosedSem, 0 ,0)) {
+    if (XLink_sem_init(&link->dispatcherClosedSem, 0 ,0)) {
         mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
         return NULL;
     }

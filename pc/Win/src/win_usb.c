@@ -15,7 +15,13 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "win_usb.h"
+#include "XLinkPublicDefines.h"
+#include "usb_boot.h"
+#include "usb_mx_id.h"
+#include "stdbool.h"
 
+#define MVLOG_UNIT_NAME xLinkWinUsb
+#include "XLinkLog.h"
 #include "XLinkStringUtils.h"
 
 #define USB_DIR_OUT     0
@@ -44,6 +50,10 @@ struct _usb_han {
 };
 
 extern const char * usb_get_pid_name(int);
+extern int isMyriadDevice(const int idVendor, const int idProduct);
+extern int isBootedMyriadDevice(const int idVendor, const int idProduct);
+extern int isBootloaderMyriadDevice(const int idVendor, const int idProduct);
+extern int isNotBootedMyriadDevice(const int idVendor, const int idProduct);
 
 #if defined(_MSC_VER) && _MSC_VER < 1900
 #define snprintf _snprintf
@@ -62,6 +72,12 @@ static int verbose = 0, ignore_errors = 0;
 static DWORD last_bulk_errcode = 0;
 static char *errmsg_buff = NULL;
 static size_t errmsg_buff_len = 0;
+
+static int MX_ID_TIMEOUT = 100; // 100ms
+
+
+static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData, int pid, char** refDevicePath);
+
 
 static const char *format_win32_msg(DWORD errId) {
     while(!FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
@@ -85,7 +101,7 @@ static const char *format_win32_msg(DWORD errId) {
 
 static void wperror(const char *errmsg) {
     DWORD errId = GetLastError();
-    fprintf(stderr, "%s: System err %d\n", errmsg, errId);
+    mvLog(MVLOG_DEBUG, "%s: System err %d\n", errmsg, errId);
 }
 
 static void wstrerror(char *buff, const char *errmsg) {
@@ -148,7 +164,9 @@ static usb_dev retreive_dev_path(HDEVINFO devInfo, SP_DEVICE_INTERFACE_DATA *ifa
     return res;
 }
 
-static const char *gen_addr(HDEVINFO devInfo, SP_DEVINFO_DATA *devInfoData, uint16_t pid) {
+
+
+static const char *gen_addr(HDEVINFO devInfo, SP_DEVINFO_DATA *devInfoData, int pid) {
     static char buff[16];
     char li_buff[128];
     unsigned int port, hub;
@@ -171,6 +189,8 @@ static const char *gen_addr(HDEVINFO devInfo, SP_DEVINFO_DATA *devInfoData, uint
     return "<error>";
 }
 
+
+
 static int compareDeviceByHubAndPort(const void *l, const void *r) {
     int lHub = 0, lPort = 0;
     int rHub = 0, rPort = 0;
@@ -189,102 +209,6 @@ static int compareDeviceByHubAndPort(const void *l, const void *r) {
     return rPort - lPort;
 }
 
-int usb_list_devices(uint16_t vid, uint16_t pid, uint8_t dev_des[][2 + 2 + 4 * 7 + 7]) {
-    HDEVINFO devInfo;
-    static int i;
-    SP_DEVINFO_DATA devInfoData;
-    char hwid_buff[128];
-
-    devInfoData.cbSize = sizeof(devInfoData);
-
-    devInfo = SetupDiGetClassDevs(&GUID_DEVINTERFACE_USB_DEVICE, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
-    if(devInfo == INVALID_HANDLE_VALUE) {
-        wperror("SetupDiGetClassDevs");
-        return -1;
-    }
-
-    for (i=0; SetupDiEnumDeviceInfo(devInfo, i, &devInfoData); i++) {
-        if (!SetupDiGetDeviceRegistryProperty(devInfo, &devInfoData, SPDRP_HARDWAREID, NULL, hwid_buff, sizeof(hwid_buff), NULL)) {
-            continue;
-        }
-        uint16_t fvid, fpid;
-        if(sscanf(hwid_buff, "USB\\VID_%hx&PID_%hx", (int16_t *)&fvid, (int16_t *)&fpid) != 2) {
-            continue;
-        }
-
-        dev_des[i][0] = ((fvid & 0xFF00)>>8);
-        dev_des[i][1] = ((fvid & 0x00FF) >> 0);
-        dev_des[i][2] = ((fpid & 0xFF00) >> 8);
-        dev_des[i][3] = ((fpid & 0x00FF) >> 0);
-        sprintf_s((char *)&dev_des[i][4], sizeof(dev_des[i]) - 4, "%s", gen_addr(devInfo, &devInfoData, fpid));
-    }
-    SetupDiDestroyDeviceInfoList(devInfo);
-
-    qsort(dev_des, i, sizeof(dev_des[0]), compareDeviceByHubAndPort);
-
-    return i;
-}
-
-void * enumerate_usb_device(uint16_t vid, uint16_t pid, const char *addr, int loud) {
-    HDEVINFO devInfo;
-    SP_DEVICE_INTERFACE_DATA ifaceData;
-    int i;
-    SP_DEVINFO_DATA devInfoData;
-    char hwid_buff[128];
-    int found, found_ind = -1;
-    const char *caddr;
-
-    devInfoData.cbSize = sizeof(devInfoData);
-
-    devInfo = SetupDiGetClassDevs(&GUID_DEVINTERFACE_USB_DEVICE, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
-    if(devInfo == INVALID_HANDLE_VALUE) {
-        wperror("SetupDiGetClassDevs");
-        return USB_DEV_NONE;
-    }
-    found = 0;
-    for(i=0; SetupDiEnumDeviceInfo(devInfo, i, &devInfoData); i++) {
-        if(!SetupDiGetDeviceRegistryProperty(devInfo, &devInfoData, SPDRP_HARDWAREID, NULL, hwid_buff, sizeof(hwid_buff), NULL))
-            continue;
-        uint16_t fvid, fpid;
-        if(sscanf(hwid_buff, "USB\\VID_%hx&PID_%hx", (int16_t*)&fvid, (int16_t*)&fpid) != 2)
-            continue;
-        if(verbose && loud)
-            fprintf(msgfile, "Vendor/Product ID: %04x:%04x\n", fvid, fpid);
-        if((fvid == vid) && (fpid == pid)) {
-            caddr = gen_addr(devInfo, &devInfoData, fpid);
-            if((addr == NULL) || !strcmp(caddr, addr)) {
-                if(verbose)
-                    fprintf(msgfile, "Found device with VID/PID %04x:%04x , address %s\n", vid, pid, caddr);
-                if(!found) {
-                    found_ind = i;
-                    found = 1;
-                }
-                if(!(verbose && loud))
-                    break;
-            }
-        }
-    }
-    if(!found) {
-        SetupDiDestroyDeviceInfoList(devInfo);
-        return USB_DEV_NONE;
-    }
-    if(verbose && loud) {
-        if(!SetupDiEnumDeviceInfo(devInfo, found_ind, &devInfoData)) {
-            wperror("SetupDiEnumDeviceInfo");
-            SetupDiDestroyDeviceInfoList(devInfo);
-            return USB_DEV_NONE;
-        }
-    }
-    ifaceData.cbSize = sizeof(ifaceData);
-    if(!SetupDiEnumDeviceInterfaces(devInfo, &devInfoData, &GUID_DEVINTERFACE_USB_DEVICE, 0, &ifaceData)) {
-        if(GetLastError() != ERROR_NO_MORE_ITEMS) {
-            wperror("SetupDiEnumDeviceInterfaces");
-        }
-        SetupDiDestroyDeviceInfoList(devInfo);
-        return USB_DEV_NONE;
-    }
-    return retreive_dev_path(devInfo, &ifaceData);
-}
 
 usb_dev findDeviceByGUID(GUID guid, int loud)
 {
@@ -330,6 +254,35 @@ int usb_check_connected(usb_dev dev) {
     CloseHandle(han);
     return 1;
 }
+
+
+UsbSpeed_t usb_get_usb_speed(usb_hwnd han){
+
+    // TODO winusb api doesn't support getting other device speeds
+    /*
+    uint8_t devSpeed = 0;
+    BOOL bResult = TRUE;
+    ULONG length = sizeof(UCHAR);
+    bResult = WinUsb_QueryDeviceInformation(han->winUsbHan, DEVICE_SPEED, &length, &devSpeed);
+    if(!bResult) {
+        printf("Error getting device speed: %d.\n", GetLastError());
+        return X_LINK_USB_SPEED_UNKNOWN;
+    }
+    switch (devSpeed){
+        case LowSpeed: return X_LINK_USB_SPEED_LOW;
+        case FullSpeed: return X_LINK_USB_SPEED_FULL;
+        case HighSpeed: return X_LINK_USB_SPEED_HIGH;        
+    }
+
+    */
+
+    // return UNKNOWN for now
+    return X_LINK_USB_SPEED_UNKNOWN;    
+
+}
+
+
+
 
 void * usb_open_device(usb_dev dev, uint8_t *ep, uint8_t intfaceno, char *err_string_buff, size_t err_max_len) {
     HANDLE devHan = INVALID_HANDLE_VALUE;
@@ -462,7 +415,7 @@ int usb_bulk_write(usb_hwnd han, uint8_t ep, const void *buffer, size_t sz, uint
         if(last_bulk_errcode == ERROR_SEM_TIMEOUT)
             return USB_ERR_TIMEOUT;
         wperror("WinUsb_WritePipe");
-        printf("\nWinUsb_WritePipe failed with error:=%d\n", GetLastError());
+        mvLog(MVLOG_ERROR, "\nWinUsb_WritePipe failed with error:=%d\n", GetLastError());
         return USB_ERR_FAILED;
     }
     last_bulk_errcode = 0;
@@ -529,3 +482,411 @@ void usb_set_verbose(int value) {
 void usb_set_ignoreerrors(int value) {
     ignore_errors = value;
 }
+
+
+
+
+static const char* get_mx_id_device_path(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData, char** devicePath) {
+
+    static char mx_id[XLINK_MAX_MX_ID_SIZE] = {0};
+    static char device_path[1024] = {0};
+
+    DWORD requiredLength = 0;
+    SP_DEVICE_INTERFACE_DATA deviceInterfaceData;
+    PSP_DEVICE_INTERFACE_DETAIL_DATA deviceInterfaceDetailData = NULL;
+
+    // Requires an interface GUID, for which I have none to specify
+    deviceInterfaceData.cbSize = sizeof(SP_INTERFACE_DEVICE_DATA);
+    if (!SetupDiEnumDeviceInterfaces(devInfo, devInfoData, &GUID_DEVINTERFACE_USB_DEVICE, 0, &deviceInterfaceData)) {
+        return NULL;
+    }
+
+    if (!SetupDiGetDeviceInterfaceDetail(devInfo, &deviceInterfaceData, NULL, 0, &requiredLength, NULL)) {
+        if (GetLastError() == ERROR_INSUFFICIENT_BUFFER && requiredLength > 0) {
+            deviceInterfaceDetailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)LocalAlloc(LPTR, requiredLength);
+
+
+            deviceInterfaceDetailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+
+            if (!SetupDiGetDeviceInterfaceDetail(devInfo, &deviceInterfaceData, deviceInterfaceDetailData, requiredLength, NULL, devInfoData)) {
+                return NULL;
+            }
+
+            uint16_t det_vid, det_pid;
+
+            // parse serial number (apperantly the way on Wins)
+            sscanf(deviceInterfaceDetailData->DevicePath, "\\\\?\\usb#vid_%hx&pid_%hx#%[^#]", &det_vid, &det_pid, mx_id);
+            mvLog(MVLOG_DEBUG, "mx id found: %s\n", mx_id);
+            
+            if (devicePath != NULL) {
+                snprintf(device_path, sizeof(device_path), "%s", deviceInterfaceDetailData->DevicePath);
+                *devicePath = &device_path[0];
+            }
+
+            return mx_id;
+
+
+            if (!deviceInterfaceDetailData) {
+                return NULL;
+            }
+        }
+        else {
+            return NULL;
+        }
+    }
+
+    return NULL;
+
+}
+
+
+
+#include "win_time.h"
+static double seconds()
+{
+    static double s;
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    if (!s)
+        s = ts.tv_sec + ts.tv_nsec * 1e-9;
+    return ts.tv_sec + ts.tv_nsec * 1e-9 - s;
+}
+
+
+static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData, int pid, char** refDevicePath) {
+
+    // initialize cache
+    usb_mx_id_cache_init();
+
+    // Static variables
+    static char final_addr[XLINK_MAX_NAME_SIZE];
+    static char mx_id[XLINK_MAX_MX_ID_SIZE];
+    static char device_path[1024];
+
+    // Set final_addr as error first
+    strncpy(final_addr, "<error>", sizeof(final_addr));
+
+    // generate unique (full) usb bus-port path 
+    const char* compat_addr = gen_addr(devInfo, devInfoData, pid);
+
+    // first check if entry already exists in the list (and is still valid)
+    // if found, it stores it into mx_id variable
+    bool found = usb_mx_id_cache_get_entry(compat_addr, mx_id);
+
+
+    // Get mx id for booted devices (and devicePath) - non intrusive operation
+    char* devicePath = NULL;
+    const char* booted_mx_id = get_mx_id_device_path(devInfo, devInfoData, &devicePath);
+    if (devicePath == NULL) {
+        return NULL;
+    }
+    // Create a local copy (which is valid until the next gen_addr_mx_id call
+    strncpy(device_path, devicePath, sizeof(device_path));
+    if (refDevicePath != NULL) {
+        *refDevicePath = device_path;
+    }
+
+
+    if (found) {
+        mvLog(MVLOG_DEBUG, "Found cached MX ID: %s", mx_id);
+    } else {
+        // If not found, retrieve mx_id
+
+        // if UNBOOTED state, perform mx_id retrieval procedure using small program and a read command
+        if (pid == DEFAULT_UNBOOTPID_2485 || pid == DEFAULT_UNBOOTPID_2150) {
+
+            // get serial from usb descriptor
+            libusb_device_handle* handle = NULL;
+            int libusb_rc = 0;
+
+            // Open device
+            char last_open_dev_err[128] = { 0 };
+            handle = usb_open_device(devicePath, NULL, 0, last_open_dev_err, sizeof(last_open_dev_err));
+            if (handle == NULL) {
+                // Some kind of error, either NO_MEM, ACCESS, NO_DEVICE or other
+                // In all these cases, return
+                // no cleanup needed
+                return final_addr;
+            }
+
+            // Retry getting MX ID for 5ms
+            const double RETRY_TIMEOUT = 0.005; // 5ms
+            const int SLEEP_BETWEEN_RETRIES_USEC = 100; // 100us
+            double t_retry = seconds();
+            do {
+
+                const int send_ep = 0x01;
+                const int size = usb_mx_id_get_payload_size();
+                int transferred = 0;
+                if ((libusb_rc = usb_bulk_write(handle, send_ep, usb_mx_id_get_payload(), size, &transferred, MX_ID_TIMEOUT)) < 0) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer send: %s", libusb_strerror(libusb_rc));
+
+                    // retry
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+                // Transfer as mxid_read_cmd size is less than 512B it should transfer all 
+                if (size != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer written %d, expected %d", transferred, size);
+
+                    // retry
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+
+                const int recv_ep = 0x81;
+                const int expected = 9;
+                uint8_t rbuf[128];
+                transferred = 0;
+                if ((libusb_rc = usb_bulk_read(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT)) < 0) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer recv: %s", libusb_strerror(libusb_rc));
+
+                    // retry
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+                if (expected != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer read %d, expected %d", transferred, expected);
+
+                    // retry
+                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
+                    continue;
+                }
+
+
+                // Parse mx_id into HEX presentation
+                // There's a bug, it should be 0x0F, but setting as in MDK
+                rbuf[8] &= 0xF0;
+
+                // Convert to HEX presentation and store into mx_id
+                for (int i = 0; i < transferred; i++) {
+                    sprintf(mx_id + 2 * i, "%02X", rbuf[i]);
+                }
+
+                // Indicate no error
+                libusb_rc = 0;
+
+            } while (libusb_rc != 0 && seconds() - t_retry < RETRY_TIMEOUT);
+
+            // Close opened device
+            usb_close_device(handle);
+
+            // if mx_id couldn't be retrieved, exit by returning final_addr ("<error>")
+            if (libusb_rc != 0) {
+                return final_addr;
+            }
+
+        } else {
+
+            // copy serial retrieved from booted device (device path OS cached)
+            strncpy(mx_id, booted_mx_id, sizeof(mx_id));
+
+        }
+
+        // Cache the retrieved mx_id
+        // Find empty space and store this entry
+        // If no empty space, don't cache (possible case: >16 devices)
+        int cache_index = usb_mx_id_cache_store_entry(mx_id, compat_addr);
+        if (cache_index >= 0) {
+            // debug print
+            mvLog(MVLOG_DEBUG, "Cached MX ID %s at index %d", mx_id, cache_index);
+        }
+        else {
+            // debug print
+            mvLog(MVLOG_DEBUG, "Couldn't cache MX ID %s", mx_id);
+        }
+
+    }
+
+    // At the end add dev_name to retain compatibility with rest of the codebase
+    const char* dev_name = usb_get_pid_name(pid);
+
+    // convert mx_id to uppercase
+    for (int i = 0; i < XLINK_MAX_MX_ID_SIZE; i++) {
+        if (mx_id[i] == 0) break;
+
+        if (mx_id[i] >= 'a' && mx_id[i] <= 'z') {
+            mx_id[i] = mx_id[i] - 32;
+        }
+    }
+
+    // Create address [mx_id]-[dev_name]
+    snprintf(final_addr, sizeof(final_addr), "%s-%s", mx_id, dev_name);
+
+    mvLog(MVLOG_DEBUG, "Returning generated name: %s (booted mx id: %s, compat addr: %s)", final_addr, booted_mx_id, compat_addr);
+
+    return final_addr;
+
+}
+
+
+typedef struct {
+    uint16_t vid;
+    uint16_t pid;
+} vid_pid_pair;
+
+
+typedef struct {
+    HDEVINFO devInfo;
+    SP_DEVINFO_DATA* infos;
+    vid_pid_pair* vidpids;
+} usb_dev_list;
+
+void usb_list_free_devices(usb_dev_list* list) {
+    
+    // Free dev info
+    SetupDiDestroyDeviceInfoList(list->devInfo);
+
+    // free infos and vidpids
+    free(list->infos);
+    free(list->vidpids);
+
+    // free structure itself
+    free(list);
+
+}
+
+
+int usb_get_device_list(usb_dev_list** refPDevList) {
+
+    // Create list
+    if (refPDevList == NULL) return -1;
+
+    *refPDevList = calloc(1, sizeof(usb_dev_list));
+    usb_dev_list* pDevList = *refPDevList;
+    const int MAX_NUM_DEVICES = 128;
+
+    int i;
+    char hwid_buff[128];
+
+    pDevList->devInfo = SetupDiGetClassDevs(&GUID_DEVINTERFACE_USB_DEVICE, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (pDevList->devInfo == INVALID_HANDLE_VALUE) {
+        wperror("SetupDiGetClassDevs");
+        return -1;
+    }
+
+    // create list
+    pDevList->infos = calloc(MAX_NUM_DEVICES, sizeof(SP_DEVINFO_DATA));
+    pDevList->vidpids = calloc(MAX_NUM_DEVICES, sizeof(vid_pid_pair));
+    
+    for (i = 0; i < MAX_NUM_DEVICES; i++) {
+        pDevList->infos[i].cbSize = sizeof(SP_DEVINFO_DATA);
+    }
+    
+    //    devInfoData.cbSize = sizeof(devInfoData);
+    for (i = 0; SetupDiEnumDeviceInfo(pDevList->devInfo, i, pDevList->infos + i) && i < MAX_NUM_DEVICES; i++) {
+        if (!SetupDiGetDeviceRegistryProperty(pDevList->devInfo, pDevList->infos + i, SPDRP_HARDWAREID, NULL, hwid_buff, sizeof(hwid_buff), NULL)) {
+            continue;
+        }
+        uint16_t fvid, fpid;
+        if (sscanf(hwid_buff, "USB\\VID_%hx&PID_%hx", (int16_t*)&fvid, (int16_t*)&fpid) != 2) {
+            continue;
+        }
+
+        pDevList->vidpids[i].vid = fvid;
+        pDevList->vidpids[i].pid = fpid;
+
+    }
+
+    return i;
+}
+
+
+#if (defined(_WIN32) || defined(_WIN64) )
+usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, void** device, int vid, int pid)
+{
+    if (!addr)
+        return USB_BOOT_ERROR;
+    int specificDevice = 0;
+    if (strlen(addr) > 1)
+        specificDevice = 1;
+
+    // TODO There is no global mutex as in linux version
+    int res;
+    
+    static usb_dev_list* devs = NULL;
+    static int devs_cnt = 0;
+    int count = 0;
+
+    // Update device list if empty or if indx 0
+    if (devs == NULL || idx == 0) {
+        if (devs) {
+            usb_list_free_devices(devs);
+            devs = 0;
+        }
+        if ((res = usb_get_device_list(&devs)) < 0) {
+            mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", libusb_strerror(res));
+            return USB_BOOT_ERROR;
+        }
+        devs_cnt = res;
+    }
+
+    for (int i = 0; i < devs_cnt; i++) {
+
+        // retrieve vid & pid
+        int idVendor = (int) devs->vidpids[i].vid;
+        int idProduct = (int) devs->vidpids[i].pid;
+
+        // If found device have the same id and vid as input
+        if ((idVendor == vid && idProduct == pid)
+            // Any myriad device
+            || (vid == AUTO_VID && pid == AUTO_PID
+                && isMyriadDevice(idVendor, idProduct))
+            // Any unbooted myriad device
+            || (vid == AUTO_VID && (pid == AUTO_UNBOOTED_PID)
+                && isNotBootedMyriadDevice(idVendor, idProduct))
+            // Any unbooted with same pid
+            || (vid == AUTO_VID && pid == idProduct
+                && isNotBootedMyriadDevice(idVendor, idProduct))
+            // Any booted device
+            || (vid == AUTO_VID && pid == DEFAULT_OPENPID
+                && isBootedMyriadDevice(idVendor, idProduct))
+            // Any bootloader device
+            || (vid == AUTO_VID && pid == DEFAULT_BOOTLOADER_PID
+                && isBootloaderMyriadDevice(idVendor, idProduct))
+            ) {
+            if (device) {
+
+                // device path to be retrieved from gen_addr_* call
+                const char* devicePath = NULL;
+                // gen addr
+                const char* caddr = gen_addr_mx_id(devs->devInfo, devs->infos + i, idProduct, &devicePath);
+                if (strncmp(addr, caddr, XLINK_MAX_NAME_SIZE) == 0)
+                {
+                    mvLog(MVLOG_DEBUG, "Found Address: %s - VID/PID %04x:%04x", caddr, idVendor, idProduct);
+                    
+                    // Create a copy of device path string. It will be freed
+                    *device = strdup(devicePath);
+                    devs_cnt = 0;
+                    return USB_BOOT_SUCCESS;
+                }
+            }
+            else if (specificDevice) {
+                
+                // gen addr
+                const char* caddr = gen_addr_mx_id(devs->devInfo, devs->infos + i, idProduct, NULL);
+
+                if (strncmp(addr, caddr, XLINK_MAX_NAME_SIZE) == 0)
+                {
+                    mvLog(MVLOG_DEBUG, "Found Address: %s - VID/PID %04x:%04x", caddr, idVendor, idProduct, NULL);
+                    return USB_BOOT_SUCCESS;
+                }
+            }
+            else if (idx == count)
+            {
+                // gen addr
+                const char* caddr = gen_addr_mx_id(devs->devInfo, devs->infos + i, idProduct, NULL);
+
+                mvLog(MVLOG_DEBUG, "Device %d Address: %s - VID/PID %04x:%04x", idx, caddr, idVendor, idProduct);
+                mv_strncpy(addr, addrsize, caddr, addrsize - 1);
+                return USB_BOOT_SUCCESS;
+            }
+            count++;
+        }
+    }
+    devs_cnt = 0;
+    return USB_BOOT_DEVICE_NOT_FOUND;
+}
+#endif
+

@@ -7,6 +7,9 @@ project(${TARGET_NAME} LANGUAGES C CXX)
 
 include(XLink.cmake)
 
+# Add option - MX ID naming instead of usb port
+option(XLINK_USE_MX_ID_NAME "Use MX ID name instead of usb port" ON) 
+
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
 
 if(NOT WIN32)
@@ -35,15 +38,18 @@ target_include_directories(${TARGET_NAME}
     PRIVATE
         ${XLINK_PLATFORM_INCLUDE}
         ${XLINK_PRIVATE_INCLUDE}
+        ${XLINK_INCLUDE}/XLink
     )
 
 target_compile_definitions(${TARGET_NAME}
     PRIVATE
-        __PC__
         HAVE_STRUCT_TIMESPEC
         _CRT_SECURE_NO_WARNINGS
         USE_USB_VSC
-    )
+    PUBLIC
+        __PC__
+        XLINK_USE_MX_ID_NAME=${XLINK_USE_MX_ID_NAME}    
+)
 
 if (ENABLE_MYRIAD_NO_BOOT)
     target_compile_definitions(${TARGET_NAME}

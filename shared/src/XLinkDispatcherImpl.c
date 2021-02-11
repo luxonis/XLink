@@ -340,7 +340,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                         stream->name[0] = '\0';
                     }
 #ifndef __PC__
-                    if(sem_destroy(&stream->sem))
+                    if(XLink_sem_destroy(&stream->sem))
                         perror("Can't destroy semaphore");
 #endif
                 }
@@ -452,7 +452,7 @@ void dispatcherCloseLink(void* fd, int fullClose)
         XLinkStreamReset(stream);
     }
 
-    if(sem_destroy(&link->dispatcherClosedSem)) {
+    if(XLink_sem_destroy(&link->dispatcherClosedSem)) {
         mvLog(MVLOG_DEBUG, "Cannot destroy dispatcherClosedSem\n");
     }
 }
@@ -552,7 +552,7 @@ int handleIncomingEvent(xLinkEvent_t* event) {
     ASSERT_XLINK(stream);
 
     stream->localFillLevel += event->header.size;
-    mvLog(MVLOG_DEBUG,"S%d: Got write of %ld, current local fill level is %ld out of %ld %ld\n",
+    mvLog(MVLOG_DEBUG,"S%u: Got write of %u, current local fill level is %u out of %u %u\n",
           event->header.streamId, event->header.size, stream->localFillLevel, stream->readSize, stream->writeSize);
 
     void* buffer = XLinkPlatformAllocateData(ALIGN_UP(event->header.size, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);

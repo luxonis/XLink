@@ -69,7 +69,7 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
 
 /**
  * @brief Connects to specific device, starts dispatcher and pings remote
- * @param[in,out] handler – XLink communication parameters (file path name for underlying layer)
+ * @param[in,out] handler - XLink communication parameters (file path name for underlying layer)
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkConnect(XLinkHandler_t* handler);
@@ -81,7 +81,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler);
  * @param size - size of buffer
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size);
+XLinkError_t XLinkBootMemory(const deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size);
 
 /**
  * @brief Boots specified firmware binary to the remote device
@@ -89,12 +89,21 @@ XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long siz
  * @param binaryPath - path to the *.mvcmd file
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath);
+XLinkError_t XLinkBoot(const deviceDesc_t* deviceDesc, const char* binaryPath);
+
+/**
+ * @brief Boots specified firmware binary to the remote device
+ * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
+ * @param firmware - firmware buffer
+ * @param length - firmware buffer length
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, unsigned long length);
 
 /**
  * @brief Resets the remote device and close all open local handles for this device
  * @warning This function should be used in a host application
- * @param[in] id – link Id obtained from XLinkConnect in the handler parameter
+ * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 
@@ -106,6 +115,42 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  */
 XLinkError_t XLinkResetAll();
 
+/**
+ * @brief Retrieves USB speed of certain connected device
+ * @return UsbSpeed_t enum describing the usb connection speed
+ */
+UsbSpeed_t XLinkGetUSBSpeed(linkId_t id);
+
+/**
+ * @brief Returns mx serial of current connected device
+ * @return pointer to mx serial string
+ */
+const char* XLinkGetMxSerial(linkId_t id);
+
+
+
+// MX ID API - This API support finding, booting and connecting to MyriadX devices using unique MX ID in devices
+
+/**
+ * @brief Returns all Myriad devices description which meets the requirements
+ * @param[in]      state - state of device enum (booted, not booted or any state)
+ * @param[in]      in_deviceRequirements - structure with device requirements (protocol, platform).
+ * @param[in,out]  out_foundDevicesPtr - pointer to array with all found devices descriptions
+ * @param[out]     devicesArraySize - size of out_foundDevicesPtr
+ * @param[out]     out_foundDevicesCount - amount of found devices
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkMxIdFindAllDevices(XLinkDeviceState_t state,
+                                         const deviceDesc_t in_deviceRequirements,
+                                         deviceDesc_t *out_foundDevicesPtr,
+                                         const unsigned int devicesArraySize,
+                                         unsigned int *out_foundDevicesCount);
+
+
+
+
+
+
 #endif // __PC__
 
 /**
@@ -115,6 +160,7 @@ XLinkError_t XLinkResetAll();
 XLinkError_t XLinkProfStart();
 XLinkError_t XLinkProfStop();
 XLinkError_t XLinkProfPrint();
+
 
 // ------------------------------------
 // Device management. End.
@@ -130,9 +176,9 @@ XLinkError_t XLinkProfPrint();
 /**
  * @brief Opens a stream in the remote that can be written to by the local
  *        Allocates stream_write_size (aligned up to 64 bytes) for that stream
- * @param[in] id – link Id obtained from XLinkConnect in the handler parameter
- * @param[in] name – stream name
- * @param[in] stream_write_size – stream buffer size
+ * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
+ * @param[in] name - stream name
+ * @param[in] stream_write_size - stream buffer size
  * @return Link Id: INVALID_STREAM_ID for failure
  */
 streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size);
@@ -148,9 +194,9 @@ XLinkError_t XLinkCloseStream(streamId_t streamId);
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream
  * @warning Actual size of the written data is ALIGN_UP(size, 64)
- * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
- * @param[in] buffer – data buffer to be transmitted
- * @param[in] size – size of the data to be transmitted
+ * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
+ * @param[in] buffer - data buffer to be transmitted
+ * @param[in] size - size of the data to be transmitted
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkWriteData(streamId_t streamId, const uint8_t* buffer, int size);
@@ -168,8 +214,8 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffe
 
 /**
  * @brief Reads data from local stream. Will only have something if it was written to by the remote
- * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
- * @param[out]  packet – structure containing output data buffer and received size
+ * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
+ * @param[out]  packet - structure containing output data buffer and received size
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReadData(streamId_t streamId, streamPacketDesc_t** packet);
@@ -186,16 +232,16 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
 /**
  * @brief Releases data from stream - This should be called after the data obtained from
  *  XlinkReadData is processed
- * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
+ * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReleaseData(streamId_t streamId);
 
 /**
  * @brief Reads fill level of the local or remote queues
- * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
- * @param[in]   isRemote – 0 – local queue; any other value – remote queue
- * @param[out]  fillLevel – fill level of the selected queue
+ * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
+ * @param[in]   isRemote - 0 - local queue; any other value - remote queue
+ * @param[out]  fillLevel - fill level of the selected queue
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkGetFillLevel(streamId_t streamId, int isRemote, int* fillLevel);
