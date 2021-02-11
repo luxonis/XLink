@@ -38,6 +38,7 @@ target_include_directories(${TARGET_NAME}
     PRIVATE
         ${XLINK_PLATFORM_INCLUDE}
         ${XLINK_PRIVATE_INCLUDE}
+        ${XLINK_INCLUDE}/XLink
     )
 
 target_compile_definitions(${TARGET_NAME}
