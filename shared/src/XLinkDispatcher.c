@@ -15,6 +15,7 @@
 #include "stdint.h"
 #include "stdlib.h"
 #include "string.h"
+#include "errno.h"
 #include <assert.h>
 #include <stdlib.h>
 
@@ -376,6 +377,41 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle)
 
     return rc;
 }
+
+int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct timespec abstime)
+{
+    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+    ASSERT_XLINK(curr != NULL);
+
+    XLink_sem_t* id = getSem(pthread_self(), curr);
+    if (id == NULL) {
+        return -1;
+    }
+
+    int rc = XLink_sem_wait(id);
+    int err = errno;
+
+#ifdef __PC__
+    if (rc) {
+        if(err == ETIMEDOUT){
+            return X_LINK_TIMEOUT;
+        } else {
+            xLinkEvent_t event = {0};
+            event.header.type = XLINK_RESET_REQ;
+            event.deviceHandle = *deviceHandle;
+            mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
+            DispatcherAddEvent(EVENT_LOCAL, &event);
+            id = getSem(pthread_self(), curr);
+            if (id == NULL || XLink_sem_wait(id)) {
+                dispatcherReset(curr);
+            }
+        }
+    }
+#endif
+
+    return rc;
+}
+
 
 char* TypeToStr(int type)
 {

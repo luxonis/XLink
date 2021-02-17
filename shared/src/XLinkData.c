@@ -35,6 +35,7 @@ static XLinkError_t checkEventHeader(xLinkEventHeader_t header);
 static float timespec_diff(struct timespec *start, struct timespec *stop);
 static XLinkError_t addEvent(xLinkEvent_t *event);
 static XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime);
+static XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigned int msTimeout);
 static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_link);
 
 // ------------------------------------
@@ -140,6 +141,32 @@ XLinkError_t XLinkWriteData(streamId_t streamId, const uint8_t* buffer,
     return X_LINK_SUCCESS;
 }
 
+XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer,
+                            int size, unsigned int msTimeout)
+{
+    XLINK_RET_IF(buffer == NULL);
+
+    float opTime = 0;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId = EXTRACT_STREAM_ID(streamId);
+
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_REQ,
+        size,(void*)buffer, link->deviceHandle);
+
+    XLinkError_t rc = addEventWithPerfTimeout(&event, &opTime, msTimeout);
+    if(rc == X_LINK_TIMEOUT) return rc;
+    else XLINK_RET_IF(rc);
+
+    if( glHandler->profEnable) {
+        glHandler->profilingData.totalWriteBytes += size;
+        glHandler->profilingData.totalWriteTime += opTime;
+    }
+
+    return X_LINK_SUCCESS;
+}
+
 XLinkError_t XLinkReadData(streamId_t streamId, streamPacketDesc_t** packet)
 {
     XLINK_RET_IF(packet == NULL);
@@ -154,6 +181,36 @@ XLinkError_t XLinkReadData(streamId_t streamId, streamPacketDesc_t** packet)
         0, NULL, link->deviceHandle);
 
     XLINK_RET_IF(addEventWithPerf(&event, &opTime));
+
+    *packet = (streamPacketDesc_t *)event.data;
+    if(*packet == NULL) {
+        return X_LINK_ERROR;
+    }
+
+    if( glHandler->profEnable) {
+        glHandler->profilingData.totalReadBytes += (*packet)->length;
+        glHandler->profilingData.totalReadTime += opTime;
+    }
+
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** packet, unsigned int msTimeout)
+{
+    XLINK_RET_IF(packet == NULL);
+
+    float opTime = 0;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId = EXTRACT_STREAM_ID(streamId);
+
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamId, XLINK_READ_REQ,
+        0, NULL, link->deviceHandle);
+
+    XLinkError_t rc = addEventWithPerfTimeout(&event, &opTime, msTimeout);
+    if(rc == X_LINK_TIMEOUT) return rc;
+    else XLINK_RET_IF(rc);
 
     *packet = (streamPacketDesc_t *)event.data;
     if(*packet == NULL) {
@@ -274,6 +331,52 @@ XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime)
     clock_gettime(CLOCK_REALTIME, &start);
 
     XLINK_RET_IF_FAIL(addEvent(event));
+
+    clock_gettime(CLOCK_REALTIME, &end);
+    *opTime = timespec_diff(&start, &end);
+
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t addEventTimeout(xLinkEvent_t *event, struct timespec abstime)
+{
+    ASSERT_XLINK(event);
+
+    xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, event);
+    if(ev == NULL) {
+        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
+            TypeToStr(event->header.type), event->header.id, event->header.streamName);
+        return X_LINK_ERROR;
+    }
+
+    if (DispatcherWaitEventCompleteTimeout(&event->deviceHandle, abstime)) {
+        return X_LINK_TIMEOUT;
+    }
+
+    XLINK_RET_ERR_IF(
+        event->header.flags.bitField.ack != 1,
+        X_LINK_COMMUNICATION_FAIL);
+
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigned int msTimeout)
+{
+    ASSERT_XLINK(opTime);
+
+    struct timespec start, end;
+    clock_gettime(CLOCK_REALTIME, &start);
+
+    struct timespec absTimeout = start;
+    int64_t sec = msTimeout / 1000;
+    absTimeout.tv_sec += sec;
+    absTimeout.tv_nsec += (msTimeout - sec) * 1000000;
+    int64_t secOver = absTimeout.tv_nsec / 1000000000;
+    absTimeout.tv_nsec -= secOver * 1000000000;
+    absTimeout.tv_sec += secOver; 
+
+    int rc = addEventTimeout(event, absTimeout);
+    if(rc != X_LINK_SUCCESS) return rc;
 
     clock_gettime(CLOCK_REALTIME, &end);
     *opTime = timespec_diff(&start, &end);
