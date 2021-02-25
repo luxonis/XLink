@@ -180,6 +180,7 @@ XLinkDeviceState_t XLinkPlatformPidToState(const int pid) {
     switch (pid) {
         case DEFAULT_OPENPID: return X_LINK_BOOTED;
         case DEFAULT_BOOTLOADER_PID: return X_LINK_BOOTLOADER;
+        case DEFAULT_DEBUGGER_PID: return X_LINK_DEBUGGER;
         case AUTO_PID: return X_LINK_ANY_STATE;
         default:       return X_LINK_UNBOOTED;
     }
@@ -206,6 +207,8 @@ int platformToPid(const XLinkPlatform_t platform, const XLinkDeviceState_t state
         return DEFAULT_OPENPID;
     } else if(state == X_LINK_BOOTLOADER){ 
         return DEFAULT_BOOTLOADER_PID;
+    } else if(state == X_LINK_DEBUGGER){ 
+        return DEFAULT_DEBUGGER_PID;
     } else if (state == X_LINK_ANY_STATE) {
         switch (platform) {
             case X_LINK_MYRIAD_2:  return DEFAULT_UNBOOTPID_2150;
@@ -291,6 +294,12 @@ xLinkPlatformErrorCode_t getUSBDeviceName(int index,
             return X_LINK_PLATFORM_ERROR;
         }
         pid = DEFAULT_BOOTLOADER_PID;
+    } else if(state == X_LINK_DEBUGGER){
+          if (in_deviceRequirements.platform != X_LINK_ANY_PLATFORM) {
+            mvLog(MVLOG_WARN, "Search specific platform for bootloader device unavailable");
+            return X_LINK_PLATFORM_ERROR;
+        }
+        pid = DEFAULT_DEBUGGER_PID;
     } else {
         if (searchByName) {
             pid = get_pid_by_name(in_deviceRequirements.name);

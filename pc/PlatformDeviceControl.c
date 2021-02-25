@@ -242,6 +242,8 @@ libusb_device_handle *usbLinkOpen(const char *path)
     int pid = DEFAULT_OPENPID;
     if(strstr(path, "bootloader") != NULL) {
         pid = DEFAULT_BOOTLOADER_PID;
+    } else if(strstr(path, "debugger") != NULL){
+        pid = DEFAULT_DEBUGGER_PID;
     }
 
     while(seconds() < waittm){

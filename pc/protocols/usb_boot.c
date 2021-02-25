@@ -77,6 +77,10 @@ static deviceBootInfo_t supportedDevices[] = {
     {
         .pid = DEFAULT_BOOTLOADER_PID,
         .name = "bootloader"
+    },
+    {
+        .pid = DEFAULT_DEBUGGER_PID,
+        .name = "debugger"
     }
 };
 
@@ -185,6 +189,9 @@ int isMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad and in bootloader
     if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_BOOTLOADER_PID)
         return 1;
+    // Device is Myriad and in debugger state
+    if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_DEBUGGER_PID)
+        return 1;
     return 0;
 }
 
@@ -203,10 +210,17 @@ int isBootloaderMyriadDevice(const int idVendor, const int idProduct) {
     return 0;
 }
 
+int isDebuggerMyriadDevice(const int idVendor, const int idProduct) {
+    // Device is Myriad and in bootloader
+    if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_DEBUGGER_PID)
+        return 1;
+    return 0;
+}
+
 int isNotBootedMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad, pid supported and it's is not booted device
     if (idVendor == DEFAULT_VID && is_pid_supported(idProduct) == 1
-        && idProduct != DEFAULT_OPENPID && idProduct != DEFAULT_BOOTLOADER_PID) {
+        && idProduct != DEFAULT_OPENPID && idProduct != DEFAULT_BOOTLOADER_PID && idProduct != DEFAULT_DEBUGGER_PID) {
         return 1;
     }
     return 0;
@@ -555,6 +569,9 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
              // Any bootloader device
              || (vid == AUTO_VID && pid == DEFAULT_BOOTLOADER_PID
                  && isBootloaderMyriadDevice(desc.idVendor, desc.idProduct)) 
+             // Any debugger device
+             || (vid == AUTO_VID && pid == DEFAULT_DEBUGGER_PID
+                 && isDebuggerMyriadDevice(desc.idVendor, desc.idProduct)) 
         ) {
             if (device) {
                 const char *dev_addr = gen_addr(&desc, dev, get_pid_by_name(input_addr));

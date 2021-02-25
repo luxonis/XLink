@@ -53,6 +53,7 @@ extern const char * usb_get_pid_name(int);
 extern int isMyriadDevice(const int idVendor, const int idProduct);
 extern int isBootedMyriadDevice(const int idVendor, const int idProduct);
 extern int isBootloaderMyriadDevice(const int idVendor, const int idProduct);
+extern int isDebuggerMyriadDevice(const int idVendor, const int idProduct);
 extern int isNotBootedMyriadDevice(const int idVendor, const int idProduct);
 
 #if defined(_MSC_VER) && _MSC_VER < 1900
@@ -845,6 +846,9 @@ usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, 
             // Any bootloader device
             || (vid == AUTO_VID && pid == DEFAULT_BOOTLOADER_PID
                 && isBootloaderMyriadDevice(idVendor, idProduct))
+            // Any debugger device
+            || (vid == AUTO_VID && pid == DEFAULT_DEBUGGER_PID
+                && isDebuggerMyriadDevice(idVendor, idProduct))
             ) {
             if (device) {
 
