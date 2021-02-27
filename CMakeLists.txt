@@ -14,13 +14,13 @@ add_library(${TARGET_NAME} ${XLINK_SOURCES})
 
 if(NOT WIN32)
     target_include_directories(${TARGET_NAME}
-            PRIVATE
-            "${LIBUSB_INCLUDE_DIR}")
+        PRIVATE "${LIBUSB_INCLUDE_DIR}"
+    )
 
     target_link_libraries(${TARGET_NAME}
-            PUBLIC
-            Threads::Threads
-            ${LIBUSB_LIBRARY})
+        PRIVATE Threads::Threads
+        PUBLIC ${LIBUSB_LIBRARY}
+    )
 endif()
 
 if(MINGW)
