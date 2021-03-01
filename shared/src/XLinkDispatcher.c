@@ -388,7 +388,7 @@ int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct
         return -1;
     }
 
-    int rc = XLink_sem_wait(id);
+    int rc = XLink_sem_timedwait(id, &abstime);
     int err = errno;
 
 #ifdef __PC__
