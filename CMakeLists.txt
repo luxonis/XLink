@@ -1,31 +1,43 @@
 # Copyright (C) 2018-2020 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
-#
+# With additions of Luxonis
+
 cmake_minimum_required(VERSION 3.2)
+
+include("cmake/HunterGate.cmake")
+HunterGate(
+    URL "https://github.com/cpp-pm/hunter/archive/v0.23.258.tar.gz"
+    SHA1 "062a19ab13ce8dffa9a882b6ce3e43bdabdf75d3"
+    LOCAL # Local config for dependencies
+)
+
 set(TARGET_NAME "XLink")
 project(${TARGET_NAME} LANGUAGES C CXX)
 
 include(XLink.cmake)
 
 # Add option - MX ID naming instead of usb port
-option(XLINK_USE_MX_ID_NAME "Use MX ID name instead of usb port" ON) 
+option(XLINK_USE_MX_ID_NAME "Use MX ID name instead of usb port" ON)
 
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
 
 if(NOT WIN32)
-    target_include_directories(${TARGET_NAME}
-        PRIVATE "${LIBUSB_INCLUDE_DIR}"
-    )
+
+    # Add libusb dependency
+    hunter_add_package(libusb)
+    find_package(libusb-1.0 CONFIG REQUIRED)
 
     target_link_libraries(${TARGET_NAME}
-        PRIVATE Threads::Threads
-        PUBLIC ${LIBUSB_LIBRARY}
+        PRIVATE
+            Threads::Threads
+            PkgConfig::libusb-1.0
     )
+
 endif()
 
 if(MINGW)
     target_link_libraries(${TARGET_NAME}
-        PUBLIC  
+        PUBLIC
             libwinusb.a
             libsetupapi.a
     )
@@ -48,7 +60,7 @@ target_compile_definitions(${TARGET_NAME}
         USE_USB_VSC
     PUBLIC
         __PC__
-        XLINK_USE_MX_ID_NAME=${XLINK_USE_MX_ID_NAME}    
+        XLINK_USE_MX_ID_NAME=${XLINK_USE_MX_ID_NAME}
 )
 
 if (ENABLE_MYRIAD_NO_BOOT)
