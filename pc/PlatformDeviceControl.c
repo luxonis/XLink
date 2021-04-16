@@ -237,14 +237,8 @@ libusb_device_handle *usbLinkOpen(const char *path)
     libusb_device *dev = NULL;
     double waittm = seconds() + statuswaittimeout;
 
-    // Change PID for bootloader device
     int vid = DEFAULT_OPENVID;
-    int pid = DEFAULT_OPENPID;
-    if(strstr(path, "bootloader") != NULL) {
-        pid = DEFAULT_BOOTLOADER_PID;
-    } else if(strstr(path, "debugger") != NULL){
-        pid = DEFAULT_DEBUGGER_PID;
-    }
+    int pid = get_pid_by_name(path);
 
     while(seconds() < waittm){
         int size = (int)strlen(path);
@@ -267,7 +261,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         if(path[i] == '-') break;
         mx_serial[i] = path[i];
     }
-        
+
 #if (defined(_WIN32) || defined(_WIN64) )
 
     char last_open_dev_err[OPEN_DEV_ERROR_MESSAGE_LENGTH] = {0};
@@ -297,7 +291,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         libusb_unref_device(dev);
         return 0;
     }
-    
+
     libusb_unref_device(dev);
     libusb_detach_kernel_driver(h, 0);
     libusb_rc = libusb_claim_interface(h, 0);
@@ -321,27 +315,27 @@ void usbLinkClose(libusb_device_handle *f)
 }
 #endif
 
-/** 
- * getter to obtain the connected usb speed which was stored by 
+/**
+ * getter to obtain the connected usb speed which was stored by
  * usb_find_device_with_bcd() during XLinkconnect().
  * @note:
  *  getter will return empty or different value
  *  if called before XLinkConnect.
- */ 
+ */
 UsbSpeed_t get_usb_speed(){
     return usb_speed_enum;
 }
 
-/** 
- * getter to obtain the Mx serial id which was received by 
+/**
+ * getter to obtain the Mx serial id which was received by
  * usb_find_device_with_bcd() during XLinkconnect().
  * @note:
  *  getter will return empty or different value
  *  if called before XLinkConnect.
  */
 const char* get_mx_serial(){
-    #ifdef USE_USB_VSC 
-        return mx_serial;  
+    #ifdef USE_USB_VSC
+        return mx_serial;
     #else
         return "UNKNOWN";
     #endif

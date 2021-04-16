@@ -53,7 +53,7 @@ extern const char * usb_get_pid_name(int);
 extern int isMyriadDevice(const int idVendor, const int idProduct);
 extern int isBootedMyriadDevice(const int idVendor, const int idProduct);
 extern int isBootloaderMyriadDevice(const int idVendor, const int idProduct);
-extern int isDebuggerMyriadDevice(const int idVendor, const int idProduct);
+extern int isFlashBootedMyriadDevice(const int idVendor, const int idProduct);
 extern int isNotBootedMyriadDevice(const int idVendor, const int idProduct);
 
 #if defined(_MSC_VER) && _MSC_VER < 1900
@@ -272,13 +272,13 @@ UsbSpeed_t usb_get_usb_speed(usb_hwnd han){
     switch (devSpeed){
         case LowSpeed: return X_LINK_USB_SPEED_LOW;
         case FullSpeed: return X_LINK_USB_SPEED_FULL;
-        case HighSpeed: return X_LINK_USB_SPEED_HIGH;        
+        case HighSpeed: return X_LINK_USB_SPEED_HIGH;
     }
 
     */
 
     // return UNKNOWN for now
-    return X_LINK_USB_SPEED_UNKNOWN;    
+    return X_LINK_USB_SPEED_UNKNOWN;
 
 }
 
@@ -518,7 +518,7 @@ static const char* get_mx_id_device_path(HDEVINFO devInfo, SP_DEVINFO_DATA* devI
             // parse serial number (apperantly the way on Wins)
             sscanf(deviceInterfaceDetailData->DevicePath, "\\\\?\\usb#vid_%hx&pid_%hx#%[^#]", &det_vid, &det_pid, mx_id);
             mvLog(MVLOG_DEBUG, "mx id found: %s\n", mx_id);
-            
+
             if (devicePath != NULL) {
                 snprintf(device_path, sizeof(device_path), "%s", deviceInterfaceDetailData->DevicePath);
                 *devicePath = &device_path[0];
@@ -568,7 +568,7 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
     // Set final_addr as error first
     strncpy(final_addr, "<error>", sizeof(final_addr));
 
-    // generate unique (full) usb bus-port path 
+    // generate unique (full) usb bus-port path
     const char* compat_addr = gen_addr(devInfo, devInfoData, pid);
 
     // first check if entry already exists in the list (and is still valid)
@@ -627,7 +627,7 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
                 }
-                // Transfer as mxid_read_cmd size is less than 512B it should transfer all 
+                // Transfer as mxid_read_cmd size is less than 512B it should transfer all
                 if (size != transferred) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer written %d, expected %d", transferred, size);
 
@@ -735,7 +735,7 @@ typedef struct {
 } usb_dev_list;
 
 void usb_list_free_devices(usb_dev_list* list) {
-    
+
     // Free dev info
     SetupDiDestroyDeviceInfoList(list->devInfo);
 
@@ -770,11 +770,11 @@ int usb_get_device_list(usb_dev_list** refPDevList) {
     // create list
     pDevList->infos = calloc(MAX_NUM_DEVICES, sizeof(SP_DEVINFO_DATA));
     pDevList->vidpids = calloc(MAX_NUM_DEVICES, sizeof(vid_pid_pair));
-    
+
     for (i = 0; i < MAX_NUM_DEVICES; i++) {
         pDevList->infos[i].cbSize = sizeof(SP_DEVINFO_DATA);
     }
-    
+
     //    devInfoData.cbSize = sizeof(devInfoData);
     for (i = 0; SetupDiEnumDeviceInfo(pDevList->devInfo, i, pDevList->infos + i) && i < MAX_NUM_DEVICES; i++) {
         if (!SetupDiGetDeviceRegistryProperty(pDevList->devInfo, pDevList->infos + i, SPDRP_HARDWAREID, NULL, hwid_buff, sizeof(hwid_buff), NULL)) {
@@ -805,7 +805,7 @@ usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, 
 
     // TODO There is no global mutex as in linux version
     int res;
-    
+
     static usb_dev_list* devs = NULL;
     static int devs_cnt = 0;
     int count = 0;
@@ -846,9 +846,9 @@ usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, 
             // Any bootloader device
             || (vid == AUTO_VID && pid == DEFAULT_BOOTLOADER_PID
                 && isBootloaderMyriadDevice(idVendor, idProduct))
-            // Any debugger device
-            || (vid == AUTO_VID && pid == DEFAULT_DEBUGGER_PID
-                && isDebuggerMyriadDevice(idVendor, idProduct))
+            // Any flash booted device
+            || (vid == AUTO_VID && pid == DEFAULT_FLASH_BOOTED_PID
+                && isFlashBootedMyriadDevice(idVendor, idProduct))
             ) {
             if (device) {
 
@@ -859,7 +859,7 @@ usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, 
                 if (strncmp(addr, caddr, XLINK_MAX_NAME_SIZE) == 0)
                 {
                     mvLog(MVLOG_DEBUG, "Found Address: %s - VID/PID %04x:%04x", caddr, idVendor, idProduct);
-                    
+
                     // Create a copy of device path string. It will be freed
                     *device = strdup(devicePath);
                     devs_cnt = 0;
@@ -867,7 +867,7 @@ usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, 
                 }
             }
             else if (specificDevice) {
-                
+
                 // gen addr
                 const char* caddr = gen_addr_mx_id(devs->devInfo, devs->infos + i, idProduct, NULL);
 

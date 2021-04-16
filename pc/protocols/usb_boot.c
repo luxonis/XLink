@@ -55,7 +55,7 @@ static int MX_ID_TIMEOUT = 100;
 
 typedef struct {
     int pid;
-    char name[10];
+    char name[16];
 } deviceBootInfo_t;
 
 static deviceBootInfo_t supportedDevices[] = {
@@ -79,8 +79,8 @@ static deviceBootInfo_t supportedDevices[] = {
         .name = "bootloader"
     },
     {
-        .pid = DEFAULT_DEBUGGER_PID,
-        .name = "debugger"
+        .pid = DEFAULT_FLASH_BOOTED_PID,
+        .name = "flash_booted"
     }
 };
 
@@ -189,8 +189,8 @@ int isMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad and in bootloader
     if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_BOOTLOADER_PID)
         return 1;
-    // Device is Myriad and in debugger state
-    if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_DEBUGGER_PID)
+    // Device is Myriad and in flash booted state
+    if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_FLASH_BOOTED_PID)
         return 1;
     return 0;
 }
@@ -210,9 +210,9 @@ int isBootloaderMyriadDevice(const int idVendor, const int idProduct) {
     return 0;
 }
 
-int isDebuggerMyriadDevice(const int idVendor, const int idProduct) {
+int isFlashBootedMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad and in bootloader
-    if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_DEBUGGER_PID)
+    if (idVendor == DEFAULT_OPENVID && idProduct == DEFAULT_FLASH_BOOTED_PID)
         return 1;
     return 0;
 }
@@ -220,7 +220,7 @@ int isDebuggerMyriadDevice(const int idVendor, const int idProduct) {
 int isNotBootedMyriadDevice(const int idVendor, const int idProduct) {
     // Device is Myriad, pid supported and it's is not booted device
     if (idVendor == DEFAULT_VID && is_pid_supported(idProduct) == 1
-        && idProduct != DEFAULT_OPENPID && idProduct != DEFAULT_BOOTLOADER_PID && idProduct != DEFAULT_DEBUGGER_PID) {
+        && idProduct != DEFAULT_OPENPID && idProduct != DEFAULT_BOOTLOADER_PID && idProduct != DEFAULT_FLASH_BOOTED_PID) {
         return 1;
     }
     return 0;
@@ -300,7 +300,7 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
     // Set final_addr as error first
     strncpy(final_addr, "<error>", sizeof(final_addr));
 
-    // generate unique (full) usb bus-port path 
+    // generate unique (full) usb bus-port path
     const char* compat_addr = gen_addr_compat(dev, pid, true);
 
     // first check if entry already exists in the list (and is still valid)
@@ -335,7 +335,7 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
 
             // if UNBOOTED state, perform mx_id retrieval procedure using small program and a read command
             if(pid == DEFAULT_UNBOOTPID_2485 || pid == DEFAULT_UNBOOTPID_2150){
-                
+
                 // Get configuration first (From OS cache)
                 int active_configuration = -1;
                 if( (libusb_rc = libusb_get_configuration(handle, &active_configuration)) == 0){
@@ -352,7 +352,7 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
                 } else {
                     // getting config failed...
                     mvLog(MVLOG_ERROR, "libusb_set_configuration: %s", libusb_strerror(libusb_rc));
-                    
+
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
@@ -375,15 +375,15 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
                 int transferred = 0;
                 if ((libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), size, &transferred, MX_ID_TIMEOUT)) < 0) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer send: %s", libusb_strerror(libusb_rc));
-                    
+
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
                 }
-                // Transfer as mxid_read_cmd size is less than 512B it should transfer all 
+                // Transfer as mxid_read_cmd size is less than 512B it should transfer all
                 if (size != transferred) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer written %d, expected %d", transferred, size);
-                    
+
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
@@ -395,26 +395,26 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
                 transferred = 0;
                 if ((libusb_rc = libusb_bulk_transfer(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT)) < 0) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer recv: %s", libusb_strerror(libusb_rc));
-                    
+
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
                 }
                 if (expected != transferred) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer read %d, expected %d", transferred, expected);
-                    
+
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
                 }
-                
+
                 // Release claimed interface
                 // ignore error as it doesn't matter
                 libusb_release_interface(handle, 0);
 
                 // Parse mx_id into HEX presentation
                 // There's a bug, it should be 0x0F, but setting as in MDK
-                rbuf[8] &= 0xF0; 
+                rbuf[8] &= 0xF0;
 
                 // Convert to HEX presentation and store into mx_id
                 for (int i = 0; i < transferred; i++) {
@@ -428,7 +428,7 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
 
                 if( (libusb_rc = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, ((uint8_t*) mx_id), sizeof(mx_id))) < 0){
                     mvLog(MVLOG_WARN, "Failed to get string descriptor");
-                    
+
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
@@ -462,11 +462,11 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
             mvLog(MVLOG_DEBUG, "Couldn't cache MX ID %s", mx_id);
         }
 
-    } 
-    
+    }
+
     // At the end add dev_name to retain compatibility with rest of the codebase
     const char* dev_name = get_pid_name(pid);
-    
+
     // Create address [mx_id]-[dev_name]
     snprintf(final_addr, sizeof(final_addr), "%s-%s", mx_id, dev_name);
 
@@ -568,10 +568,10 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                  && isBootedMyriadDevice(desc.idVendor, desc.idProduct))
              // Any bootloader device
              || (vid == AUTO_VID && pid == DEFAULT_BOOTLOADER_PID
-                 && isBootloaderMyriadDevice(desc.idVendor, desc.idProduct)) 
-             // Any debugger device
-             || (vid == AUTO_VID && pid == DEFAULT_DEBUGGER_PID
-                 && isDebuggerMyriadDevice(desc.idVendor, desc.idProduct)) 
+                 && isBootloaderMyriadDevice(desc.idVendor, desc.idProduct))
+             // Any flash booted device
+             || (vid == AUTO_VID && pid == DEFAULT_FLASH_BOOTED_PID
+                 && isFlashBootedMyriadDevice(desc.idVendor, desc.idProduct))
         ) {
             if (device) {
                 const char *dev_addr = gen_addr(&desc, dev, get_pid_by_name(input_addr));
@@ -636,13 +636,13 @@ usbBootError_t usb_find_device(unsigned idx, char *addr, unsigned addrsize, void
 {
     if (!addr)
         return USB_BOOT_ERROR;
-   
+
     if(!initialized)
     {
         mvLog(MVLOG_ERROR, "Library has not been initialized when loaded");
         return USB_BOOT_ERROR;
     }
-    
+
     return win_usb_find_device(idx, addr, addrsize, device, vid, pid);
 }
 #endif
@@ -739,7 +739,7 @@ static int wait_findopen(const char *device_address, int timeout, libusb_device 
         mvLog(MVLOG_DEBUG, "Starting wait for connect, no timeout");
     } else if(timeout == 0){
         mvLog(MVLOG_DEBUG, "Trying to connect");
-    } else { 
+    } else {
         mvLog(MVLOG_DEBUG, "Starting wait for connect with %ums timeout (device_address: %s)", timeout, device_address);
     }
 
