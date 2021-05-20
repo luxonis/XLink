@@ -102,7 +102,7 @@ static const char *format_win32_msg(DWORD errId) {
 
 static void wperror(const char *errmsg) {
     DWORD errId = GetLastError();
-    mvLog(MVLOG_DEBUG, "%s: System err %d\n", errmsg, errId);
+    mvLog(MVLOG_ERROR, "%s: System err %d\n", errmsg, errId);
 }
 
 static void wstrerror(char *buff, const char *errmsg) {
@@ -402,31 +402,48 @@ int usb_control_transfer(usb_hwnd han, uint8_t bmRequestType, uint8_t bRequest, 
     if(han == NULL)
         return USB_ERR_INVALID;
 
-    // Set timeout
-    if(!WinUsb_SetPipePolicy(han->devHan, 0, PIPE_TRANSFER_TIMEOUT, sizeof(ULONG), timeout_ms)){
+    // Timeout variables
+    ULONG prevTimeout = 0;
+    ULONG prevTimeoutSize = sizeof(prevTimeout);
+
+    // Get previous timeout on control endpoint (0)
+    if (!WinUsb_GetPipePolicy(han->winUsbHan, 0, PIPE_TRANSFER_TIMEOUT, &prevTimeoutSize, &prevTimeout)) {
+        wperror("WinUsb_GetPipePolicy");
+        return USB_ERR_FAILED;
+    }
+
+    // Set given timeout
+    ULONG timeout = timeout_ms;
+    if(!WinUsb_SetPipePolicy(han->winUsbHan, 0, PIPE_TRANSFER_TIMEOUT, sizeof(ULONG), &timeout)){
         wperror("WinUsb_SetPipePolicy");
         return USB_ERR_FAILED;
     }
 
-    if(!WinUsb_WritePipe(han->winUsbHan, ep, (PUCHAR)buffer, (ULONG)sz, &wb, NULL)) {
-
     // Create setup packet
-    WINUSB_SETUP_PACKET setup;
-    setup.RequestType = bmRequestType;
-    setup.Request = bRequest;
-    setup.Value = wValue;
-    setup.Index = wIndex;
-    setup.Length = sz;
+    WINUSB_SETUP_PACKET setup = {
+        .RequestType = bmRequestType,
+        .Request = bRequest,
+        .Value = wValue,
+        .Index = wIndex,
+        .Length = sz
+    };
 
     // Make control transfer
     if(!WinUsb_ControlTransfer(han->winUsbHan, setup, buffer, sz, wrote_bytes, NULL)){
         if(GetLastError() == ERROR_SEM_TIMEOUT){
+            mvLog(MVLOG_ERROR, "\WinUsb_ControlTransfer timeout\n");
             return USB_ERR_TIMEOUT;
         }
         wperror("WinUsb_ControlTransfer");
         mvLog(MVLOG_ERROR, "\WinUsb_ControlTransfer failed with error:=%d\n", GetLastError());
         return USB_ERR_FAILED;
     }
+
+    // Set back previous timeout
+    if (!WinUsb_SetPipePolicy(han->winUsbHan, 0, PIPE_TRANSFER_TIMEOUT, sizeof(prevTimeout), &prevTimeout)) {
+        wperror("WinUsb_SetPipePolicy");
+        return USB_ERR_FAILED;
+    }    
 
     return USB_ERR_NONE;
 }

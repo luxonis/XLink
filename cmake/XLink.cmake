@@ -11,7 +11,7 @@ file(GLOB_RECURSE SHARED_SRC "${XLINK_ROOT_DIR}/src/shared/*.c")
 list(APPEND XLINK_SOURCES ${PC_SRC} ${PC_PROTO_SRC} ${SHARED_SRC})
 
 if(WIN32)
-    set(XLINK_PLATFORM_INCLUDE ${XLINK_ROOT_DIR}/pc/Win/include)
+    set(XLINK_PLATFORM_INCLUDE ${XLINK_ROOT_DIR}/src/pc/Win/include)
 
     file(GLOB XLINK_PLATFORM_SRC "${XLINK_ROOT_DIR}/src/pc/Win/src/*.c")
     list(APPEND XLINK_SOURCES "${XLINK_ROOT_DIR}/src/pc/protocols/usb_mx_id.c")

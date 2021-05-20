@@ -372,13 +372,15 @@ bool usbLinkBootBootloader(const char *path) {
     }
 
     // Make control transfer
-    usb_control_transfer(dev,
+    uint32_t transferred = 0;
+    usb_control_transfer(h,
         bootBootloaderPacket.requestType,   // bmRequestType: device-directed
         bootBootloaderPacket.request,   // bRequest: custom
         bootBootloaderPacket.value, // wValue: custom
         bootBootloaderPacket.index, // wIndex
         NULL,   // data pointer
         0,      // data size
+        &transferred,
         1000    // timeout [ms]
     );
 
