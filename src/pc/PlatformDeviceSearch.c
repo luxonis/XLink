@@ -238,6 +238,7 @@ xLinkPlatformErrorCode_t parseUsbBootError(usbBootError_t rc) {
             return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
         case USB_BOOT_TIMEOUT:
             return X_LINK_PLATFORM_TIMEOUT;
+        case USB_BOOT_ERROR:
         default:
             return X_LINK_PLATFORM_ERROR;
     }

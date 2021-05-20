@@ -607,7 +607,7 @@ usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
                     }
                     return USB_BOOT_SUCCESS;
                 }
-            } else if (idx == count) {
+            } else if ((int)idx == count) {
                 const char *caddr = gen_addr(&desc, dev, desc.idProduct);
 #if 0 // To avoid spam in Debug mode
                 mvLog(MVLOG_DEBUG, "Device %d Address: %s - VID/PID %04x:%04x",

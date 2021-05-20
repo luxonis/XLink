@@ -395,6 +395,42 @@ size_t usb_get_endpoint_size(usb_hwnd han, uint8_t ep) {
     return 0;
 }
 
+int usb_control_transfer(usb_hwnd han, uint8_t bmRequestType, uint8_t bRequest, uint16_t wValue, uint16_t wIndex, const void *buffer, size_t sz, uint32_t *wrote_bytes, int timeout_ms) {
+    ULONG wb = 0;
+    if(wrote_bytes != NULL)
+        *wrote_bytes = 0;
+    if(han == NULL)
+        return USB_ERR_INVALID;
+
+    // Set timeout
+    if(!WinUsb_SetPipePolicy(han->devHan, 0, PIPE_TRANSFER_TIMEOUT, sizeof(ULONG), timeout_ms)){
+        wperror("WinUsb_SetPipePolicy");
+        return USB_ERR_FAILED;
+    }
+
+    if(!WinUsb_WritePipe(han->winUsbHan, ep, (PUCHAR)buffer, (ULONG)sz, &wb, NULL)) {
+
+    // Create setup packet
+    WINUSB_SETUP_PACKET setup;
+    setup.RequestType = bmRequestType;
+    setup.Request = bRequest;
+    setup.Value = wValue;
+    setup.Index = wIndex;
+    setup.Length = sz;
+
+    // Make control transfer
+    if(!WinUsb_ControlTransfer(han->winUsbHan, setup, buffer, sz, wrote_bytes, NULL)){
+        if(GetLastError() == ERROR_SEM_TIMEOUT){
+            return USB_ERR_TIMEOUT;
+        }
+        wperror("WinUsb_ControlTransfer");
+        mvLog(MVLOG_ERROR, "\WinUsb_ControlTransfer failed with error:=%d\n", GetLastError());
+        return USB_ERR_FAILED;
+    }
+
+    return USB_ERR_NONE;
+}
+
 int usb_bulk_write(usb_hwnd han, uint8_t ep, const void *buffer, size_t sz, uint32_t *wrote_bytes, int timeout_ms) {
     ULONG wb = 0;
     if(wrote_bytes != NULL)
