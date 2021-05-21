@@ -431,11 +431,11 @@ int usb_control_transfer(usb_hwnd han, uint8_t bmRequestType, uint8_t bRequest, 
     // Make control transfer
     if(!WinUsb_ControlTransfer(han->winUsbHan, setup, buffer, sz, wrote_bytes, NULL)){
         if(GetLastError() == ERROR_SEM_TIMEOUT){
-            mvLog(MVLOG_ERROR, "\WinUsb_ControlTransfer timeout\n");
+            mvLog(MVLOG_ERROR, "WinUsb_ControlTransfer timeout\n");
             return USB_ERR_TIMEOUT;
         }
         wperror("WinUsb_ControlTransfer");
-        mvLog(MVLOG_ERROR, "\WinUsb_ControlTransfer failed with error:=%d\n", GetLastError());
+        mvLog(MVLOG_ERROR, "WinUsb_ControlTransfer failed with error:=%d\n", GetLastError());
         return USB_ERR_FAILED;
     }
 
@@ -443,7 +443,7 @@ int usb_control_transfer(usb_hwnd han, uint8_t bmRequestType, uint8_t bRequest, 
     if (!WinUsb_SetPipePolicy(han->winUsbHan, 0, PIPE_TRANSFER_TIMEOUT, sizeof(prevTimeout), &prevTimeout)) {
         wperror("WinUsb_SetPipePolicy");
         return USB_ERR_FAILED;
-    }    
+    }
 
     return USB_ERR_NONE;
 }
