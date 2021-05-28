@@ -56,8 +56,6 @@ static int statuswaittimeout = 5;
 #include <arpa/inet.h>
 #include <net/if.h>
 
-#define TCP_SOCKET_PORT 8080
-
 int sockfd = -1;
 #endif /*USE_TCP_IP*/
 
