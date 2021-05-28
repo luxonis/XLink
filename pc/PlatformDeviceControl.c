@@ -516,6 +516,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
+#if defined(USE_TCP_IP)
     sockfd = socket( AF_INET, SOCK_STREAM, 0 );
     if( sockfd < 0 )
     {
@@ -550,7 +551,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     void *external_fd = ( void* ) sockfd;
     *fd = external_fd;
-
+#endif
     return 0;
 }
 
@@ -608,11 +609,13 @@ int pciePlatformClose(void *f)
 
 int tcpipPlatformClose(void *fd)
 {
+#if defined(USE_TCP_IP)
     if( sockfd != -1 )
     {
         close( sockfd );
         return 0;
     }
+#endif
     return -1;
 }
 

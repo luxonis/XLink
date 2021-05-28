@@ -340,21 +340,25 @@ int pciePlatformRead(void *f, void *data, int size)
 
 static int tcpipPlatformRead(void *fd, void *data, int size)
 {
+#if defined(USE_TCP_IP)
     int nread = 0;
     while( nread < size )
     {
         nread += read(sockfd, &((char*)data)[nread], size - nread);
     }
+#endif
     return 0;
 }
 
 static int tcpipPlatformWrite(void *fd, void *data, int size)
 {
+#if defined(USE_TCP_IP)
     int byteCount = 0;
     while( byteCount < size )
     {
         byteCount += write(sockfd, &((char*)data)[byteCount], size - byteCount);
     }
+#endif
     return 0;
 }
 
