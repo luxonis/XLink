@@ -47,6 +47,10 @@ extern int usbFdWrite;
 extern int usbFdRead;
 #endif  /*USE_USB_VSC*/
 
+#ifdef USE_TCP_IP
+extern int sockfd;
+#endif /*USE_TCP_IP*/
+
 #ifndef XLINK_USB_DATA_TIMEOUT
 #define XLINK_USB_DATA_TIMEOUT 0
 #endif
@@ -70,14 +74,16 @@ static int usb_read(libusb_device_handle *f, void *data, size_t size);
 
 static int usbPlatformRead(void *fd, void *data, int size);
 static int pciePlatformRead(void *f, void *data, int size);
+static int tcpipPlatformRead(void *fd, void *data, int size);
 
 static int usbPlatformWrite(void *fd, void *data, int size);
 static int pciePlatformWrite(void *f, void *data, int size);
+static int tcpipPlatformWrite(void *fd, void *data, int size);
 
 int (*write_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*, void*, int) = \
-                            {usbPlatformWrite, usbPlatformWrite, pciePlatformWrite};
+                            {usbPlatformWrite, usbPlatformWrite, pciePlatformWrite, tcpipPlatformWrite};
 int (*read_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*, void*, int) = \
-                            {usbPlatformRead, usbPlatformRead, pciePlatformRead};
+                            {usbPlatformRead, usbPlatformRead, pciePlatformRead, tcpipPlatformRead};
 
 // ------------------------------------
 // Wrappers declaration. End.
@@ -330,6 +336,26 @@ int pciePlatformRead(void *f, void *data, int size)
 
     return 0;
 #endif
+}
+
+static int tcpipPlatformRead(void *fd, void *data, int size)
+{
+    int nread = 0;
+    while( nread < size )
+    {
+        nread += read(sockfd, &((char*)data)[nread], size - nread);
+    }
+    return 0;
+}
+
+static int tcpipPlatformWrite(void *fd, void *data, int size)
+{
+    int byteCount = 0;
+    while( byteCount < size )
+    {
+        byteCount += write(sockfd, &((char*)data)[byteCount], size - byteCount);
+    }
+    return 0;
 }
 
 // ------------------------------------

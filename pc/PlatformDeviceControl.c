@@ -46,6 +46,22 @@ static char mx_serial[XLINK_MAX_MX_ID_SIZE] = { 0 };
 #ifdef USE_USB_VSC
 static int statuswaittimeout = 5;
 #endif
+
+#ifdef USE_TCP_IP
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+
+#define TCP_SOCKET_PORT 8080
+
+int sockfd = -1;
+#endif /*USE_TCP_IP*/
+
+
 // ------------------------------------
 // Helpers declaration. Begin.
 // ------------------------------------
@@ -72,14 +88,17 @@ static int usbPlatformConnect(const char *devPathRead,
                               const char *devPathWrite, void **fd);
 static int pciePlatformConnect(UNUSED const char *devPathRead,
                                const char *devPathWrite, void **fd);
+static int tcpipPlatformConnect(const char *devPathRead,
+                                const char *devPathWrite, void **fd);
 
 static int usbPlatformClose(void *fd);
 static int pciePlatformClose(void *f);
+static int tcpipPlatformClose(void *fd);
 
 static int (*open_fcts[X_LINK_NMB_OF_PROTOCOLS])(const char*, const char*, void**) = \
-                            {usbPlatformConnect, usbPlatformConnect, pciePlatformConnect};
+                            {usbPlatformConnect, usbPlatformConnect, pciePlatformConnect, tcpipPlatformConnect};
 static int (*close_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*) = \
-                            {usbPlatformClose, usbPlatformClose, pciePlatformClose};
+                            {usbPlatformClose, usbPlatformClose, pciePlatformClose, tcpipPlatformClose};
 
 // ------------------------------------
 // Wrappers declaration. End.
@@ -95,6 +114,47 @@ void XLinkPlatformInit()
 {
 #if (defined(_WIN32) || defined(_WIN64))
     initialize_usb_boot();
+#endif
+
+#ifndef __PC__
+    int tempfd = socket( AF_INET, SOCK_STREAM, 0 );
+    if( tempfd < 0 )
+    {
+        perror("socket");
+    }
+
+    int reuse_addr = 1;
+    int sc;
+    sc = setsockopt( tempfd, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof( int ) );
+    if( sc < 0 )
+    {
+        perror("setsockopt");
+        close( tempfd );
+    }
+
+    struct sockaddr_in serv_addr = {}, client = {};
+    memset( &serv_addr, 0, sizeof( serv_addr ) );
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_port = htons( TCP_SOCKET_PORT );
+    if( bind( tempfd, ( struct sockaddr* ) &serv_addr, sizeof( serv_addr ) ) < 0 )
+    {
+        perror("bind");
+        close( tempfd );
+    }
+
+    if( listen( tempfd, 10 ) < 0 )
+    {
+        perror("listen");
+        close( tempfd );
+    }
+
+    unsigned len = sizeof( client );
+    sockfd = accept( tempfd, ( struct sockaddr* ) &client, &len );
+    if( sockfd < 0 )
+    {
+        perror("accept");
+    }
 #endif
 }
 
@@ -265,7 +325,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         if(path[i] == '-') break;
         mx_serial[i] = path[i];
     }
-        
+
 #if (defined(_WIN32) || defined(_WIN64) )
 
     char last_open_dev_err[OPEN_DEV_ERROR_MESSAGE_LENGTH] = {0};
@@ -295,7 +355,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         libusb_unref_device(dev);
         return 0;
     }
-    
+
     libusb_unref_device(dev);
     libusb_detach_kernel_driver(h, 0);
     libusb_rc = libusb_claim_interface(h, 0);
@@ -319,27 +379,27 @@ void usbLinkClose(libusb_device_handle *f)
 }
 #endif
 
-/** 
- * getter to obtain the connected usb speed which was stored by 
+/**
+ * getter to obtain the connected usb speed which was stored by
  * usb_find_device_with_bcd() during XLinkconnect().
  * @note:
  *  getter will return empty or different value
  *  if called before XLinkConnect.
- */ 
+ */
 UsbSpeed_t get_usb_speed(){
     return usb_speed_enum;
 }
 
-/** 
- * getter to obtain the Mx serial id which was received by 
+/**
+ * getter to obtain the Mx serial id which was received by
  * usb_find_device_with_bcd() during XLinkconnect().
  * @note:
  *  getter will return empty or different value
  *  if called before XLinkConnect.
  */
 const char* get_mx_serial(){
-    #ifdef USE_USB_VSC 
-        return mx_serial;  
+    #ifdef USE_USB_VSC
+        return mx_serial;
     #else
         return "UNKNOWN";
     #endif
@@ -454,6 +514,46 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 #endif  /*USE_USB_VSC*/
 }
 
+int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
+{
+    sockfd = socket( AF_INET, SOCK_STREAM, 0 );
+    if( sockfd < 0 )
+    {
+        perror("socket");
+        return -1;
+    }
+
+    struct sockaddr_in serv_addr;
+    memset( &serv_addr, 0, sizeof( serv_addr ) );
+
+    int len = strlen( devPathWrite );
+    char devPathWriteBuff[len];
+    strcpy( devPathWriteBuff, devPathWrite );
+
+    char* serv_ip = strtok( devPathWriteBuff, ":" );
+    char* serv_port = strtok( NULL, ":" );
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons( atoi( serv_port ) );
+
+    if( inet_pton( AF_INET, serv_ip, &serv_addr.sin_addr ) <= 0 )
+    {
+        perror("inet_pton");
+        return -1;
+    }
+
+    if( connect( sockfd, ( struct sockaddr * ) &serv_addr, sizeof( serv_addr ) ) < 0 )
+    {
+        perror("connect");
+        return -1;
+    }
+
+    void *external_fd = ( void* ) sockfd;
+    *fd = external_fd;
+
+    return 0;
+}
+
 int pciePlatformConnect(UNUSED const char *devPathRead,
                         const char *devPathWrite,
                         void **fd)
@@ -504,6 +604,16 @@ int pciePlatformClose(void *f)
         mvLog(MVLOG_ERROR, "Device closing failed with error %d", rc);
     }
     return rc;
+}
+
+int tcpipPlatformClose(void *fd)
+{
+    if( sockfd != -1 )
+    {
+        close( sockfd );
+        return 0;
+    }
+    return -1;
 }
 
 // ------------------------------------

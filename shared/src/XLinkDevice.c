@@ -125,9 +125,10 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     link->id = getNextAvailableLinkUniqueId();
     link->peerState = XLINK_UP;
     link->deviceHandle.xLinkFD = NULL;
+    link->deviceHandle.protocol = globalHandler->protocol;
 
     xLinkDeviceHandle_t temp = {0};
-    temp.protocol = X_LINK_ANY_PROTOCOL;
+    temp.protocol = globalHandler->protocol;
     XLINK_RET_IF_FAIL(DispatcherStart(&temp)); //myriad has one
 
     sem_wait(&pingSem);
