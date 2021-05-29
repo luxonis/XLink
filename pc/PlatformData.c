@@ -350,10 +350,21 @@ int usb_read(libusb_device_handle *f, void *data, size_t size)
         int bt, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
+#ifdef TCPIP_PATCH
+        int rc = read((int)f, data, ss);
+        if (rc < 0) {
+            perror("sock read");
+            bt = 0;
+        } else {
+            bt = rc;
+            rc = 0;
+        }
+#else
 #if (defined(_WIN32) || defined(_WIN64))
         int rc = usb_bulk_read(f, USB_ENDPOINT_IN, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
 #else
         int rc = libusb_bulk_transfer(f, USB_ENDPOINT_IN,(unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+#endif
 #endif
         if(rc)
             return rc;
@@ -371,10 +382,21 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size)
         int bt, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
+#ifdef TCPIP_PATCH
+        int rc = write((int)f, data, ss);
+        if (rc < 0) {
+            perror("sock write");
+            bt = 0;
+        } else {
+            bt = rc;
+            rc = 0;
+        }
+#else
 #if (defined(_WIN32) || defined(_WIN64) )
         int rc = usb_bulk_write(f, USB_ENDPOINT_OUT, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
 #else
         int rc = libusb_bulk_transfer(f, USB_ENDPOINT_OUT, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+#endif
 #endif
         if(rc)
             return rc;

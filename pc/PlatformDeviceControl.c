@@ -35,6 +35,16 @@ int usbFdWrite = -1;
 int usbFdRead = -1;
 #endif  /*USE_USB_VSC*/
 
+#ifdef TCPIP_PATCH
+#include <assert.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#endif
+
 #include "XLinkPublicDefines.h"
 
 #define USB_LINK_SOCKET_PORT 5678
@@ -310,11 +320,15 @@ libusb_device_handle *usbLinkOpen(const char *path)
 
 void usbLinkClose(libusb_device_handle *f)
 {
+#ifdef TCPIP_PATCH
+    close((int)f);
+#else
 #if (defined(_WIN32) || defined(_WIN64))
     usb_close_device(f);
 #else
     libusb_release_interface(f, 0);
     libusb_close(f);
+#endif
 #endif
 }
 #endif
@@ -440,6 +454,38 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 #endif  /*USE_LINK_JTAG*/
 #else
+  #ifdef TCPIP_PATCH
+  {
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("socket");
+        return -1;
+    }
+
+    char ip[64] = "invalid";
+    int port = 0;
+    sscanf(devPathWrite, "%[^:]:%d", ip, &port);
+    printf("Connecting to MX server: %s:%d\n", ip, port);
+
+    struct sockaddr_in serv_addr = {};
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+    if (inet_pton(AF_INET, ip, &serv_addr.sin_addr) <= 0) {
+        perror("inet_pton");
+        return -1;
+    }
+
+    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        perror("connect");
+        return -1;
+    }
+    void *external_fd = (void*)sockfd; // Just ignore the warning here...
+    printf("Connected! Socket fd: %p\n", external_fd);
+
+    *fd = external_fd;
+    return 0;
+  }
+  #endif
     *fd = usbLinkOpen(devPathWrite);
     if (*fd == 0)
     {

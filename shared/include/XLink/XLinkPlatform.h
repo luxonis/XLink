@@ -17,6 +17,8 @@ extern "C"
 {
 #endif
 
+#define TCPIP_PATCH 1
+
 #define MAX_POOLS_ALLOC 32
 #define PACKET_LENGTH (64*1024)
 

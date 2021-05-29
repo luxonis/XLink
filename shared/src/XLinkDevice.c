@@ -35,6 +35,8 @@ sem_t  pingSem; //to b used by myriad
 DispatcherControlFunctions controlFunctionTbl;
 linkId_t nextUniqueLinkId = 0; //incremental number, doesn't get decremented.
 
+#define MX_ADDR "192.168.1.222:8080"
+
 // ------------------------------------
 // Global fields. End.
 // ------------------------------------
@@ -148,6 +150,12 @@ XLinkError_t XLinkFindFirstSuitableDevice(XLinkDeviceState_t state,
 {
     XLINK_RET_IF(out_foundDevice == NULL);
 
+    if (state == X_LINK_BOOTLOADER) {
+        out_foundDevice[0].protocol = X_LINK_USB_VSC;
+        strcpy(out_foundDevice[0].name, MX_ADDR);
+        return 0;
+    }
+
     xLinkPlatformErrorCode_t rc;
     rc = XLinkPlatformFindDeviceName(state, in_deviceRequirements, out_foundDevice);
     return parsePlatformError(rc);
@@ -161,6 +169,13 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
     XLINK_RET_IF(out_foundDevicesPtr == NULL);
     XLINK_RET_IF(devicesArraySize <= 0);
     XLINK_RET_IF(out_foundDevicesCount == NULL);
+
+    if (state == X_LINK_BOOTLOADER) {
+        out_foundDevicesPtr[0].protocol = X_LINK_USB_VSC;
+        strcpy(out_foundDevicesPtr[0].name, MX_ADDR);
+        *out_foundDevicesCount = 1;
+        return 0;
+    }
 
     xLinkPlatformErrorCode_t rc;
     rc = XLinkPlatformFindArrayOfDevicesNames(
