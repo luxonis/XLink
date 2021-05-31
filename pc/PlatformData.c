@@ -342,9 +342,20 @@ static int tcpipPlatformRead(void *fd, void *data, int size)
 {
 #if defined(USE_TCP_IP)
     int nread = 0;
-    while( nread < size )
+    int rc = -1;
+
+    while(nread < size)
     {
-        nread += read(sockfd, &((char*)data)[nread], size - nread);
+        rc = read((intptr_t)fd, &((char*)data)[nread], size - nread);
+        if(rc < 0)
+        {
+            return rc;
+        }
+        else
+        {
+            nread += rc;
+            rc = -1;
+        }
     }
 #endif
     return 0;
@@ -354,9 +365,20 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
 {
 #if defined(USE_TCP_IP)
     int byteCount = 0;
-    while( byteCount < size )
+    int rc = -1;
+
+    while(byteCount < size)
     {
-        byteCount += write(sockfd, &((char*)data)[byteCount], size - byteCount);
+        rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
+        if(rc < 0)
+        {
+            return rc;
+        }
+        else
+        {
+            byteCount += rc;
+            rc = -1;
+        }
     }
 #endif
     return 0;
