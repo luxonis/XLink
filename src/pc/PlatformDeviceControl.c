@@ -49,17 +49,8 @@ static int statuswaittimeout = 5;
 #endif
 
 #ifdef USE_TCP_IP
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <net/if.h>
-
-int sockfd = -1;
-#endif /*USE_TCP_IP*/
-
+#endif /* USE_TCP_IP */
 
 typedef struct {
   uint8_t  requestType;
@@ -583,40 +574,42 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if defined(USE_TCP_IP)
-    sockfd = socket( AF_INET, SOCK_STREAM, 0 );
-    if( sockfd < 0 )
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if(sockfd < 0)
     {
         perror("socket");
+        close(sockfd);
         return -1;
     }
 
     struct sockaddr_in serv_addr;
-    memset( &serv_addr, 0, sizeof( serv_addr ) );
+    memset(&serv_addr, 0, sizeof(serv_addr));
 
-    int len = strlen( devPathWrite );
+    size_t len = strlen(devPathWrite);
     char devPathWriteBuff[len];
-    strcpy( devPathWriteBuff, devPathWrite );
+    strcpy(devPathWriteBuff, devPathWrite);
 
-    char* serv_ip = strtok( devPathWriteBuff, ":" );
-    char* serv_port = strtok( NULL, ":" );
+    char* serv_ip = strtok(devPathWriteBuff, ":");
+    char* serv_port = strtok(NULL, ":");
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons( atoi( serv_port ) );
+    serv_addr.sin_port = htons(atoi(serv_port));
 
-    if( inet_pton( AF_INET, serv_ip, &serv_addr.sin_addr ) <= 0 )
+    if(inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr) <= 0)
     {
         perror("inet_pton");
+        close(sockfd);
         return -1;
     }
 
-    if( connect( sockfd, ( struct sockaddr * ) &serv_addr, sizeof( serv_addr ) ) < 0 )
+    if(connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
     {
         perror("connect");
+        close(sockfd);
         return -1;
     }
 
-    void *external_fd = ( void* ) sockfd;
-    *fd = external_fd;
+    *((int*)fd) = sockfd;
 #endif
     return 0;
 }
@@ -691,9 +684,10 @@ int pciePlatformClose(void *f)
 int tcpipPlatformClose(void *fd)
 {
 #if defined(USE_TCP_IP)
-    if( sockfd != -1 )
+    intptr_t sockfd = (intptr_t)fd;
+    if(sockfd != -1)
     {
-        close( sockfd );
+        close(sockfd);
         return 0;
     }
 #endif
