@@ -50,6 +50,7 @@ target_compile_definitions(${TARGET_NAME}
         HAVE_STRUCT_TIMESPEC
         _CRT_SECURE_NO_WARNINGS
         USE_USB_VSC
+        USE_TCP_IP
     PUBLIC
         __PC__
         XLINK_USE_MX_ID_NAME=${XLINK_USE_MX_ID_NAME}
