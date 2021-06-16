@@ -97,6 +97,6 @@ tcpipHostError_t tcpip_close_socket(void *fd);
  * @retval      TCPIP_HOST_ERROR Failed to get network interface informations
  * @retval      TCPIP_HOST_SUCCESS Received all device IP address available
 */
-tcpipHostError_t tcpip_get_ip(tcpipHostDeviceInfo_t *devices, uint8_t* device_count, const char* target_ip);
+tcpipHostError_t tcpip_get_ip(tcpipHostDeviceInfo_t *devices, unsigned int* device_count, const char* target_ip);
 
 #endif /* TCPIP_HOST_H */

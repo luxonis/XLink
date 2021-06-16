@@ -40,7 +40,7 @@ static tcpipHostDeviceState_t tcpip_convert_device_state(uint32_t state)
     }
 }
 
-static tcpipHostError_t tcpip_create_socket(char* iface_name, void *fd)
+static tcpipHostError_t tcpip_create_socket(char* iface_name, int *fd)
 {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if(sockfd < 0)
@@ -69,7 +69,7 @@ static tcpipHostError_t tcpip_create_socket(char* iface_name, void *fd)
         return TCPIP_HOST_ERROR;
     }
 
-    memcpy(fd, &sockfd, sizeof(sockfd));
+    *fd = sockfd;
     return TCPIP_HOST_SUCCESS;
 }
 
@@ -87,7 +87,7 @@ tcpipHostError_t tcpip_close_socket(void *fd)
     return TCPIP_HOST_ERROR;
 }
 
-tcpipHostError_t tcpip_get_ip(tcpipHostDeviceInfo_t *devices, uint8_t* device_count, const char* target_ip)
+tcpipHostError_t tcpip_get_ip(tcpipHostDeviceInfo_t *devices, unsigned int* device_count, const char* target_ip)
 {
     // get all network interface information
     struct ifaddrs *ifaddr;
@@ -148,13 +148,10 @@ tcpipHostError_t tcpip_get_ip(tcpipHostDeviceInfo_t *devices, uint8_t* device_co
                     // convert IP address in binary into string
                     inet_ntop(AF_INET, &dev_addr.sin_addr, ip_addr, sizeof(ip_addr));
 
-                    // copy IP address into buffer
-                    memcpy(((tcpipHostDeviceInfo_t*)(devices)+index)->desc.name, ip_addr, sizeof(ip_addr));
-                    memcpy(((tcpipHostDeviceInfo_t*)(devices)+index)->info.mxid, recv_buffer.mxid, MAX_MXID_CHAR);
-
-                    // convert device status into proper tcpip status
-                    tcpipHostDeviceState_t devState = tcpip_convert_device_state(recv_buffer.state);
-                    memcpy(&((tcpipHostDeviceInfo_t*)(devices)+index)->info.state, &devState, sizeof(uint32_t));
+                    // copy device information
+                    strcpy(devices[index].desc.name, ip_addr);
+                    strcpy(devices[index].info.mxid, recv_buffer.mxid);
+                    devices[index].info.state = tcpip_convert_device_state(recv_buffer.state);
 
                     // check if IP matched with target IP
                     if(strcmp(target_ip, ip_addr) == 0)
@@ -172,7 +169,7 @@ tcpipHostError_t tcpip_get_ip(tcpipHostDeviceInfo_t *devices, uint8_t* device_co
     }
 
     // return total device found
-    memcpy(device_count, &index, sizeof(index));
+    *device_count = index;
 
     // free linked list
     freeifaddrs(ifaddr);
