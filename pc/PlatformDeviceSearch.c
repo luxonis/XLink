@@ -387,6 +387,7 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
                                                    unsigned int* out_foundDevicesCount)
 {
     ASSERT_XLINK_PLATFORM(out_foundDevice);
+    ASSERT_XLINK_PLATFORM(devicesArraySize);
     if (in_deviceRequirements.platform == X_LINK_MYRIAD_2) {
         /**
          * There is no PCIe on Myriad 2. Asserting that check
@@ -453,6 +454,7 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
         }
     }
 
+    free(devices);
     return X_LINK_PLATFORM_SUCCESS;
 }
 
