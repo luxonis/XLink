@@ -65,7 +65,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDeviceName(XLinkDeviceState_t state,
 
         case X_LINK_PCIE:
             return getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
-        
+
         case X_LINK_TCP_IP:
             return getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, 1u, &out_amountOfFoundDevices);
 
@@ -131,7 +131,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
 
             *out_amountOfFoundDevices = pcie_index;
             return X_LINK_PLATFORM_SUCCESS;
-        
+
         case X_LINK_TCP_IP:
             return getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, out_amountOfFoundDevices);
 
@@ -152,9 +152,10 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
             }
 
             // Try find TCPIP device
-            getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, out_amountOfFoundDevices);
+            unsigned int numTcpIpDevices = 0;
+            getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, &numTcpIpDevices);
 
-            *out_amountOfFoundDevices = both_protocol_index;
+            *out_amountOfFoundDevices = both_protocol_index + numTcpIpDevices;
             return X_LINK_PLATFORM_SUCCESS;
 
         default:
@@ -409,7 +410,7 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
     if(state == X_LINK_UNBOOTED)
     {
         /**
-         * There is no condition where unbooted 
+         * There is no condition where unbooted
          * state device to be found using tcp/ip.
         */
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
@@ -419,7 +420,8 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
     tcpipHostDeviceInfo_t devices[MAX_DEVICE_SEARCH] = {0};
 
     int res = tcpip_get_ip(devices, &device_count, in_deviceRequirements.name);
-    memcpy(out_foundDevicesCount, &device_count, sizeof(device_count));
+    *out_foundDevicesCount = device_count;
+
 
     // check if user specify IP address to be connected
     if(strlen(in_deviceRequirements.name) > 0)
