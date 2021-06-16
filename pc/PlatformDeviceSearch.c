@@ -65,7 +65,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDeviceName(XLinkDeviceState_t state,
 
         case X_LINK_PCIE:
             return getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
-        
+
         case X_LINK_TCP_IP:
             return getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, 1u, &out_amountOfFoundDevices);
 
@@ -131,7 +131,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
 
             *out_amountOfFoundDevices = pcie_index;
             return X_LINK_PLATFORM_SUCCESS;
-        
+
         case X_LINK_TCP_IP:
             return getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, out_amountOfFoundDevices);
 
@@ -152,9 +152,10 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
             }
 
             // Try find TCPIP device
-            getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, &both_protocol_index);
+            unsigned int numTcpIpDevices = 0;
+            getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, &numTcpIpDevices);
 
-            *out_amountOfFoundDevices = both_protocol_index;
+            *out_amountOfFoundDevices = both_protocol_index + numTcpIpDevices;
             return X_LINK_PLATFORM_SUCCESS;
 
         default:
@@ -231,7 +232,7 @@ int platformToPid(const XLinkPlatform_t platform, const XLinkDeviceState_t state
         }
     } else if (state == X_LINK_BOOTED) {
         return DEFAULT_OPENPID;
-    } else if(state == X_LINK_BOOTLOADER){ 
+    } else if(state == X_LINK_BOOTLOADER){
         return DEFAULT_BOOTLOADER_PID;
     } else if (state == X_LINK_ANY_STATE) {
         switch (platform) {
@@ -239,7 +240,7 @@ int platformToPid(const XLinkPlatform_t platform, const XLinkDeviceState_t state
             case X_LINK_MYRIAD_X:  return DEFAULT_UNBOOTPID_2485;
             default:               return AUTO_PID;
         }
-    } 
+    }
 
     return AUTO_PID;
 }
@@ -311,7 +312,7 @@ xLinkPlatformErrorCode_t getUSBDeviceName(int index,
             return X_LINK_PLATFORM_ERROR;
         }
         pid = DEFAULT_OPENPID;
-        
+
     } else if(state == X_LINK_BOOTLOADER){
           if (in_deviceRequirements.platform != X_LINK_ANY_PLATFORM) {
             mvLog(MVLOG_WARN, "Search specific platform for bootloader device unavailable");
@@ -399,7 +400,7 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
     if(state == X_LINK_UNBOOTED)
     {
         /**
-         * There is no condition where unbooted 
+         * There is no condition where unbooted
          * state device to be found using tcp/ip.
         */
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
