@@ -65,7 +65,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDeviceName(XLinkDeviceState_t state,
 
         case X_LINK_PCIE:
             return getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
-        
+
         case X_LINK_TCP_IP:
             return getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, 1u, &out_amountOfFoundDevices);
 
@@ -131,7 +131,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
 
             *out_amountOfFoundDevices = pcie_index;
             return X_LINK_PLATFORM_SUCCESS;
-        
+
         case X_LINK_TCP_IP:
             return getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, out_amountOfFoundDevices);
 
@@ -152,9 +152,10 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
             }
 
             // Try find TCPIP device
-            getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, &both_protocol_index);
+            unsigned int numTcpIpDevices = 0;
+            getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, &numTcpIpDevices);
 
-            *out_amountOfFoundDevices = both_protocol_index;
+            *out_amountOfFoundDevices = both_protocol_index + numTcpIpDevices;
             return X_LINK_PLATFORM_SUCCESS;
 
         default:
@@ -409,7 +410,7 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
     if(state == X_LINK_UNBOOTED)
     {
         /**
-         * There is no condition where unbooted 
+         * There is no condition where unbooted
          * state device to be found using tcp/ip.
         */
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
