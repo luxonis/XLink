@@ -65,16 +65,6 @@ typedef struct
     uint32_t state;
 } tcpipHostDeviceDiscoveryResp_t;
 
-/* Device information */
-typedef struct
-{
-    deviceDesc_t desc;
-    tcpipHostDeviceDiscoveryResp_t info;
-    int32_t linkSpeed;
-    int32_t linkFullDuplex;
-    int32_t gpioBootMode;
-} tcpipHostDeviceInfo_t;
-
 /* **************************************************************************/
 /*      Public Function Declarations                                        */
 /* **************************************************************************/
@@ -86,17 +76,17 @@ typedef struct
  * @retval      TCPIP_HOST_ERROR Failed to close socket
  * @retval      TCPIP_HOST_SUCCESS Success to close socket
 */
-tcpipHostError_t tcpip_close_socket(void *fd);
+tcpipHostError_t tcpip_close_socket(void* fd);
 
 /**
  * @brief       Broadcast message and get all devices responses with their IPs
  * 
- * @param[out]  devices Pointer to store device IP array
+ * @param[out]  devices Pointer to store device information
  * @param[out]  device_count Total device IP address obtained
  * @param[in]   target_ip Target IP address to be checked
  * @retval      TCPIP_HOST_ERROR Failed to get network interface informations
  * @retval      TCPIP_HOST_SUCCESS Received all device IP address available
 */
-tcpipHostError_t tcpip_get_ip(tcpipHostDeviceInfo_t *devices, unsigned int* device_count, const char* target_ip);
+tcpipHostError_t tcpip_get_ip(deviceDesc_t* devices, unsigned int* device_count, const char* target_ip);
 
 #endif /* TCPIP_HOST_H */

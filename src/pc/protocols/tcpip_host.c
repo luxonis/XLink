@@ -24,15 +24,15 @@
 /* **************************************************************************/
 /*      Private Function Definitions                                        */
 /* **************************************************************************/
-static tcpipHostDeviceState_t tcpip_convert_device_state(uint32_t state)
+static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
 {
-    if(state == X_LINK_BOOTED)
+    if(state == TCPIP_HOST_STATE_BOOTED)
     {
-        return TCPIP_HOST_STATE_BOOTED;
+        return X_LINK_BOOTED;
     }
-    else if(state == X_LINK_UNBOOTED)
+    else if(state == TCPIP_HOST_STATE_BOOTLOADER)
     {
-        return TCPIP_HOST_STATE_BOOTLOADER;
+        return X_LINK_UNBOOTED;
     }
     else
     {
@@ -40,7 +40,7 @@ static tcpipHostDeviceState_t tcpip_convert_device_state(uint32_t state)
     }
 }
 
-static tcpipHostError_t tcpip_create_socket(char* iface_name, int *fd)
+static tcpipHostError_t tcpip_create_socket(char* iface_name, int* fd)
 {
     int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
     if(sockfd < 0)
@@ -76,7 +76,7 @@ static tcpipHostError_t tcpip_create_socket(char* iface_name, int *fd)
 /* **************************************************************************/
 /*      Public Function Definitions                                         */
 /* **************************************************************************/
-tcpipHostError_t tcpip_close_socket(void *fd)
+tcpipHostError_t tcpip_close_socket(void* fd)
 {
     intptr_t sockfd = (intptr_t)fd;
     if(sockfd != -1)
@@ -87,7 +87,7 @@ tcpipHostError_t tcpip_close_socket(void *fd)
     return TCPIP_HOST_ERROR;
 }
 
-tcpipHostError_t tcpip_get_ip(tcpipHostDeviceInfo_t *devices, unsigned int* device_count, const char* target_ip)
+tcpipHostError_t tcpip_get_ip(deviceDesc_t* devices, unsigned int* device_count, const char* target_ip)
 {
     // get all network interface information
     struct ifaddrs *ifaddr;
@@ -149,9 +149,7 @@ tcpipHostError_t tcpip_get_ip(tcpipHostDeviceInfo_t *devices, unsigned int* devi
                     inet_ntop(AF_INET, &dev_addr.sin_addr, ip_addr, sizeof(ip_addr));
 
                     // copy device information
-                    strcpy(devices[index].desc.name, ip_addr);
-                    strcpy(devices[index].info.mxid, recv_buffer.mxid);
-                    devices[index].info.state = tcpip_convert_device_state(recv_buffer.state);
+                    strcpy(devices[index].name, ip_addr);
 
                     // check if IP matched with target IP
                     if(strcmp(target_ip, ip_addr) == 0)
@@ -170,9 +168,6 @@ tcpipHostError_t tcpip_get_ip(tcpipHostDeviceInfo_t *devices, unsigned int* devi
 
     // return total device found
     *device_count = index;
-
-    // free linked list
-    freeifaddrs(ifaddr);
 
     return TCPIP_HOST_SUCCESS;
 }
