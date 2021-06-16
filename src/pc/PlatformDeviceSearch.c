@@ -152,7 +152,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
             }
 
             // Try find TCPIP device
-            getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, out_amountOfFoundDevices);
+            getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, &both_protocol_index);
 
             *out_amountOfFoundDevices = both_protocol_index;
             return X_LINK_PLATFORM_SUCCESS;
@@ -415,11 +415,11 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
-    uint8_t device_count = 0;
+    unsigned int device_count = 0;
     tcpipHostDeviceInfo_t devices[MAX_DEVICE_SEARCH] = {0};
 
     int res = tcpip_get_ip(devices, &device_count, in_deviceRequirements.name);
-    memcpy(out_foundDevicesCount, &device_count, sizeof(device_count));
+    *out_foundDevicesCount = device_count;
 
     // check if user specify IP address to be connected
     if(strlen(in_deviceRequirements.name) > 0)
@@ -448,7 +448,7 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
             }
 
             // return first device found
-            memcpy(out_foundDevice->name, devices[0].desc.name, MAX_IP_ADDR_CHAR);
+            strcpy(out_foundDevice->name, devices[0].desc.name);
             out_foundDevice->protocol = X_LINK_TCP_IP;
             out_foundDevice->platform = X_LINK_MYRIAD_X;
         }

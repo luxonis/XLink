@@ -20,7 +20,7 @@ extern "C"
 #ifdef XLINK_USE_MX_ID_NAME
 #define XLINK_MAX_NAME_SIZE (XLINK_MAX_MX_ID_SIZE + 16) // additional space for device name (see supportedDevices)
 #else
-#define XLINK_MAX_NAME_SIZE 28
+#define XLINK_MAX_NAME_SIZE 64
 #endif
 
 #define XLINK_MAX_STREAMS 32
