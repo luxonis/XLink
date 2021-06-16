@@ -8,10 +8,13 @@
 #include "XLinkPlatformErrorUtils.h"
 #include "usb_boot.h"
 #include "pcie_host.h"
+#include "tcpip_host.h"
 #include "XLinkStringUtils.h"
 
 #define MVLOG_UNIT_NAME PlatformDeviceSearch
 #include "XLinkLog.h"
+
+#define MAX_DEVICE_SEARCH   32
 
 // ------------------------------------
 // Helpers declaration. Begin.
@@ -31,6 +34,11 @@ static xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
                                                   XLinkDeviceState_t state,
                                                   const deviceDesc_t in_deviceRequirements,
                                                   deviceDesc_t* out_foundDevice);
+static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
+                                                   const deviceDesc_t in_deviceRequirements,
+                                                   deviceDesc_t* out_foundDevice,
+                                                   const uint8_t devicesArraySize,
+                                                   unsigned int* out_amountOfFoundDevices);
 
 // ------------------------------------
 // Helpers declaration. End.
@@ -47,6 +55,8 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDeviceName(XLinkDeviceState_t state,
     memset(out_foundDevice, 0, sizeof(deviceDesc_t));
     xLinkPlatformErrorCode_t USB_rc;
     xLinkPlatformErrorCode_t PCIe_rc;
+    xLinkPlatformErrorCode_t TCPIP_rc;
+    unsigned int out_amountOfFoundDevices = 0u;
 
     switch (in_deviceRequirements.protocol){
         case X_LINK_USB_CDC:
@@ -55,6 +65,9 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDeviceName(XLinkDeviceState_t state,
 
         case X_LINK_PCIE:
             return getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
+        
+        case X_LINK_TCP_IP:
+            return getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, 1u, &out_amountOfFoundDevices);
 
         case X_LINK_ANY_PROTOCOL:
             USB_rc = getUSBDeviceName(0, state, in_deviceRequirements, out_foundDevice);
@@ -68,6 +81,13 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDeviceName(XLinkDeviceState_t state,
             if (PCIe_rc == X_LINK_PLATFORM_SUCCESS) {     // Found PCIe device, return it
                 return X_LINK_PLATFORM_SUCCESS;
             }
+
+            // Try find TCPIP device
+            TCPIP_rc = getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, 1u, &out_amountOfFoundDevices);
+            if(TCPIP_rc == X_LINK_PLATFORM_SUCCESS) {     // Found TCPIP device, return it
+                return X_LINK_PLATFORM_SUCCESS;
+            }
+
             return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
 
         default:
@@ -111,6 +131,9 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
 
             *out_amountOfFoundDevices = pcie_index;
             return X_LINK_PLATFORM_SUCCESS;
+        
+        case X_LINK_TCP_IP:
+            return getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, out_amountOfFoundDevices);
 
         case X_LINK_ANY_PROTOCOL:
             while(getUSBDeviceName(
@@ -127,6 +150,10 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
                 ++pcie_index;
                 ++both_protocol_index;
             }
+
+            // Try find TCPIP device
+            getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, out_amountOfFoundDevices);
+
             *out_amountOfFoundDevices = both_protocol_index;
             return X_LINK_PLATFORM_SUCCESS;
 
@@ -352,6 +379,82 @@ xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
 
     }
     return xLinkRc;
+}
+
+static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
+                                                   const deviceDesc_t in_deviceRequirements,
+                                                   deviceDesc_t* out_foundDevice,
+                                                   const uint8_t devicesArraySize,
+                                                   unsigned int* out_foundDevicesCount)
+{
+    ASSERT_XLINK_PLATFORM(out_foundDevice);
+    if (in_deviceRequirements.platform == X_LINK_MYRIAD_2) {
+        /**
+         * There is no PCIe on Myriad 2. Asserting that check
+         * produces enormous amount of logs in tests.
+         */
+        return X_LINK_PLATFORM_ERROR;
+    }
+
+    if(state == X_LINK_UNBOOTED)
+    {
+        /**
+         * There is no condition where unbooted 
+         * state device to be found using tcp/ip.
+        */
+        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+    }
+
+    uint8_t device_count = 0;
+    tcpipHostDeviceInfo_t devices[MAX_DEVICE_SEARCH] = {0};
+
+    int res = tcpip_get_ip(devices, &device_count, in_deviceRequirements.name);
+    memcpy(out_foundDevicesCount, &device_count, sizeof(device_count));
+
+    // check if user specify IP address to be connected
+    if(strlen(in_deviceRequirements.name) > 0)
+    {
+        if(res == TCPIP_HOST_DEVICE_FOUND)
+        {
+            memcpy(out_foundDevice->name, in_deviceRequirements.name, MAX_IP_ADDR_CHAR);
+            out_foundDevice->protocol = X_LINK_TCP_IP;
+            out_foundDevice->platform = X_LINK_MYRIAD_X;
+            return X_LINK_PLATFORM_SUCCESS;
+        }
+        else
+        {
+            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        }
+    }
+
+    if(device_count > 0)
+    {
+        if(devicesArraySize == 1u)
+        {
+            if(strlen(in_deviceRequirements.name) > 0)
+            {
+                // check if device present in network
+                return X_LINK_PLATFORM_SUCCESS;
+            }
+
+            // return first device found
+            memcpy(out_foundDevice->name, devices[0].desc.name, MAX_IP_ADDR_CHAR);
+            out_foundDevice->protocol = X_LINK_TCP_IP;
+            out_foundDevice->platform = X_LINK_MYRIAD_X;
+        }
+        else
+        {
+            for(int i = 0; i < device_count; i++)
+            {
+                devices[i].desc.protocol = X_LINK_TCP_IP;
+                devices[i].desc.platform = X_LINK_MYRIAD_X;
+            }
+            // return all devices found
+            memcpy(out_foundDevice, devices, sizeof(devices));
+        }
+    }
+
+    return X_LINK_PLATFORM_SUCCESS;
 }
 
 // ------------------------------------
