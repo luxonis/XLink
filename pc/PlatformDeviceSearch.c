@@ -14,8 +14,6 @@
 #define MVLOG_UNIT_NAME PlatformDeviceSearch
 #include "XLinkLog.h"
 
-#define MAX_DEVICE_SEARCH   32
-
 // ------------------------------------
 // Helpers declaration. Begin.
 // ------------------------------------
@@ -37,7 +35,7 @@ static xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
 static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
                                                    const deviceDesc_t in_deviceRequirements,
                                                    deviceDesc_t* out_foundDevice,
-                                                   const uint8_t devicesArraySize,
+                                                   const unsigned int devicesArraySize,
                                                    unsigned int* out_amountOfFoundDevices);
 
 // ------------------------------------
@@ -385,7 +383,7 @@ xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
 static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
                                                    const deviceDesc_t in_deviceRequirements,
                                                    deviceDesc_t* out_foundDevice,
-                                                   const uint8_t devicesArraySize,
+                                                   const unsigned int devicesArraySize,
                                                    unsigned int* out_foundDevicesCount)
 {
     ASSERT_XLINK_PLATFORM(out_foundDevice);
@@ -406,9 +404,9 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
-    unsigned int device_count = 0;
-    tcpipHostDeviceInfo_t devices[MAX_DEVICE_SEARCH] = {0};
+    tcpipHostDeviceInfo_t* devices = (tcpipHostDeviceInfo_t *) malloc(sizeof(tcpipHostDeviceInfo_t) * devicesArraySize);
 
+    unsigned int device_count = 0;
     int res = tcpip_get_ip(devices, &device_count, in_deviceRequirements.name);
     *out_foundDevicesCount = device_count;
 
@@ -451,7 +449,7 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
                 devices[i].desc.platform = X_LINK_MYRIAD_X;
             }
             // return all devices found
-            memcpy(out_foundDevice, devices, sizeof(devices));
+            memcpy(out_foundDevice, devices, devicesArraySize);
         }
     }
 
