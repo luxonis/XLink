@@ -8,6 +8,7 @@
 #include "XLinkPlatformErrorUtils.h"
 #include "usb_boot.h"
 #include "pcie_host.h"
+#include "tcpip_host.h"
 #include "XLinkStringUtils.h"
 
 #define MVLOG_UNIT_NAME PlatformDeviceControl
@@ -483,8 +484,14 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     char* serv_ip = strtok(devPathWriteBuff, ":");
     char* serv_port = strtok(NULL, ":");
 
+    // Parse port, or use default
+    uint16_t port = TCPIP_LINK_SOCKET_PORT;
+    if(serv_port != NULL){
+        port = atoi(serv_port);
+    }
+
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(atoi(serv_port));
+    serv_addr.sin_port = htons(port);
 
     if(inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr) <= 0)
     {
