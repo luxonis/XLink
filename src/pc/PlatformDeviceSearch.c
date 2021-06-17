@@ -415,54 +415,7 @@ static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
-    unsigned int device_count = 0;
-    int res = tcpip_get_ip(out_foundDevice, &device_count, in_deviceRequirements.name);
-    *out_foundDevicesCount = device_count;
-
-    // check if user specify IP address to be connected
-    if(strlen(in_deviceRequirements.name) > 0)
-    {
-        if(res == TCPIP_HOST_DEVICE_FOUND)
-        {
-            memcpy(out_foundDevice->name, in_deviceRequirements.name, MAX_IP_ADDR_CHAR);
-            out_foundDevice->protocol = X_LINK_TCP_IP;
-            out_foundDevice->platform = X_LINK_MYRIAD_X;
-            return X_LINK_PLATFORM_SUCCESS;
-        }
-        else
-        {
-            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
-        }
-    }
-
-    if(device_count > 0)
-    {
-        if(devicesArraySize == 1u)
-        {
-            if(strlen(in_deviceRequirements.name) > 0)
-            {
-                // check if device present in network
-                return X_LINK_PLATFORM_SUCCESS;
-            }
-
-            // return first device found
-            strcpy(out_foundDevice->name, out_foundDevice[0].name);
-            out_foundDevice->protocol = X_LINK_TCP_IP;
-            out_foundDevice->platform = X_LINK_MYRIAD_X;
-        }
-        else
-        {
-            for(int i = 0; i < device_count; i++)
-            {
-                out_foundDevice[i].protocol = X_LINK_TCP_IP;
-                out_foundDevice[i].platform = X_LINK_MYRIAD_X;
-            }
-            // return all devices found
-            memcpy(out_foundDevice, out_foundDevice, devicesArraySize);
-        }
-    }
-
-    return X_LINK_PLATFORM_SUCCESS;
+    return tcpip_get_devices(state, out_foundDevice, devicesArraySize, out_foundDevicesCount, in_deviceRequirements.name);
 }
 
 // ------------------------------------
