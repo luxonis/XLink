@@ -31,7 +31,6 @@
 //#define DEBUG(...) do { printf(__VA_ARGS__); } while(0)
 #define DEBUG(fmt, ...) do {} while(0)
 
-#define TCPIP_LINK_SOCKET_PORT              11490
 #define BROADCAST_UDP_PORT                  11491
 
 #define MAX_IP_ADDR_CHAR                    64
@@ -230,6 +229,8 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
 
                     // copy device information
                     strncpy(devices[num_devices_match].name, ip_addr, sizeof(devices[num_devices_match].name));
+                    devices[num_devices_match].platform = X_LINK_MYRIAD_X;
+                    devices[num_devices_match].protocol = X_LINK_TCP_IP;
 
                     num_devices_match++;
                 }
