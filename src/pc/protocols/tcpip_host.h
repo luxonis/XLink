@@ -38,9 +38,10 @@ typedef enum
 /* Host-to-device command list */
 typedef enum
 {
-    TCPIP_HOST_CMD_DEVICE_DISCOVER = 0,
-    TCPIP_HOST_CMD_DEVICE_INFO = 1,
-    TCPIP_HOST_CMD_RESET = 2
+    TCPIP_HOST_CMD_NO_COMMAND = 0,
+    TCPIP_HOST_CMD_DEVICE_DISCOVER = 1,
+    TCPIP_HOST_CMD_DEVICE_INFO = 2,
+    TCPIP_HOST_CMD_RESET = 3
 } tcpipHostCommand_t;
 
 /* Device state */

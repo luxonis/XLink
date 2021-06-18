@@ -24,6 +24,7 @@
 #else
 #include <unistd.h>
 #include <libusb.h>
+#include <sys/socket.h>
 #endif  /*defined(_WIN32) || defined(_WIN64)*/
 
 #ifdef USE_LINK_JTAG
@@ -347,9 +348,9 @@ static int tcpipPlatformRead(void *fd, void *data, int size)
     while(nread < size)
     {
         rc = read((intptr_t)fd, &((char*)data)[nread], size - nread);
-        if(rc < 0)
+        if(rc <= 0)
         {
-            return rc;
+            return -1;
         }
         else
         {
@@ -369,10 +370,12 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
 
     while(byteCount < size)
     {
-        rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
-        if(rc < 0)
+        // Use send instead of write and ignore SIGPIPE
+        //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
+        rc = send((intptr_t)fd, &((char*)data)[byteCount], size - byteCount, MSG_NOSIGNAL);
+        if(rc <= 0)
         {
-            return rc;
+            return -1;
         }
         else
         {
