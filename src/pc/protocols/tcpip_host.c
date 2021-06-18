@@ -33,7 +33,6 @@
 
 #define BROADCAST_UDP_PORT                  11491
 
-#define MAX_IP_ADDR_CHAR                    64
 #define MAX_IFACE_CHAR                      64
 #define MAX_DEVICE_DISCOVERY_IFACE          10
 
@@ -166,7 +165,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
                 socket_count++;
 
                 // get broadcast address
-                char ip_addr[MAX_IP_ADDR_CHAR] = {0};
+                char ip_addr[INET_ADDRSTRLEN] = {0};
                 inet_ntop(family, &((struct sockaddr_in *)ifa->ifa_ifu.ifu_broadaddr)->sin_addr, ip_addr, sizeof(ip_addr));
 
                 DEBUG("Up and running. IP: %s", ip_addr);
@@ -193,6 +192,8 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
 
         }
     }
+    // Release interface addresses
+    freeifaddrs(ifaddr);
 
     // loop to receive message response from devices
     int num_devices_match = 0;
@@ -208,7 +209,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
                 break;
             }
 
-            char ip_addr[MAX_IP_ADDR_CHAR] = {0};
+            char ip_addr[INET_ADDRSTRLEN] = {0};
             tcpipHostDeviceDiscoveryResp_t recv_buffer;
             struct sockaddr_in dev_addr;
             uint32_t len = sizeof(dev_addr);
@@ -221,6 +222,9 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
 
                     // convert IP address in binary into string
                     inet_ntop(AF_INET, &dev_addr.sin_addr, ip_addr, sizeof(ip_addr));
+                    // if(state == X_LINK_BOOTED){
+                    //     strncat(ip_addr, ":11492", 16);
+                    // }
 
                     // Check IP if needed
                     if(check_target_ip && strcmp(target_ip, ip_addr) != 0){
