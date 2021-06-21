@@ -28,8 +28,8 @@
 /* **************************************************************************/
 
 // Debug, uncomment first line for some printing
-//#define DEBUG(...) do { printf(__VA_ARGS__); } while(0)
-#define DEBUG(fmt, ...) do {} while(0)
+//#define HAS_DEBUG
+#undef HAS_DEBUG
 
 #define BROADCAST_UDP_PORT                  11491
 
@@ -39,6 +39,12 @@
 #define MSEC_TO_USEC(x)                     (x * 1000)
 #define DEVICE_DISCOVERY_RES_TIMEOUT_SEC    0.2
 #define DEVICE_RES_TIMEOUT_MSEC             20
+
+#ifdef HAS_DEBUG
+#define DEBUG(...) do { printf(__VA_ARGS__); } while(0)
+#else
+#define DEBUG(fmt, ...) do {} while(0)
+#endif
 
 
 /* **************************************************************************/
@@ -145,7 +151,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
     {
         // check for ipv4 family
         family = ifa->ifa_addr->sa_family;
-        if(family == AF_INET)
+        if(ifa->ifa_addr != NULL && family == AF_INET)
         {
 
             // create new socket for every interface
@@ -163,17 +169,22 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
                 // Interface is up and running, save the socket
                 socket_lookup[socket_count] = sockfd;
                 socket_count++;
+                
+                // Calculate broadcast address (IPv4, OR negated mask)
+                struct sockaddr_in ip_broadcast = *((struct sockaddr_in*) ifa->ifa_addr);
+                struct sockaddr_in ip_netmask = *((struct sockaddr_in*) ifa->ifa_netmask);
+                ip_broadcast.sin_addr.s_addr |= ~ip_netmask.sin_addr.s_addr;
 
-                // get broadcast address
-                char ip_addr[INET_ADDRSTRLEN] = {0};
-                inet_ntop(family, &((struct sockaddr_in *)ifa->ifa_ifu.ifu_broadaddr)->sin_addr, ip_addr, sizeof(ip_addr));
-
-                DEBUG("Up and running. IP: %s", ip_addr);
+                #ifdef HAS_DEBUG
+                    char ip_broadcast_str[INET_ADDRSTRLEN] = {0};
+                    inet_ntop(family, &((struct sockaddr_in *)&ip_broadcast)->sin_addr, ip_broadcast_str, sizeof(ip_broadcast_str));    
+                    DEBUG("Up and running. Broadcast IP: %s", ip_broadcast_str);
+                #endif
 
                 // send broadcast message
                 struct sockaddr_in broadcast_addr;
                 broadcast_addr.sin_family = family;
-                broadcast_addr.sin_addr.s_addr = inet_addr(ip_addr);
+                broadcast_addr.sin_addr.s_addr = ip_broadcast.sin_addr.s_addr;
                 broadcast_addr.sin_port = htons(BROADCAST_UDP_PORT);
 
                 tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
