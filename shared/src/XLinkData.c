@@ -63,6 +63,11 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
         mv_strncpy(event.header.streamName, MAX_STREAM_NAME_LENGTH,
                    name, MAX_STREAM_NAME_LENGTH - 1);
 
+        // Create new streamId if HOST (host keeps track of unique streamIds)
+#ifdef __PC__
+        event.header.streamId = XLinkAddOrUpdateStream(link->deviceHandle.xLinkFD, event.header.streamName, stream_write_size, 0, INVALID_STREAM_ID);
+#endif
+
         DispatcherAddEvent(EVENT_LOCAL, &event);
         XLINK_RET_ERR_IF(
             DispatcherWaitEventComplete(&link->deviceHandle),
@@ -373,7 +378,7 @@ XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigne
     absTimeout.tv_nsec += (msTimeout - sec) * 1000000;
     int64_t secOver = absTimeout.tv_nsec / 1000000000;
     absTimeout.tv_nsec -= secOver * 1000000000;
-    absTimeout.tv_sec += secOver; 
+    absTimeout.tv_sec += secOver;
 
     int rc = addEventTimeout(event, absTimeout);
     if(rc != X_LINK_SUCCESS) return rc;

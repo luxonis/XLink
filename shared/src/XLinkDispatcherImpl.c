@@ -293,11 +293,18 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
         case XLINK_CREATE_STREAM_REQ:
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_CREATE_STREAM_RESP;
+
+            // If Device side, accept the stream id selected by host
+            streamId_t streamId = INVALID_LINK_ID;
+            #ifndef __PC__
+            streamId = event->header.streamId;
+            #endif
+
             //write size from remote means read size for this peer
             response->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD,
                                                                event->header.streamName,
                                                                0, event->header.size,
-                                                               INVALID_STREAM_ID);
+                                                               streamId);
 
             if (response->header.streamId == INVALID_STREAM_ID) {
                 response->header.flags.bitField.ack = 0;
