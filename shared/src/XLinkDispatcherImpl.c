@@ -176,6 +176,13 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
         }
         case XLINK_CREATE_STREAM_REQ:
         {
+
+            // If Host side - this event happens when host tries to send an OpenStream request to device.
+            // Generate a streamId (and not rely on device to do it) and send that to the device.
+            #ifdef __PC__
+                event->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD, event->header.streamName, event->header.size, 0, INVALID_STREAM_ID);
+            #endif
+
             XLINK_EVENT_ACKNOWLEDGE(event);
             mvLog(MVLOG_DEBUG,"XLINK_CREATE_STREAM_REQ - do nothing\n");
             break;
@@ -293,11 +300,20 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
         case XLINK_CREATE_STREAM_REQ:
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_CREATE_STREAM_RESP;
+
+            // If Host side, create its own stream id
+            #ifdef __PC__
+            streamId_t streamId = INVALID_STREAM_ID;
+            #else
+            // If Device side, accept the stream id selected by host
+            streamId_t streamId = event->header.streamId;
+            #endif
+
             //write size from remote means read size for this peer
             response->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD,
                                                                event->header.streamName,
                                                                0, event->header.size,
-                                                               INVALID_STREAM_ID);
+                                                               streamId);
 
             if (response->header.streamId == INVALID_STREAM_ID) {
                 response->header.flags.bitField.ack = 0;
