@@ -295,7 +295,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             response->header.type = XLINK_CREATE_STREAM_RESP;
 
             // If Device side, accept the stream id selected by host
-            streamId_t streamId = INVALID_LINK_ID;
+            streamId_t streamId = INVALID_STREAM_ID;
             #ifndef __PC__
             streamId = event->header.streamId;
             #endif
