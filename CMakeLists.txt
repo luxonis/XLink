@@ -8,7 +8,9 @@ project(${TARGET_NAME} LANGUAGES C CXX)
 include(XLink.cmake)
 
 # Add option - MX ID naming instead of usb port
-option(XLINK_USE_MX_ID_NAME "Use MX ID name instead of usb port" ON) 
+option(XLINK_USE_MX_ID_NAME "Use MX ID name instead of usb port" ON)
+# Build tests
+option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
 
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
 
@@ -25,7 +27,7 @@ endif()
 
 if(MINGW)
     target_link_libraries(${TARGET_NAME}
-        PUBLIC  
+        PUBLIC
             libwinusb.a
             libsetupapi.a
     )
@@ -48,7 +50,7 @@ target_compile_definitions(${TARGET_NAME}
         USE_USB_VSC
     PUBLIC
         __PC__
-        XLINK_USE_MX_ID_NAME=${XLINK_USE_MX_ID_NAME}    
+        XLINK_USE_MX_ID_NAME=${XLINK_USE_MX_ID_NAME}
 )
 
 if (ENABLE_MYRIAD_NO_BOOT)
@@ -58,6 +60,12 @@ if (ENABLE_MYRIAD_NO_BOOT)
 endif()
 
 set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 99)
+
+
+# Tests
+if(XLINK_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
 
 include(GNUInstallDirs)
 install(TARGETS ${TARGET_NAME}
