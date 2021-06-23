@@ -63,11 +63,6 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
         mv_strncpy(event.header.streamName, MAX_STREAM_NAME_LENGTH,
                    name, MAX_STREAM_NAME_LENGTH - 1);
 
-        // Create new streamId if HOST (host keeps track of unique streamIds)
-#ifdef __PC__
-        event.header.streamId = XLinkAddOrUpdateStream(link->deviceHandle.xLinkFD, event.header.streamName, stream_write_size, 0, INVALID_STREAM_ID);
-#endif
-
         DispatcherAddEvent(EVENT_LOCAL, &event);
         XLINK_RET_ERR_IF(
             DispatcherWaitEventComplete(&link->deviceHandle),
