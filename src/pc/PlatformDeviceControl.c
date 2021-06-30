@@ -50,7 +50,22 @@ static int statuswaittimeout = 5;
 #endif
 
 #ifdef USE_TCP_IP
+
+#if (defined(_WIN32) || defined(_WIN64))
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601  /* Windows 7. */
+#endif
+#include <winsock2.h>
+#include <Ws2tcpip.h>
+#pragma comment(lib, "Ws2_32.lib")
+#else
+#include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netdb.h> 
+#include <unistd.h>
+typedef int SOCKET;
+#endif
+
 #endif /* USE_TCP_IP */
 
 typedef struct {
@@ -79,8 +94,8 @@ static char* pciePlatformStateToStr(const pciePlatformState_t platformState);
 static double seconds();
 static libusb_device_handle *usbLinkOpen(const char *path);
 static void usbLinkClose(libusb_device_handle *f);
-
 #endif
+
 // ------------------------------------
 // Helpers declaration. End.
 // ------------------------------------
@@ -126,6 +141,12 @@ void XLinkPlatformInit()
 {
 #if (defined(_WIN32) || defined(_WIN64))
     initialize_usb_boot();
+
+#ifdef USE_TCP_IP
+    WSADATA wsa_data;
+    WSAStartup(MAKEWORD(2,2), &wsa_data);
+#endif
+
 #endif
 }
 
@@ -575,20 +596,19 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if defined(USE_TCP_IP)
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(sockfd < 0)
+    SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0)
     {
         perror("socket");
-        close(sockfd);
+        tcpip_close_socket(sock);
         return -1;
     }
 
-    struct sockaddr_in serv_addr;
-    memset(&serv_addr, 0, sizeof(serv_addr));
+    struct sockaddr_in serv_addr = { 0 };
 
     size_t len = strlen(devPathWrite);
-    char devPathWriteBuff[len];
-    strcpy(devPathWriteBuff, devPathWrite);
+    char* devPathWriteBuff = (char*) malloc(len);
+    strncpy(devPathWriteBuff, devPathWrite, len);
 
     char* serv_ip = strtok(devPathWriteBuff, ":");
     char* serv_port = strtok(NULL, ":");
@@ -602,21 +622,24 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
 
-    if(inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr) <= 0)
+    int ret = inet_pton(AF_INET, devPathWrite, &serv_addr.sin_addr);
+    free(devPathWriteBuff);
+    
+    if(ret <= 0)
     {
         perror("inet_pton");
-        close(sockfd);
+        tcpip_close_socket(sock);
         return -1;
     }
 
-    if(connect(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+    if(connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
     {
         perror("connect");
-        close(sockfd);
+        tcpip_close_socket(sock);
         return -1;
     }
 
-    *((int*)fd) = sockfd;
+    *((SOCKET*)fd) = sock;
 #endif
     return 0;
 }
@@ -691,12 +714,26 @@ int pciePlatformClose(void *f)
 int tcpipPlatformClose(void *fd)
 {
 #if defined(USE_TCP_IP)
+
+    int status = 0;
+
+#ifdef _WIN32
+    SOCKET sock = (SOCKET) fd;
+    status = shutdown(sock, SD_BOTH);
+    if (status == 0) { status = closesocket(sock); }
+    return status;
+#else
+
     intptr_t sockfd = (intptr_t)fd;
     if(sockfd != -1)
     {
-        close(sockfd);
-        return 0;
+        status = shutdown(sockfd, SHUT_RDWR);
+        if (status == 0) { status = close(sockfd); }
     }
+    return status;
+
+#endif
+
 #endif
     return -1;
 }

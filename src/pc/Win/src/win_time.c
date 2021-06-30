@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-//#include "windows.h"
-#include <time.h>
 #include "win_time.h"
 
 int clock_gettime(int dummy, struct timespec *spec)

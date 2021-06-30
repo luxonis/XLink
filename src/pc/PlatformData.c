@@ -18,14 +18,21 @@
 #include "XLinkLog.h"
 
 #if (defined(_WIN32) || defined(_WIN64))
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601  /* Windows 7. */
+#endif
 #include "win_usb.h"
 #include "win_time.h"
 #include "win_pthread.h"
+#include <winsock2.h>
+#include <Ws2tcpip.h>
+#pragma comment(lib, "Ws2_32.lib")
 #else
-#include <unistd.h>
-#include <libusb.h>
 #include <sys/socket.h>
-#endif  /*defined(_WIN32) || defined(_WIN64)*/
+#include <arpa/inet.h>
+#include <netdb.h> 
+#include <unistd.h>
+#endif
 
 #ifdef USE_LINK_JTAG
 #include <sys/types.h>
@@ -347,7 +354,8 @@ static int tcpipPlatformRead(void *fd, void *data, int size)
 
     while(nread < size)
     {
-        rc = read((intptr_t)fd, &((char*)data)[nread], size - nread);
+        SOCKET sock = (SOCKET) fd;
+        rc = recv((SOCKET)fd, &((char*)data)[nread], size - nread, 0);
         if(rc <= 0)
         {
             return -1;
@@ -372,7 +380,15 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
     {
         // Use send instead of write and ignore SIGPIPE
         //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
-        rc = send((intptr_t)fd, &((char*)data)[byteCount], size - byteCount, MSG_NOSIGNAL);
+
+#if (defined(_WIN32) | defined(_WIN64))
+        int flags = 0;
+#else
+        int flags = MSG_NOSIGNAL;
+#endif
+
+        SOCKET sock = (SOCKET)fd;
+        rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
         if(rc <= 0)
         {
             return -1;

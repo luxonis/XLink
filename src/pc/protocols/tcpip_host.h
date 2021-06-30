@@ -84,6 +84,6 @@ tcpipHostError_t tcpip_close_socket(int sockfd);
  * @retval      TCPIP_HOST_ERROR Failed to get network interface informations
  * @retval      TCPIP_HOST_SUCCESS Received all device IP address available
 */
-xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_t* devices, ssize_t devices_size, unsigned int* device_count, const char* target_ip);
+xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count, const char* target_ip);
 
 #endif /* TCPIP_HOST_H */
