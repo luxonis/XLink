@@ -30,8 +30,10 @@
 #else
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <netdb.h> 
+#include <netdb.h>
 #include <unistd.h>
+#include <libusb.h>
+typedef int SOCKET;
 #endif
 
 #ifdef USE_LINK_JTAG
