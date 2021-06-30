@@ -26,7 +26,7 @@
 #else
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <netdb.h> 
+#include <netdb.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -111,7 +111,7 @@ static tcpipHostError_t tcpip_create_socket_broadcast(SOCKET* out_sock)
         return TCPIP_HOST_ERROR;
     }
  #else
-    if(sockfd < 0)
+    if(sock < 0)
     {
         return TCPIP_HOST_ERROR;
     }
@@ -153,7 +153,7 @@ static tcpipHostError_t tcpip_create_socket_broadcast(SOCKET* out_sock)
 
 
 static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
-    
+
 #if (defined(_WIN32) || defined(_WIN64) )
 
     DWORD rv, size;
@@ -177,12 +177,12 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
     broadcast.sin_family = AF_INET;
     broadcast.sin_port = htons(BROADCAST_UDP_PORT);
     for (DWORD i = 0; i < ipaddrtable->dwNumEntries; ++i) {
-        
+
         // Get broadcast IP
         MIB_IPADDRROW addr = ipaddrtable->table[i];
         broadcast.sin_addr.s_addr = (addr.dwAddr & addr.dwMask)
             | (addr.dwMask ^ (DWORD)0xffffffff);
-        sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr*) & broadcast, sizeof(broadcast));  
+        sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr*) & broadcast, sizeof(broadcast));
 
 #ifdef HAS_DEBUG
         char ip_broadcast_str[INET_ADDRSTRLEN] = { 0 };
@@ -216,12 +216,12 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
             // Check if interface is up and running
             struct ifreq if_req;
             strncpy(if_req.ifr_name, ifa->ifa_name, sizeof(if_req.ifr_name));
-            ioctl(sockfd, SIOCGIFFLAGS, &if_req);
+            ioctl(sock, SIOCGIFFLAGS, &if_req);
 
             DEBUG("interface name %s, (flags: %hu). ", ifa->ifa_name, if_req.ifr_flags);
 
             if((if_req.ifr_flags & IFF_UP) && (if_req.ifr_flags & IFF_RUNNING)){
-                // Interface is up and running                
+                // Interface is up and running
                 // Calculate broadcast address (IPv4, OR negated mask)
                 struct sockaddr_in ip_broadcast = *((struct sockaddr_in*) ifa->ifa_addr);
                 struct sockaddr_in ip_netmask = *((struct sockaddr_in*) ifa->ifa_netmask);
@@ -229,7 +229,7 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
 
                 #ifdef HAS_DEBUG
                     char ip_broadcast_str[INET_ADDRSTRLEN] = {0};
-                    inet_ntop(family, &((struct sockaddr_in *)&ip_broadcast)->sin_addr, ip_broadcast_str, sizeof(ip_broadcast_str));    
+                    inet_ntop(family, &((struct sockaddr_in *)&ip_broadcast)->sin_addr, ip_broadcast_str, sizeof(ip_broadcast_str));
                     DEBUG("Up and running. Broadcast IP: %s", ip_broadcast_str);
                 #endif
 
@@ -240,7 +240,7 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
                 broadcast_addr.sin_port = htons(BROADCAST_UDP_PORT);
 
                 tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
-                if(sendto(sockfd, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr)) < 0)
+                if(sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr)) < 0)
                 {
                     // Ignore if not successful. The devices on that interface won't be found
                 }
@@ -255,6 +255,7 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
     // Release interface addresses
     freeifaddrs(ifaddr);
 
+    return TCPIP_HOST_SUCCESS;
 #endif
 }
 
@@ -263,7 +264,7 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
 /*      Public Function Definitions                                         */
 /* **************************************************************************/
 tcpipHostError_t tcpip_close_socket(SOCKET sock)
-{   
+{
 #if (defined(_WIN32) || defined(_WIN64) )
     if(sock != INVALID_SOCKET)
     {
