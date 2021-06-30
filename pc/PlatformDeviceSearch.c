@@ -134,6 +134,8 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
             return getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, out_amountOfFoundDevices);
 
         case X_LINK_ANY_PROTOCOL:
+
+            // TODO properly refactor, both USB and PCIe cases
             while(getUSBDeviceName(
                 usb_index, state, in_deviceRequirements,
                 &out_foundDevice[both_protocol_index]) ==
@@ -151,7 +153,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
 
             // Try find TCPIP device
             unsigned int numTcpIpDevices = 0;
-            getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, devicesArraySize, &numTcpIpDevices);
+            getTcpIpDeviceName(state, in_deviceRequirements, &out_foundDevice[both_protocol_index], devicesArraySize - both_protocol_index, &numTcpIpDevices);
 
             *out_amountOfFoundDevices = both_protocol_index + numTcpIpDevices;
             return X_LINK_PLATFORM_SUCCESS;
