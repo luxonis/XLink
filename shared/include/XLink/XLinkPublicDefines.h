@@ -88,6 +88,8 @@ typedef struct {
     XLinkProtocol_t protocol;
     XLinkPlatform_t platform;
     char name[XLINK_MAX_NAME_SIZE];
+    XLinkDeviceState_t state;
+    char mxid[XLINK_MAX_MX_ID_SIZE];
 } deviceDesc_t;
 
 typedef struct streamPacketDesc_t

@@ -26,7 +26,8 @@ typedef enum {
     X_LINK_PLATFORM_ERROR = -2,
     X_LINK_PLATFORM_TIMEOUT = -3,
     X_LINK_PLATFORM_DRIVER_NOT_LOADED = -4,
-    X_LINK_PLATFORM_INVALID_PARAMETERS = -5
+    X_LINK_PLATFORM_INVALID_PARAMETERS = -5,
+    X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS = -6
 } xLinkPlatformErrorCode_t;
 
 // ------------------------------------
@@ -39,9 +40,9 @@ void XLinkPlatformInit();
 /**
  * @brief Return Myriad device description which meets the requirements
  */
-xLinkPlatformErrorCode_t XLinkPlatformFindDeviceName(XLinkDeviceState_t state,
-                                                     const deviceDesc_t in_deviceRequirements,
-                                                     deviceDesc_t* out_foundDevice);
+xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
+                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
+                                                     int *out_amountOfFoundDevices);
 
 xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
     XLinkDeviceState_t state,

@@ -148,9 +148,11 @@ XLinkError_t XLinkFindFirstSuitableDevice(XLinkDeviceState_t state,
 {
     XLINK_RET_IF(out_foundDevice == NULL);
 
+/*
     xLinkPlatformErrorCode_t rc;
-    rc = XLinkPlatformFindDeviceName(state, in_deviceRequirements, out_foundDevice);
+    rc = XLinkPlatformFindDevices(state, in_deviceRequirements, out_foundDevice);
     return parsePlatformError(rc);
+*/
 }
 
 XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,

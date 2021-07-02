@@ -10,6 +10,7 @@
 #include "pcie_host.h"
 #include "XLinkStringUtils.h"
 
+
 #define MVLOG_UNIT_NAME PlatformDeviceSearch
 #include "XLinkLog.h"
 
@@ -23,10 +24,9 @@ static pciePlatformState_t xlinkDeviceStateToPciePlatformState(const XLinkDevice
 static xLinkPlatformErrorCode_t parseUsbBootError(usbBootError_t rc);
 static xLinkPlatformErrorCode_t parsePCIeHostError(pcieHostError_t rc);
 
-static xLinkPlatformErrorCode_t getUSBDeviceName(int index,
-                                                 XLinkDeviceState_t state,
-                                                 const deviceDesc_t in_deviceRequirements,
-                                                 deviceDesc_t* out_foundDevice);
+xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
+                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
+                                                     int *out_amountOfFoundDevices);
 static xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
                                                   XLinkDeviceState_t state,
                                                   const deviceDesc_t in_deviceRequirements,
@@ -41,23 +41,25 @@ static xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
 // XLinkPlatform API implementation. Begin.
 // ------------------------------------
 
-xLinkPlatformErrorCode_t XLinkPlatformFindDeviceName(XLinkDeviceState_t state,
-                                                     const deviceDesc_t in_deviceRequirements,
-                                                     deviceDesc_t* out_foundDevice) {
-    memset(out_foundDevice, 0, sizeof(deviceDesc_t));
+xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
+                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
+                                                     int *out_amountOfFoundDevices) {
+    memset(out_foundDevices, sizeFoundDevices, sizeof(deviceDesc_t));
     xLinkPlatformErrorCode_t USB_rc;
     xLinkPlatformErrorCode_t PCIe_rc;
+
+    /*
 
     switch (in_deviceRequirements.protocol){
         case X_LINK_USB_CDC:
         case X_LINK_USB_VSC:
-            return getUSBDeviceName(0, state, in_deviceRequirements, out_foundDevice);
+            return getUSBDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 
         case X_LINK_PCIE:
             return getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
 
         case X_LINK_ANY_PROTOCOL:
-            USB_rc = getUSBDeviceName(0, state, in_deviceRequirements, out_foundDevice);
+            USB_rc = getUSBDevices(0, state, in_deviceRequirements, out_foundDevice);
             if (USB_rc == X_LINK_PLATFORM_SUCCESS) {      // Found USB device, return it
                 return X_LINK_PLATFORM_SUCCESS;
             }
@@ -74,6 +76,8 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDeviceName(XLinkDeviceState_t state,
             mvLog(MVLOG_WARN, "Unknown protocol");
             return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
+    */
+
 }
 
 xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
@@ -89,11 +93,13 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
     unsigned int pcie_index = 0;
     unsigned int both_protocol_index = 0;
 
+/*
+
     // TODO Handle possible errors
     switch (in_deviceRequirements.protocol){
         case X_LINK_USB_CDC:
         case X_LINK_USB_VSC:
-            while(getUSBDeviceName(
+            while(getUSBDevices(
                 usb_index, state, in_deviceRequirements, &out_foundDevice[usb_index]) ==
                   X_LINK_PLATFORM_SUCCESS) {
                 ++usb_index;
@@ -113,7 +119,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
             return X_LINK_PLATFORM_SUCCESS;
 
         case X_LINK_ANY_PROTOCOL:
-            while(getUSBDeviceName(
+            while(getUSBDevices(
                 usb_index, state, in_deviceRequirements,
                 &out_foundDevice[both_protocol_index]) ==
                   X_LINK_PLATFORM_SUCCESS) {
@@ -134,6 +140,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
             mvLog(MVLOG_WARN, "Unknown protocol");
             return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
+    */
 }
 
 int XLinkPlatformIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state) {
@@ -204,7 +211,7 @@ int platformToPid(const XLinkPlatform_t platform, const XLinkDeviceState_t state
         }
     } else if (state == X_LINK_BOOTED) {
         return DEFAULT_OPENPID;
-    } else if(state == X_LINK_BOOTLOADER){ 
+    } else if(state == X_LINK_BOOTLOADER){
         return DEFAULT_BOOTLOADER_PID;
     } else if (state == X_LINK_ANY_STATE) {
         switch (platform) {
@@ -212,7 +219,7 @@ int platformToPid(const XLinkPlatform_t platform, const XLinkDeviceState_t state
             case X_LINK_MYRIAD_X:  return DEFAULT_UNBOOTPID_2485;
             default:               return AUTO_PID;
         }
-    } 
+    }
 
     return AUTO_PID;
 }
@@ -259,63 +266,6 @@ xLinkPlatformErrorCode_t parsePCIeHostError(pcieHostError_t rc) {
     }
 }
 
-xLinkPlatformErrorCode_t getUSBDeviceName(int index,
-                                                 XLinkDeviceState_t state,
-                                                 const deviceDesc_t in_deviceRequirements,
-                                                 deviceDesc_t* out_foundDevice) {
-    ASSERT_XLINK_PLATFORM(index >= 0);
-    ASSERT_XLINK_PLATFORM(out_foundDevice);
-
-    int vid = AUTO_VID;
-    int pid = AUTO_PID;
-
-    char name[XLINK_MAX_NAME_SIZE] = { 0 };
-
-    int searchByName = 0;
-    if (strlen(in_deviceRequirements.name) > 0) {
-        searchByName = 1;
-        mv_strcpy(name, XLINK_MAX_NAME_SIZE, in_deviceRequirements.name);
-    }
-
-    // Set PID
-    if (state == X_LINK_BOOTED) {
-        if (in_deviceRequirements.platform != X_LINK_ANY_PLATFORM) {
-            mvLog(MVLOG_WARN, "Search specific platform for booted device unavailable");
-            return X_LINK_PLATFORM_ERROR;
-        }
-        pid = DEFAULT_OPENPID;
-        
-    } else if(state == X_LINK_BOOTLOADER){
-          if (in_deviceRequirements.platform != X_LINK_ANY_PLATFORM) {
-            mvLog(MVLOG_WARN, "Search specific platform for bootloader device unavailable");
-            return X_LINK_PLATFORM_ERROR;
-        }
-        pid = DEFAULT_BOOTLOADER_PID;
-    } else {
-        if (searchByName) {
-            pid = get_pid_by_name(in_deviceRequirements.name);
-        } else {
-            pid = platformToPid(in_deviceRequirements.platform, state);
-        }
-    }
-
-#if (!defined(_WIN32) && !defined(_WIN64))
-    uint16_t  bcdusb = -1;
-    usbBootError_t rc = usb_find_device_with_bcd(
-        index, name, XLINK_MAX_NAME_SIZE, 0, vid, pid, &bcdusb);
-#else
-    usbBootError_t rc = usb_find_device(
-                index, name, XLINK_MAX_NAME_SIZE, 0, vid, pid);
-#endif
-    xLinkPlatformErrorCode_t xLinkRc = parseUsbBootError(rc);
-    if(xLinkRc == X_LINK_PLATFORM_SUCCESS)
-    {
-        mv_strcpy(out_foundDevice->name, XLINK_MAX_NAME_SIZE, name);
-        out_foundDevice->protocol = X_LINK_USB_VSC;
-        out_foundDevice->platform = XLinkPlatformPidToPlatform(get_pid_by_name(name));
-    }
-    return xLinkRc;
-}
 
 xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
                                                   XLinkDeviceState_t state,
