@@ -61,7 +61,7 @@ static int statuswaittimeout = 5;
 #else
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <netdb.h> 
+#include <netdb.h>
 #include <unistd.h>
 typedef int SOCKET;
 #endif
@@ -243,7 +243,6 @@ int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
 {
     if(deviceHandle->protocol == X_LINK_ANY_PROTOCOL ||
        deviceHandle->protocol == X_LINK_NMB_OF_PROTOCOLS) {
-        perror("No method for closing handler with protocol value equals to X_LINK_ANY_PROTOCOL and X_LINK_NMB_OF_PROTOCOLS\n");
         return X_LINK_PLATFORM_ERROR;
     }
 
@@ -511,10 +510,8 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 
     if (connect(usbFdWrite, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        perror("ERROR connecting");
         exit(1);
     }
-    printf("this is working\n");
     return 0;
 
 #else
@@ -599,7 +596,6 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0)
     {
-        perror("socket");
         tcpip_close_socket(sock);
         return -1;
     }
@@ -624,17 +620,15 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     int ret = inet_pton(AF_INET, devPathWrite, &serv_addr.sin_addr);
     free(devPathWriteBuff);
-    
+
     if(ret <= 0)
     {
-        perror("inet_pton");
         tcpip_close_socket(sock);
         return -1;
     }
 
     if(connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
     {
-        perror("connect");
         tcpip_close_socket(sock);
         return -1;
     }
