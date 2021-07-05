@@ -42,7 +42,7 @@ void XLinkPlatformInit();
  */
 xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                     int *out_amountOfFoundDevices);
+                                                     unsigned int *out_amountOfFoundDevices);
 
 xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
     XLinkDeviceState_t state,

@@ -40,7 +40,6 @@ int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDevice
 
 /**
  * @brief Returns Myriad device description which meets the requirements
- * @param[in]   state - state of device enum (booted, not booted or any state)
  * @param[in]   in_deviceRequirements - structure with device requirements (protocol, platform).
  * @note        If in_deviceRequirements has device name specified,
  *                  this function tries to get a device with that exact name
@@ -48,8 +47,7 @@ int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDevice
  * @param[out]  out_foundDevice - found device description
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkFindFirstSuitableDevice(XLinkDeviceState_t state,
-                                          const deviceDesc_t in_deviceRequirements,
+XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequirements,
                                           deviceDesc_t *out_foundDevice);
 
 /**
@@ -61,8 +59,7 @@ XLinkError_t XLinkFindFirstSuitableDevice(XLinkDeviceState_t state,
  * @param[out]     out_foundDevicesCount - amount of found devices
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
-                                         const deviceDesc_t in_deviceRequirements,
+XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirements,
                                          deviceDesc_t *out_foundDevicesPtr,
                                          const unsigned int devicesArraySize,
                                          unsigned int *out_foundDevicesCount);

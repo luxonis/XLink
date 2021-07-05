@@ -26,7 +26,7 @@ static xLinkPlatformErrorCode_t parsePCIeHostError(pcieHostError_t rc);
 
 xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                     int *out_amountOfFoundDevices);
+                                                     unsigned int *out_amountOfFoundDevices);
 static xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
                                                   XLinkDeviceState_t state,
                                                   const deviceDesc_t in_deviceRequirements,
@@ -43,105 +43,49 @@ static xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
 
 xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                     int *out_amountOfFoundDevices) {
+                                                     unsigned int *out_amountOfFoundDevices) {
     memset(out_foundDevices, sizeFoundDevices, sizeof(deviceDesc_t));
     xLinkPlatformErrorCode_t USB_rc;
     xLinkPlatformErrorCode_t PCIe_rc;
-
-    /*
 
     switch (in_deviceRequirements.protocol){
         case X_LINK_USB_CDC:
         case X_LINK_USB_VSC:
             return getUSBDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 
+        /* TODO(themarpe) - reenable PCIe
         case X_LINK_PCIE:
             return getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
+        */
 
         case X_LINK_ANY_PROTOCOL:
-            USB_rc = getUSBDevices(0, state, in_deviceRequirements, out_foundDevice);
-            if (USB_rc == X_LINK_PLATFORM_SUCCESS) {      // Found USB device, return it
+
+            // Find first correct USB Device
+            USB_rc = getUSBDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
+            // Found enough devices, return
+            if (*out_amountOfFoundDevices >= sizeFoundDevices) {
                 return X_LINK_PLATFORM_SUCCESS;
             }
 
-            // Try to find PCIe device
-            memset(out_foundDevice, 0, sizeof(deviceDesc_t));
+            /* TODO(themarpe)
             PCIe_rc = getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
-            if (PCIe_rc == X_LINK_PLATFORM_SUCCESS) {     // Found PCIe device, return it
+            // Found enough devices, return
+            if (*out_amountOfFoundDevices >= sizeFoundDevices) {
                 return X_LINK_PLATFORM_SUCCESS;
             }
-            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+            */
+
+            break;
 
         default:
             mvLog(MVLOG_WARN, "Unknown protocol");
             return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
-    */
+
+    return X_LINK_PLATFORM_SUCCESS;
 
 }
 
-xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
-    XLinkDeviceState_t state,
-    const deviceDesc_t in_deviceRequirements,
-    deviceDesc_t* out_foundDevice,
-    const unsigned int devicesArraySize,
-    unsigned int *out_amountOfFoundDevices) {
-
-    memset(out_foundDevice, 0, sizeof(deviceDesc_t) * devicesArraySize);
-
-    unsigned int usb_index = 0;
-    unsigned int pcie_index = 0;
-    unsigned int both_protocol_index = 0;
-
-/*
-
-    // TODO Handle possible errors
-    switch (in_deviceRequirements.protocol){
-        case X_LINK_USB_CDC:
-        case X_LINK_USB_VSC:
-            while(getUSBDevices(
-                usb_index, state, in_deviceRequirements, &out_foundDevice[usb_index]) ==
-                  X_LINK_PLATFORM_SUCCESS) {
-                ++usb_index;
-            }
-
-            *out_amountOfFoundDevices = usb_index;
-            return X_LINK_PLATFORM_SUCCESS;
-
-        case X_LINK_PCIE:
-            while(getPCIeDeviceName(
-                pcie_index, state, in_deviceRequirements, &out_foundDevice[pcie_index]) ==
-                  X_LINK_PLATFORM_SUCCESS) {
-                ++pcie_index;
-            }
-
-            *out_amountOfFoundDevices = pcie_index;
-            return X_LINK_PLATFORM_SUCCESS;
-
-        case X_LINK_ANY_PROTOCOL:
-            while(getUSBDevices(
-                usb_index, state, in_deviceRequirements,
-                &out_foundDevice[both_protocol_index]) ==
-                  X_LINK_PLATFORM_SUCCESS) {
-                ++usb_index;
-                ++both_protocol_index;
-            }
-            while(getPCIeDeviceName(
-                pcie_index, state, in_deviceRequirements,
-                &out_foundDevice[both_protocol_index]) ==
-                  X_LINK_PLATFORM_SUCCESS) {
-                ++pcie_index;
-                ++both_protocol_index;
-            }
-            *out_amountOfFoundDevices = both_protocol_index;
-            return X_LINK_PLATFORM_SUCCESS;
-
-        default:
-            mvLog(MVLOG_WARN, "Unknown protocol");
-            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
-    }
-    */
-}
 
 int XLinkPlatformIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state) {
     if(!in_deviceDesc){

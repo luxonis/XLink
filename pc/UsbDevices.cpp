@@ -29,7 +29,12 @@ struct pair_hash {
         return std::hash<T1>()(pair.first) ^ std::hash<T2>()(pair.second);
     }
 };
-static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceState = {{{1,1}, X_LINK_BOOTED}};
+
+static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceState = {
+    {{0x03E7, 0x2485}, X_LINK_UNBOOTED},
+    {{0x03E7, 0xf63c}, X_LINK_BOOTED},
+    {{0x03E7, 0xf63c}, X_LINK_BOOTLOADER},
+};
 
 static std::string getLibusbDevicePath(libusb_device *dev);
 static std::string getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev);
@@ -37,15 +42,16 @@ static const char* xlink_libusb_strerror(int x);
 
 extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                     int *out_amountOfFoundDevices) {
+                                                     unsigned int *out_amountOfFoundDevices) {
 
     std::lock_guard<std::mutex> l(mutex);
 
     // Get list of usb devices
     static libusb_device **devs = NULL;
-    auto res = libusb_get_device_list(NULL, &devs);
-    if(res != LIBUSB_SUCCESS) {
-        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(res));
+    auto numDevices = libusb_get_device_list(NULL, &devs);
+    if(numDevices < 0) {
+        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
+        return X_LINK_PLATFORM_ERROR;
     }
 
     // Initialize mx id cache
@@ -54,8 +60,8 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
     // Loop over all usb devices, increase count only if myriad device
     int i = 0;
     int numDevicesFound = 0;
-    libusb_device* dev = nullptr;
-    while ((dev = devs[i++]) != NULL) {
+    for(ssize_t i = 0; i < numDevices; i++) {
+        if(devs[i] == nullptr) continue;
 
         if(numDevicesFound >= sizeFoundDevices){
             break;
@@ -63,7 +69,8 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
 
         // Get device descriptor
         struct libusb_device_descriptor desc;
-        if ((res = libusb_get_device_descriptor(dev, &desc)) < 0) {
+        auto res = libusb_get_device_descriptor(devs[i], &desc);
+        if (res < 0) {
             mvLog(MVLOG_DEBUG, "Unable to get USB device descriptor: %s", xlink_libusb_strerror(res));
             continue;
         }
@@ -82,7 +89,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             }
 
             // Get device name
-            std::string devicePath = getLibusbDevicePath(dev);
+            std::string devicePath = getLibusbDevicePath(devs[i]);
             // Check if compare with name
             std::string requiredName(in_deviceRequirements.name);
             if(requiredName.length() > 0 && requiredName != devicePath){
@@ -91,7 +98,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             }
 
             // Get device mxid
-            std::string mxId = getLibusbDeviceMxId(state, devicePath, &desc, dev);
+            std::string mxId = getLibusbDeviceMxId(state, devicePath, &desc, devs[i]);
             // compare with MxId
             std::string requiredMxId(in_deviceRequirements.mxid);
             if(requiredMxId.length() > 0 && requiredMxId != mxId){
@@ -102,6 +109,8 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             // TODO, check platform
 
             // Everything passed, fillout details of found device
+            out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
+            out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
             out_foundDevices[numDevicesFound].state = state;
             strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
             strncpy(out_foundDevices[numDevicesFound].mxid, mxId.c_str(), sizeof(out_foundDevices[numDevicesFound].mxid));

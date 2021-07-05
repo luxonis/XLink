@@ -142,21 +142,20 @@ int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDevice
     return XLinkPlatformIsDescriptionValid(in_deviceDesc, state);
 }
 
-XLinkError_t XLinkFindFirstSuitableDevice(XLinkDeviceState_t state,
-                                          const deviceDesc_t in_deviceRequirements,
-                                          deviceDesc_t *out_foundDevice)
+XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequirements, deviceDesc_t *out_foundDevice)
 {
     XLINK_RET_IF(out_foundDevice == NULL);
 
-/*
     xLinkPlatformErrorCode_t rc;
-    rc = XLinkPlatformFindDevices(state, in_deviceRequirements, out_foundDevice);
-    return parsePlatformError(rc);
-*/
+    int numFoundDevices = 0;
+    rc = XLinkPlatformFindDevices(in_deviceRequirements, out_foundDevice, 1, &numFoundDevices);
+    if(numFoundDevices <= 0){
+        return X_LINK_DEVICE_NOT_FOUND;
+    }
+    return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
-                                         const deviceDesc_t in_deviceRequirements,
+XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirements,
                                          deviceDesc_t *out_foundDevicesPtr,
                                          const unsigned int devicesArraySize,
                                          unsigned int* out_foundDevicesCount) {
@@ -165,9 +164,7 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
     XLINK_RET_IF(out_foundDevicesCount == NULL);
 
     xLinkPlatformErrorCode_t rc;
-    rc = XLinkPlatformFindArrayOfDevicesNames(
-        state, in_deviceRequirements,
-        out_foundDevicesPtr, devicesArraySize, out_foundDevicesCount);
+    rc = XLinkPlatformFindDevices(in_deviceRequirements, out_foundDevicesPtr, devicesArraySize, out_foundDevicesCount);
 
     return parsePlatformError(rc);
 }
