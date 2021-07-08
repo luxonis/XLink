@@ -176,6 +176,7 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
         }
         case XLINK_CREATE_STREAM_REQ:
         {
+
             // If Host side - this event happens when host tries to send an OpenStream request to device.
             // Generate a streamId (and not rely on device to do it) and send that to the device.
             #ifdef __PC__

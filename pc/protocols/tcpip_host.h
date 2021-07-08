@@ -16,7 +16,6 @@
 /* **************************************************************************/
 /*      Public Macro Definitions                                            */
 /* **************************************************************************/
-#define MAX_MXID_CHAR                       32
 #define TCPIP_LINK_SOCKET_PORT              11490
 
 
@@ -56,7 +55,7 @@ typedef enum
 typedef struct
 {
     tcpipHostCommand_t command;
-    char mxid[MAX_MXID_CHAR];
+    char mxid[32];
     uint32_t state;
 } tcpipHostDeviceDiscoveryResp_t;
 

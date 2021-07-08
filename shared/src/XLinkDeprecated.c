@@ -120,35 +120,3 @@ XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec) {
 // ------------------------------------
 
 #endif // __PC__
-
-// ------------------------------------
-// Public helpers. Begin.
-// ------------------------------------
-
-const char* XLinkErrorToStr(XLinkError_t rc) {
-    switch (rc) {
-        case X_LINK_SUCCESS:
-            return "X_LINK_SUCCESS";
-        case X_LINK_ALREADY_OPEN:
-            return "X_LINK_ALREADY_OPEN";
-        case X_LINK_COMMUNICATION_NOT_OPEN:
-            return "X_LINK_COMMUNICATION_NOT_OPEN";
-        case X_LINK_COMMUNICATION_FAIL:
-            return "X_LINK_COMMUNICATION_FAIL";
-        case X_LINK_COMMUNICATION_UNKNOWN_ERROR:
-            return "X_LINK_COMMUNICATION_UNKNOWN_ERROR";
-        case X_LINK_DEVICE_NOT_FOUND:
-            return "X_LINK_DEVICE_NOT_FOUND";
-        case X_LINK_TIMEOUT:
-            return "X_LINK_TIMEOUT";
-        case X_LINK_OUT_OF_MEMORY:
-            return "X_LINK_OUT_OF_MEMORY";
-        case X_LINK_ERROR:
-        default:
-            return "X_LINK_ERROR";
-    }
-}
-
-// ------------------------------------
-// Public helpers. End.
-// ------------------------------------

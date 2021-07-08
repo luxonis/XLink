@@ -91,10 +91,12 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     {
         return X_LINK_BOOTLOADER;
     }
+    /* TODO(themarpe) - when merged with flash_booted
     else if(state == TCPIP_HOST_STATE_FLASH_BOOTED)
     {
         return X_LINK_FLASH_BOOTED;
     }
+    */
     else
     {
         return X_LINK_ANY_STATE;

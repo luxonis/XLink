@@ -77,8 +77,8 @@ static char* pciePlatformStateToStr(const pciePlatformState_t platformState);
 static double seconds();
 static libusb_device_handle *usbLinkOpen(const char *path);
 static void usbLinkClose(libusb_device_handle *f);
-#endif
 
+#endif
 // ------------------------------------
 // Helpers declaration. End.
 // ------------------------------------

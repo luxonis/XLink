@@ -14,7 +14,9 @@ option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
 
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
 
-if(NOT WIN32)
+if(WIN32)
+    target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
+else()
     target_include_directories(${TARGET_NAME}
         PRIVATE "${LIBUSB_INCLUDE_DIR}"
     )
@@ -45,7 +47,6 @@ target_include_directories(${TARGET_NAME}
 
 target_compile_definitions(${TARGET_NAME}
     PRIVATE
-        WIN32_LEAN_AND_MEAN
         HAVE_STRUCT_TIMESPEC
         _CRT_SECURE_NO_WARNINGS
         USE_USB_VSC

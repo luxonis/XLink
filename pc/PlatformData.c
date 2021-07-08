@@ -57,10 +57,6 @@ extern int usbFdWrite;
 extern int usbFdRead;
 #endif  /*USE_USB_VSC*/
 
-#ifdef USE_TCP_IP
-extern int sockfd;
-#endif /*USE_TCP_IP*/
-
 #ifndef XLINK_USB_DATA_TIMEOUT
 #define XLINK_USB_DATA_TIMEOUT 0
 #endif
