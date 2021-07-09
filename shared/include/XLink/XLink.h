@@ -127,29 +127,35 @@ UsbSpeed_t XLinkGetUSBSpeed(linkId_t id);
  */
 const char* XLinkGetMxSerial(linkId_t id);
 
-
-
-// MX ID API - This API support finding, booting and connecting to MyriadX devices using unique MX ID in devices
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkErrorToStr(XLinkError_t val);
 
 /**
- * @brief Returns all Myriad devices description which meets the requirements
- * @param[in]      state - state of device enum (booted, not booted or any state)
- * @param[in]      in_deviceRequirements - structure with device requirements (protocol, platform).
- * @param[in,out]  out_foundDevicesPtr - pointer to array with all found devices descriptions
- * @param[out]     devicesArraySize - size of out_foundDevicesPtr
- * @param[out]     out_foundDevicesCount - amount of found devices
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
  */
-XLinkError_t XLinkMxIdFindAllDevices(XLinkDeviceState_t state,
-                                         const deviceDesc_t in_deviceRequirements,
-                                         deviceDesc_t *out_foundDevicesPtr,
-                                         const unsigned int devicesArraySize,
-                                         unsigned int *out_foundDevicesCount);
+const char* XLinkProtocolToStr(XLinkProtocol_t val);
 
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkPlatformToStr(XLinkPlatform_t val);
 
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkDeviceStateToStr(XLinkDeviceState_t val);
 
-
-
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val);
 
 #endif // __PC__
 

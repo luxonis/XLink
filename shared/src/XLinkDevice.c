@@ -125,9 +125,10 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     link->id = getNextAvailableLinkUniqueId();
     link->peerState = XLINK_UP;
     link->deviceHandle.xLinkFD = NULL;
+    link->deviceHandle.protocol = globalHandler->protocol;
 
     xLinkDeviceHandle_t temp = {0};
-    temp.protocol = X_LINK_ANY_PROTOCOL;
+    temp.protocol = globalHandler->protocol;
     XLINK_RET_IF_FAIL(DispatcherStart(&temp)); //myriad has one
 
     sem_wait(&pingSem);
@@ -441,6 +442,94 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
 }
 
 #endif // __PC__
+
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkErrorToStr(XLinkError_t val) {
+    switch (val) {
+        case X_LINK_SUCCESS: return "X_LINK_SUCCESS";
+        case X_LINK_ALREADY_OPEN: return "X_LINK_ALREADY_OPEN";
+        case X_LINK_COMMUNICATION_NOT_OPEN: return "X_LINK_COMMUNICATION_NOT_OPEN";
+        case X_LINK_COMMUNICATION_FAIL: return "X_LINK_COMMUNICATION_FAIL";
+        case X_LINK_COMMUNICATION_UNKNOWN_ERROR: return "X_LINK_COMMUNICATION_UNKNOWN_ERROR";
+        case X_LINK_DEVICE_NOT_FOUND: return "X_LINK_DEVICE_NOT_FOUND";
+        case X_LINK_TIMEOUT: return "X_LINK_TIMEOUT";
+        case X_LINK_ERROR: return "X_LINK_ERROR";
+        case X_LINK_OUT_OF_MEMORY: return "X_LINK_OUT_OF_MEMORY";
+        case X_LINK_NOT_IMPLEMENTED: return "X_LINK_NOT_IMPLEMENTED";
+        default:
+            return "INVALID_ENUM_VALUE";
+            break;
+    }
+}
+
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkProtocolToStr(XLinkProtocol_t val) {
+    switch (val) {
+        case X_LINK_USB_VSC: return "X_LINK_USB_VSC";
+        case X_LINK_USB_CDC: return "X_LINK_USB_CDC";
+        case X_LINK_PCIE: return "X_LINK_PCIE";
+        case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
+        case X_LINK_IPC: return "X_LINK_IPC";
+        case X_LINK_NMB_OF_PROTOCOLS: return "X_LINK_NMB_OF_PROTOCOLS";
+        case X_LINK_ANY_PROTOCOL: return "X_LINK_ANY_PROTOCOL";
+        default:
+            return "INVALID_ENUM_VALUE";
+            break;
+    }
+}
+
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkPlatformToStr(XLinkPlatform_t val) {
+    switch (val) {
+        case X_LINK_ANY_PLATFORM: return "X_LINK_ANY_PLATFORM";
+        case X_LINK_MYRIAD_2: return "X_LINK_MYRIAD_2";
+        case X_LINK_MYRIAD_X: return "X_LINK_MYRIAD_X";
+        default:
+            return "INVALID_ENUM_VALUE";
+            break;
+    }
+}
+
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkDeviceStateToStr(XLinkDeviceState_t val) {
+    switch (val) {
+        case X_LINK_ANY_STATE: return "X_LINK_ANY_STATE";
+        case X_LINK_BOOTED: return "X_LINK_BOOTED";
+        case X_LINK_UNBOOTED: return "X_LINK_UNBOOTED";
+        case X_LINK_BOOTLOADER: return "X_LINK_BOOTLOADER";
+        default:
+            return "INVALID_ENUM_VALUE";
+            break;
+    }
+}
+
+
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val) {
+    switch (val) {
+        case X_LINK_PCIE_UNKNOWN_BOOTLOADER: return "X_LINK_PCIE_UNKNOWN_BOOTLOADER";
+        case X_LINK_PCIE_SIMPLIFIED_BOOTLOADER: return "X_LINK_PCIE_SIMPLIFIED_BOOTLOADER";
+        case X_LINK_PCIE_UNIFIED_BOOTLOADER: return "X_LINK_PCIE_UNIFIED_BOOTLOADER";
+        default:
+            return "INVALID_ENUM_VALUE";
+            break;
+    }
+}
 
 // ------------------------------------
 // Helpers implementation. End.

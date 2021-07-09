@@ -20,7 +20,7 @@ extern "C"
 #ifdef XLINK_USE_MX_ID_NAME
 #define XLINK_MAX_NAME_SIZE (XLINK_MAX_MX_ID_SIZE + 16) // additional space for device name (see supportedDevices)
 #else
-#define XLINK_MAX_NAME_SIZE 28
+#define XLINK_MAX_NAME_SIZE 64
 #endif
 
 #define XLINK_MAX_STREAMS 32
@@ -53,6 +53,7 @@ typedef enum{
     X_LINK_USB_CDC,
     X_LINK_PCIE,
     X_LINK_IPC,
+    X_LINK_TCP_IP,
     X_LINK_NMB_OF_PROTOCOLS,
     X_LINK_ANY_PROTOCOL
 } XLinkProtocol_t;
@@ -124,8 +125,6 @@ typedef struct
     int linkId;
     XLinkProtocol_t protocol;
 } XLinkHandler_t;
-
-const char* XLinkErrorToStr(XLinkError_t rc);
 
 //Deprecated defines. Begin.
 
