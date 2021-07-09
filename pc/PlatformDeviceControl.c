@@ -100,11 +100,6 @@ static int usbPlatformClose(void *fd);
 static int pciePlatformClose(void *f);
 static int tcpipPlatformClose(void *fd);
 
-static int (*open_fcts[X_LINK_NMB_OF_PROTOCOLS])(const char*, const char*, void**) = \
-                            {usbPlatformConnect, usbPlatformConnect, pciePlatformConnect, tcpipPlatformConnect};
-static int (*close_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*) = \
-                            {usbPlatformClose, usbPlatformClose, pciePlatformClose, tcpipPlatformClose};
-
 // ------------------------------------
 // Wrappers declaration. End.
 // ------------------------------------
@@ -210,7 +205,20 @@ int XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmwa
 
 int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
 {
-    return open_fcts[protocol](devPathRead, devPathWrite, fd);
+    switch (protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformConnect(devPathRead, devPathWrite, fd);
+
+        case X_LINK_PCIE:
+            return pciePlatformConnect(devPathRead, devPathWrite, fd);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
 }
 
 int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
@@ -220,7 +228,21 @@ int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
         return X_LINK_PLATFORM_ERROR;
     }
 
-    return close_fcts[deviceHandle->protocol](deviceHandle->xLinkFD);
+    switch (deviceHandle->protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformClose(deviceHandle->xLinkFD);
+
+        case X_LINK_PCIE:
+            return pciePlatformClose(deviceHandle->xLinkFD);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformClose(deviceHandle->xLinkFD);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+
 }
 
 // ------------------------------------

@@ -86,11 +86,6 @@ static int usbPlatformWrite(void *fd, void *data, int size);
 static int pciePlatformWrite(void *f, void *data, int size);
 static int tcpipPlatformWrite(void *fd, void *data, int size);
 
-int (*write_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*, void*, int) = \
-                            {usbPlatformWrite, usbPlatformWrite, pciePlatformWrite, tcpipPlatformWrite};
-int (*read_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*, void*, int) = \
-                            {usbPlatformRead, usbPlatformRead, pciePlatformRead, tcpipPlatformRead};
-
 // ------------------------------------
 // Wrappers declaration. End.
 // ------------------------------------
@@ -103,12 +98,38 @@ int (*read_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*, void*, int) = \
 
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 {
-    return write_fcts[deviceHandle->protocol](deviceHandle->xLinkFD, data, size);
+    switch (deviceHandle->protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformWrite(deviceHandle->xLinkFD, data, size);
+
+        case X_LINK_PCIE:
+            return pciePlatformWrite(deviceHandle->xLinkFD, data, size);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
 }
 
 int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 {
-    return read_fcts[deviceHandle->protocol](deviceHandle->xLinkFD, data, size);
+    switch (deviceHandle->protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformRead(deviceHandle->xLinkFD, data, size);
+
+        case X_LINK_PCIE:
+            return pciePlatformRead(deviceHandle->xLinkFD, data, size);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformRead(deviceHandle->xLinkFD, data, size);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
 }
 
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment)
