@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+// Allow windows.h to include more things for pcie case
+#undef WIN32_LEAN_AND_MEAN
+
 #include "XLinkPlatform.h"
 
 #include <stdio.h>

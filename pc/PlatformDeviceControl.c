@@ -8,6 +8,7 @@
 #include "XLinkPlatformErrorUtils.h"
 #include "usb_boot.h"
 #include "pcie_host.h"
+#include "tcpip_host.h"
 #include "XLinkStringUtils.h"
 
 #define MVLOG_UNIT_NAME PlatformDeviceControl
@@ -46,6 +47,26 @@ static char mx_serial[XLINK_MAX_MX_ID_SIZE] = { 0 };
 #ifdef USE_USB_VSC
 static int statuswaittimeout = 5;
 #endif
+
+#ifdef USE_TCP_IP
+
+#if (defined(_WIN32) || defined(_WIN64))
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601  /* Windows 7. */
+#endif
+#include <winsock2.h>
+#include <Ws2tcpip.h>
+#pragma comment(lib, "Ws2_32.lib")
+#else
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <unistd.h>
+typedef int SOCKET;
+#endif
+
+#endif /* USE_TCP_IP */
+
 // ------------------------------------
 // Helpers declaration. Begin.
 // ------------------------------------
@@ -72,14 +93,12 @@ static int usbPlatformConnect(const char *devPathRead,
                               const char *devPathWrite, void **fd);
 static int pciePlatformConnect(UNUSED const char *devPathRead,
                                const char *devPathWrite, void **fd);
+static int tcpipPlatformConnect(const char *devPathRead,
+                                const char *devPathWrite, void **fd);
 
 static int usbPlatformClose(void *fd);
 static int pciePlatformClose(void *f);
-
-static int (*open_fcts[X_LINK_NMB_OF_PROTOCOLS])(const char*, const char*, void**) = \
-                            {usbPlatformConnect, usbPlatformConnect, pciePlatformConnect};
-static int (*close_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*) = \
-                            {usbPlatformClose, usbPlatformClose, pciePlatformClose};
+static int tcpipPlatformClose(void *fd);
 
 // ------------------------------------
 // Wrappers declaration. End.
@@ -95,6 +114,12 @@ void XLinkPlatformInit()
 {
 #if (defined(_WIN32) || defined(_WIN64))
     initialize_usb_boot();
+
+#ifdef USE_TCP_IP
+    WSADATA wsa_data;
+    WSAStartup(MAKEWORD(2,2), &wsa_data);
+#endif
+
 #endif
 }
 
@@ -180,18 +205,44 @@ int XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmwa
 
 int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
 {
-    return open_fcts[protocol](devPathRead, devPathWrite, fd);
+    switch (protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformConnect(devPathRead, devPathWrite, fd);
+
+        case X_LINK_PCIE:
+            return pciePlatformConnect(devPathRead, devPathWrite, fd);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
 }
 
 int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
 {
     if(deviceHandle->protocol == X_LINK_ANY_PROTOCOL ||
        deviceHandle->protocol == X_LINK_NMB_OF_PROTOCOLS) {
-        perror("No method for closing handler with protocol value equals to X_LINK_ANY_PROTOCOL and X_LINK_NMB_OF_PROTOCOLS\n");
         return X_LINK_PLATFORM_ERROR;
     }
 
-    return close_fcts[deviceHandle->protocol](deviceHandle->xLinkFD);
+    switch (deviceHandle->protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformClose(deviceHandle->xLinkFD);
+
+        case X_LINK_PCIE:
+            return pciePlatformClose(deviceHandle->xLinkFD);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformClose(deviceHandle->xLinkFD);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+
 }
 
 // ------------------------------------
@@ -265,7 +316,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         if(path[i] == '-') break;
         mx_serial[i] = path[i];
     }
-        
+
 #if (defined(_WIN32) || defined(_WIN64) )
 
     char last_open_dev_err[OPEN_DEV_ERROR_MESSAGE_LENGTH] = {0};
@@ -295,7 +346,7 @@ libusb_device_handle *usbLinkOpen(const char *path)
         libusb_unref_device(dev);
         return 0;
     }
-    
+
     libusb_unref_device(dev);
     libusb_detach_kernel_driver(h, 0);
     libusb_rc = libusb_claim_interface(h, 0);
@@ -319,27 +370,27 @@ void usbLinkClose(libusb_device_handle *f)
 }
 #endif
 
-/** 
- * getter to obtain the connected usb speed which was stored by 
+/**
+ * getter to obtain the connected usb speed which was stored by
  * usb_find_device_with_bcd() during XLinkconnect().
  * @note:
  *  getter will return empty or different value
  *  if called before XLinkConnect.
- */ 
+ */
 UsbSpeed_t get_usb_speed(){
     return usb_speed_enum;
 }
 
-/** 
- * getter to obtain the Mx serial id which was received by 
+/**
+ * getter to obtain the Mx serial id which was received by
  * usb_find_device_with_bcd() during XLinkconnect().
  * @note:
  *  getter will return empty or different value
  *  if called before XLinkConnect.
  */
 const char* get_mx_serial(){
-    #ifdef USE_USB_VSC 
-        return mx_serial;  
+    #ifdef USE_USB_VSC
+        return mx_serial;
     #else
         return "UNKNOWN";
     #endif
@@ -372,10 +423,8 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 
     if (connect(usbFdWrite, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        perror("ERROR connecting");
         exit(1);
     }
-    printf("this is working\n");
     return 0;
 
 #else
@@ -454,6 +503,54 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 #endif  /*USE_USB_VSC*/
 }
 
+int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
+{
+#if defined(USE_TCP_IP)
+    SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0)
+    {
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    struct sockaddr_in serv_addr = { 0 };
+
+    size_t len = strlen(devPathWrite);
+    char* devPathWriteBuff = (char*) malloc(len);
+    strncpy(devPathWriteBuff, devPathWrite, len);
+
+    char* serv_ip = strtok(devPathWriteBuff, ":");
+    char* serv_port = strtok(NULL, ":");
+
+    // Parse port, or use default
+    uint16_t port = TCPIP_LINK_SOCKET_PORT;
+    if(serv_port != NULL){
+        port = atoi(serv_port);
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+
+    int ret = inet_pton(AF_INET, devPathWrite, &serv_addr.sin_addr);
+    free(devPathWriteBuff);
+
+    if(ret <= 0)
+    {
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    if(connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+    {
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    *((SOCKET*)fd) = sock;
+#endif
+    return 0;
+}
+
 int pciePlatformConnect(UNUSED const char *devPathRead,
                         const char *devPathWrite,
                         void **fd)
@@ -504,6 +601,33 @@ int pciePlatformClose(void *f)
         mvLog(MVLOG_ERROR, "Device closing failed with error %d", rc);
     }
     return rc;
+}
+
+int tcpipPlatformClose(void *fd)
+{
+#if defined(USE_TCP_IP)
+
+    int status = 0;
+
+#ifdef _WIN32
+    SOCKET sock = (SOCKET) fd;
+    status = shutdown(sock, SD_BOTH);
+    if (status == 0) { status = closesocket(sock); }
+    return status;
+#else
+
+    intptr_t sockfd = (intptr_t)fd;
+    if(sockfd != -1)
+    {
+        status = shutdown(sockfd, SHUT_RDWR);
+        if (status == 0) { status = close(sockfd); }
+    }
+    return status;
+
+#endif
+
+#endif
+    return -1;
 }
 
 // ------------------------------------

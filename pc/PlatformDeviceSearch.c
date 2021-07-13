@@ -8,6 +8,7 @@
 #include "XLinkPlatformErrorUtils.h"
 #include "usb_boot.h"
 #include "pcie_host.h"
+#include "tcpip_host.h"
 #include "XLinkStringUtils.h"
 
 
@@ -31,6 +32,11 @@ static xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
                                                   XLinkDeviceState_t state,
                                                   const deviceDesc_t in_deviceRequirements,
                                                   deviceDesc_t* out_foundDevice);
+static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
+                                                   const deviceDesc_t in_deviceRequirements,
+                                                   deviceDesc_t* out_foundDevice,
+                                                   const unsigned int devicesArraySize,
+                                                   unsigned int* out_amountOfFoundDevices);
 
 // ------------------------------------
 // Helpers declaration. End.
@@ -47,6 +53,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
     memset(out_foundDevices, sizeFoundDevices, sizeof(deviceDesc_t));
     xLinkPlatformErrorCode_t USB_rc;
     xLinkPlatformErrorCode_t PCIe_rc;
+    xLinkPlatformErrorCode_t TCPIP_rc;
 
     switch (in_deviceRequirements.protocol){
         case X_LINK_USB_CDC:
@@ -58,6 +65,9 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             return getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
         */
 
+        //case X_LINK_TCP_IP:
+        //    return getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, 1u, &out_amountOfFoundDevices);
+
         case X_LINK_ANY_PROTOCOL:
 
             // Find first correct USB Device
@@ -67,7 +77,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
                 return X_LINK_PLATFORM_SUCCESS;
             }
 
-            /* TODO(themarpe)
+            /* TODO(themarpe) - reenable PCIe
             PCIe_rc = getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
             // Found enough devices, return
             if (*out_amountOfFoundDevices >= sizeFoundDevices) {
@@ -75,7 +85,13 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             }
             */
 
-            break;
+            // // Try find TCPIP device
+            // TCPIP_rc = getTcpIpDeviceName(state, in_deviceRequirements, out_foundDevice, 1u, &out_amountOfFoundDevices);
+            // if(TCPIP_rc == X_LINK_PLATFORM_SUCCESS) {     // Found TCPIP device, return it
+            //     return X_LINK_PLATFORM_SUCCESS;
+            // }
+
+            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
 
         default:
             mvLog(MVLOG_WARN, "Unknown protocol");
@@ -210,7 +226,6 @@ xLinkPlatformErrorCode_t parsePCIeHostError(pcieHostError_t rc) {
     }
 }
 
-
 xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
                                                   XLinkDeviceState_t state,
                                                   const deviceDesc_t in_deviceRequirements,
@@ -246,6 +261,34 @@ xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
 
     }
     return xLinkRc;
+}
+
+static xLinkPlatformErrorCode_t getTcpIpDeviceName(XLinkDeviceState_t state,
+                                                   const deviceDesc_t in_deviceRequirements,
+                                                   deviceDesc_t* out_foundDevice,
+                                                   const unsigned int devicesArraySize,
+                                                   unsigned int* out_foundDevicesCount)
+{
+    ASSERT_XLINK_PLATFORM(out_foundDevice);
+    ASSERT_XLINK_PLATFORM(devicesArraySize);
+    if (in_deviceRequirements.platform == X_LINK_MYRIAD_2) {
+        /**
+         * There is no PCIe on Myriad 2. Asserting that check
+         * produces enormous amount of logs in tests.
+         */
+        return X_LINK_PLATFORM_ERROR;
+    }
+
+    if(state == X_LINK_UNBOOTED)
+    {
+        /**
+         * There is no condition where unbooted
+         * state device to be found using tcp/ip.
+        */
+        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+    }
+
+    return tcpip_get_devices(state, out_foundDevice, devicesArraySize, out_foundDevicesCount, in_deviceRequirements.name);
 }
 
 // ------------------------------------
