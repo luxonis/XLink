@@ -44,7 +44,7 @@ struct pair_hash {
 
 static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceState = {
     {{0x03E7, 0x2485}, X_LINK_UNBOOTED},
-    {{0x03E7, 0xf63c}, X_LINK_BOOTED},
+    {{0x03E7, 0xf63b}, X_LINK_BOOTED},
     {{0x03E7, 0xf63c}, X_LINK_BOOTLOADER},
 };
 
@@ -533,7 +533,7 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
-    usb_open_device(dev, &endpoint);
+    h = usb_open_device(dev, &endpoint);
 
     rc = send_file(h, endpoint, mvcmd, size, bcdusb);
     if (h) {

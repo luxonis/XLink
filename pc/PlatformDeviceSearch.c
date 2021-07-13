@@ -90,8 +90,11 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             // if(TCPIP_rc == X_LINK_PLATFORM_SUCCESS) {     // Found TCPIP device, return it
             //     return X_LINK_PLATFORM_SUCCESS;
             // }
+            if(*out_amountOfFoundDevices <= 0){
+                return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+            }
 
-            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+            return X_LINK_PLATFORM_SUCCESS;
 
         default:
             mvLog(MVLOG_WARN, "Unknown protocol");

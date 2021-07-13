@@ -11,6 +11,8 @@ include(XLink.cmake)
 option(XLINK_USE_MX_ID_NAME "Use MX ID name instead of usb port" ON)
 # Build tests
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
+# Build examples
+option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
 
@@ -68,6 +70,11 @@ set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 99)
 # Tests
 if(XLINK_BUILD_TESTS)
     add_subdirectory(tests)
+endif()
+
+# Examples
+if(XLINK_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()
 
 include(GNUInstallDirs)

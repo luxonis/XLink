@@ -370,10 +370,10 @@ static int tcpipPlatformRead(void *fd, void *data, int size)
 #if defined(USE_TCP_IP)
     int nread = 0;
     int rc = -1;
+    SOCKET sock = (SOCKET) ((intptr_t) fd);
 
     while(nread < size)
     {
-        SOCKET sock = (SOCKET) fd;
         rc = recv(sock, &((char*)data)[nread], size - nread, 0);
         if(rc <= 0)
         {
@@ -394,6 +394,7 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
 #if defined(USE_TCP_IP)
     int byteCount = 0;
     int rc = -1;
+    SOCKET sock = (SOCKET) ((intptr_t) fd);
 
     while(byteCount < size)
     {
@@ -406,7 +407,6 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
         int flags = MSG_NOSIGNAL;
 #endif
 
-        SOCKET sock = (SOCKET)fd;
         rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
         if(rc <= 0)
         {
