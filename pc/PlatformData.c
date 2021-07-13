@@ -11,7 +11,7 @@
 #include "XLinkPlatform.h"
 #include "XLinkPlatformErrorUtils.h"
 #include "XLinkStringUtils.h"
-#include "usb_boot.h"
+#include "usb_host.h"
 #include "pcie_host.h"
 
 #define MVLOG_UNIT_NAME PlatformData
@@ -374,7 +374,7 @@ static int tcpipPlatformRead(void *fd, void *data, int size)
     while(nread < size)
     {
         SOCKET sock = (SOCKET) fd;
-        rc = recv((SOCKET)fd, &((char*)data)[nread], size - nread, 0);
+        rc = recv(sock, &((char*)data)[nread], size - nread, 0);
         if(rc <= 0)
         {
             return -1;
@@ -440,11 +440,7 @@ int usb_read(libusb_device_handle *f, void *data, size_t size)
         int bt, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
-#if (defined(_WIN32) || defined(_WIN64))
-        int rc = usb_bulk_read(f, USB_ENDPOINT_IN, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
-#else
         int rc = libusb_bulk_transfer(f, USB_ENDPOINT_IN,(unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
-#endif
         if(rc)
             return rc;
         data = ((char *)data) + bt;
@@ -461,11 +457,7 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size)
         int bt, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
-#if (defined(_WIN32) || defined(_WIN64) )
-        int rc = usb_bulk_write(f, USB_ENDPOINT_OUT, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
-#else
         int rc = libusb_bulk_transfer(f, USB_ENDPOINT_OUT, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
-#endif
         if(rc)
             return rc;
         data = (char *)data + bt;

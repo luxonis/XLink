@@ -7,9 +7,10 @@ set(XLINK_PRIVATE_INCLUDE ${XLINK_ROOT_DIR}/pc/protocols)
 file(GLOB PC_SRC             "${XLINK_ROOT_DIR}/pc/*.c")
 file(GLOB PC_SRC_CPP         "${XLINK_ROOT_DIR}/pc/*.cpp")
 file(GLOB PC_PROTO_SRC       "${XLINK_ROOT_DIR}/pc/protocols/*.c")
+file(GLOB PC_PROTO_SRC_CPP   "${XLINK_ROOT_DIR}/pc/protocols/*.cpp")
 file(GLOB_RECURSE SHARED_SRC "${XLINK_ROOT_DIR}/shared/*.c")
 
-list(APPEND XLINK_SOURCES ${PC_SRC} ${PC_SRC_CPP} ${PC_PROTO_SRC} ${SHARED_SRC})
+list(APPEND XLINK_SOURCES ${PC_SRC} ${PC_SRC_CPP} ${PC_PROTO_SRC} ${PC_PROTO_SRC_CPP} ${SHARED_SRC})
 
 if(WIN32)
     set(XLINK_PLATFORM_INCLUDE

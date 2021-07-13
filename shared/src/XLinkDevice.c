@@ -148,7 +148,7 @@ XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequiremen
     XLINK_RET_IF(out_foundDevice == NULL);
 
     xLinkPlatformErrorCode_t rc;
-    int numFoundDevices = 0;
+    unsigned numFoundDevices = 0;
     rc = XLinkPlatformFindDevices(in_deviceRequirements, out_foundDevice, 1, &numFoundDevices);
     if(numFoundDevices <= 0){
         return X_LINK_DEVICE_NOT_FOUND;

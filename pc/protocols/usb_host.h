@@ -6,6 +6,8 @@
 extern "C" {
 #endif
 
+#include "XLink/XLink.h"
+
 #define AUTO_VID                    0
 #define AUTO_PID                    0
 #define AUTO_UNBOOTED_PID           -1
@@ -41,6 +43,9 @@ void initialize_usb_boot();
 int usb_boot(const char *addr, const void *mvcmd, unsigned size);
 int get_pid_by_name(const char* name);
 
+int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
+int usbPlatformClose(void *fd);
+int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 
 #ifdef __cplusplus
 }

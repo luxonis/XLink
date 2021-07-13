@@ -6,7 +6,7 @@
 
 #include "XLinkPlatform.h"
 #include "XLinkPlatformErrorUtils.h"
-#include "usb_boot.h"
+#include "usb_host.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
 #include "XLinkStringUtils.h"
@@ -68,37 +68,17 @@ typedef int SOCKET;
 #endif /* USE_TCP_IP */
 
 // ------------------------------------
-// Helpers declaration. Begin.
-// ------------------------------------
-
-static char* pciePlatformStateToStr(const pciePlatformState_t platformState);
-
-#ifdef USE_USB_VSC
-static double seconds();
-static libusb_device_handle *usbLinkOpen(const char *path);
-static void usbLinkClose(libusb_device_handle *f);
-
-#endif
-// ------------------------------------
-// Helpers declaration. End.
-// ------------------------------------
-
-
-
-// ------------------------------------
 // Wrappers declaration. Begin.
 // ------------------------------------
 
-static int usbPlatformConnect(const char *devPathRead,
-                              const char *devPathWrite, void **fd);
-static int pciePlatformConnect(UNUSED const char *devPathRead,
-                               const char *devPathWrite, void **fd);
-static int tcpipPlatformConnect(const char *devPathRead,
-                                const char *devPathWrite, void **fd);
+static int pciePlatformConnect(UNUSED const char *devPathRead, const char *devPathWrite, void **fd);
+static int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
 
-static int usbPlatformClose(void *fd);
 static int pciePlatformClose(void *f);
 static int tcpipPlatformClose(void *fd);
+
+static int pciePlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
+static int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 
 // ------------------------------------
 // Wrappers declaration. End.
@@ -168,38 +148,22 @@ int XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPa
 }
 
 int XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
-    if (deviceDesc->protocol == X_LINK_PCIE) {
-        // Temporary open fd to boot device and then close it
-        int* pcieFd = NULL;
-        int rc = pcie_init(deviceDesc->name, (void**)&pcieFd);
-        if (rc) {
-            return rc;
-        }
-#if (!defined(_WIN32) && !defined(_WIN64))
-        rc = pcie_boot_device(*(int*)pcieFd, firmware, length);
-#else
-        rc = pcie_boot_device(pcieFd, firmware, length);
-#endif
-        pcie_close(pcieFd); // Will not check result for now
-        return rc;
-    } else if (deviceDesc->protocol == X_LINK_USB_VSC) {
 
-        char subaddr[28+2];
-        // This will be the string to search for in /sys/dev/char links
-        int chars_to_write = snprintf(subaddr, 28, "-%s:", deviceDesc->name);
-        if(chars_to_write >= 28) {
-            printf("Path to your boot util is too long for the char array here!\n");
-        }
-        // Boot it
-        int rc = usb_boot(deviceDesc->name, firmware, (unsigned)length);
+    switch (deviceDesc->protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformBootFirmware(deviceDesc, firmware, length);
 
-        if(!rc) {
-            mvLog(MVLOG_DEBUG, "Boot successful, device address %s", deviceDesc->name);
-        }
-        return rc;
-    } else {
-        return -1;
+        case X_LINK_PCIE:
+            return pciePlatformBootFirmware(deviceDesc, firmware, length);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformBootFirmware(deviceDesc, firmware, length);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
+
 }
 
 
@@ -249,127 +213,6 @@ int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
 // XLinkPlatform API implementation. End.
 // ------------------------------------
 
-
-
-// ------------------------------------
-// Helpers implementation. Begin.
-// ------------------------------------
-#ifdef USE_USB_VSC
-double seconds()
-{
-    static double s;
-    struct timespec ts;
-
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    if(!s)
-        s = ts.tv_sec + ts.tv_nsec * 1e-9;
-    return ts.tv_sec + ts.tv_nsec * 1e-9 - s;
-}
-#endif
-
-char* pciePlatformStateToStr(const pciePlatformState_t platformState) {
-    switch (platformState) {
-        case PCIE_PLATFORM_ANY_STATE: return "PCIE_PLATFORM_ANY_STATE";
-        case PCIE_PLATFORM_BOOTED: return "PCIE_PLATFORM_BOOTED";
-        case PCIE_PLATFORM_UNBOOTED: return "PCIE_PLATFORM_UNBOOTED";
-        default: return "";
-    }
-}
-
-#ifdef USE_USB_VSC
-libusb_device_handle *usbLinkOpen(const char *path)
-{
-    if (path == NULL) {
-        return 0;
-    }
-
-    usbBootError_t rc = USB_BOOT_DEVICE_NOT_FOUND;
-    libusb_device_handle *h = NULL;
-    libusb_device *dev = NULL;
-    double waittm = seconds() + statuswaittimeout;
-
-    // Change PID for bootloader device
-    int vid = DEFAULT_OPENVID;
-    int pid = DEFAULT_OPENPID;
-    if(strstr(path, "bootloader") != NULL) {
-        pid = DEFAULT_BOOTLOADER_PID;
-    }
-
-    while(seconds() < waittm){
-        int size = (int)strlen(path);
-
-#if (!defined(_WIN32) && !defined(_WIN64))
-        uint16_t  bcdusb = -1;
-        rc = usb_find_device_with_bcd(0, (char *)path, size, (void **)&dev, vid, pid, &bcdusb);
-#else
-        rc = usb_find_device(0, (char *)path, size, (void **)&dev, vid, pid);
-#endif
-        if(rc == USB_BOOT_SUCCESS)
-            break;
-        usleep(1000);
-    }
-    if (rc == USB_BOOT_TIMEOUT || rc == USB_BOOT_DEVICE_NOT_FOUND) // Timeout
-        return 0;
-
-    // Retrieve mx id from name
-    for(int i = 0; i < XLINK_MAX_NAME_SIZE; i++){
-        if(path[i] == '-') break;
-        mx_serial[i] = path[i];
-    }
-
-#if (defined(_WIN32) || defined(_WIN64) )
-
-    char last_open_dev_err[OPEN_DEV_ERROR_MESSAGE_LENGTH] = {0};
-    h = usb_open_device(dev, NULL, 0, last_open_dev_err, OPEN_DEV_ERROR_MESSAGE_LENGTH);
-    int libusb_rc = ((h != NULL) ? (0) : (-1));
-    if (libusb_rc < 0)
-    {
-        if(last_open_dev_err[0])
-            mvLog(MVLOG_DEBUG, "Last opened device name: %s", last_open_dev_err);
-
-        usb_close_device(h);
-        usb_free_device(dev);
-        return 0;
-    }
-    usb_free_device(dev);
-
-    // Get usb speed
-    usb_speed_enum = usb_get_usb_speed(h);
-
-#else
-
-    usb_speed_enum = libusb_get_device_speed(dev);
-
-    int libusb_rc = libusb_open(dev, &h);
-    if (libusb_rc < 0)
-    {
-        libusb_unref_device(dev);
-        return 0;
-    }
-
-    libusb_unref_device(dev);
-    libusb_detach_kernel_driver(h, 0);
-    libusb_rc = libusb_claim_interface(h, 0);
-    if(libusb_rc < 0)
-    {
-        libusb_close(h);
-        return 0;
-    }
-#endif
-    return h;
-}
-
-void usbLinkClose(libusb_device_handle *f)
-{
-#if (defined(_WIN32) || defined(_WIN64))
-    usb_close_device(f);
-#else
-    libusb_release_interface(f, 0);
-    libusb_close(f);
-#endif
-}
-#endif
-
 /**
  * getter to obtain the connected usb speed which was stored by
  * usb_find_device_with_bcd() during XLinkconnect().
@@ -406,102 +249,6 @@ const char* get_mx_serial(){
 // Wrappers implementation. Begin.
 // ------------------------------------
 
-int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
-{
-#if (!defined(USE_USB_VSC))
-    #ifdef USE_LINK_JTAG
-    struct sockaddr_in serv_addr;
-    usbFdWrite = socket(AF_INET, SOCK_STREAM, 0);
-    usbFdRead = socket(AF_INET, SOCK_STREAM, 0);
-    assert(usbFdWrite >=0);
-    assert(usbFdRead >=0);
-    memset(&serv_addr, '0', sizeof(serv_addr));
-
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    serv_addr.sin_port = htons(USB_LINK_SOCKET_PORT);
-
-    if (connect(usbFdWrite, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
-    {
-        exit(1);
-    }
-    return 0;
-
-#else
-    usbFdRead= open(devPathRead, O_RDWR);
-    if(usbFdRead < 0)
-    {
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
-    }
-    // set tty to raw mode
-    struct termios  tty;
-    speed_t     spd;
-    int rc;
-    rc = tcgetattr(usbFdRead, &tty);
-    if (rc < 0) {
-        close(usbFdRead);
-        usbFdRead = -1;
-        return X_LINK_PLATFORM_ERROR;
-    }
-
-    spd = B115200;
-    cfsetospeed(&tty, (speed_t)spd);
-    cfsetispeed(&tty, (speed_t)spd);
-
-    cfmakeraw(&tty);
-
-    rc = tcsetattr(usbFdRead, TCSANOW, &tty);
-    if (rc < 0) {
-        close(usbFdRead);
-        usbFdRead = -1;
-        return X_LINK_PLATFORM_ERROR;
-    }
-
-    usbFdWrite= open(devPathWrite, O_RDWR);
-    if(usbFdWrite < 0)
-    {
-        close(usbFdRead);
-        usbFdWrite = -1;
-        return X_LINK_PLATFORM_ERROR;
-    }
-    // set tty to raw mode
-    rc = tcgetattr(usbFdWrite, &tty);
-    if (rc < 0) {
-        close(usbFdRead);
-        close(usbFdWrite);
-        usbFdWrite = -1;
-        return X_LINK_PLATFORM_ERROR;
-    }
-
-    spd = B115200;
-    cfsetospeed(&tty, (speed_t)spd);
-    cfsetispeed(&tty, (speed_t)spd);
-
-    cfmakeraw(&tty);
-
-    rc = tcsetattr(usbFdWrite, TCSANOW, &tty);
-    if (rc < 0) {
-        close(usbFdRead);
-        close(usbFdWrite);
-        usbFdWrite = -1;
-        return X_LINK_PLATFORM_ERROR;
-    }
-    return 0;
-#endif  /*USE_LINK_JTAG*/
-#else
-    *fd = usbLinkOpen(devPathWrite);
-    if (*fd == 0)
-    {
-        /* could fail due to port name change */
-        return -1;
-    }
-
-    if(*fd)
-        return 0;
-    else
-        return -1;
-#endif  /*USE_USB_VSC*/
-}
 
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
@@ -558,28 +305,15 @@ int pciePlatformConnect(UNUSED const char *devPathRead,
     return pcie_init(devPathWrite, fd);
 }
 
-int usbPlatformClose(void *fd)
-{
 
-#ifndef USE_USB_VSC
-    #ifdef USE_LINK_JTAG
-    /*Nothing*/
-#else
-    if (usbFdRead != -1){
-        close(usbFdRead);
-        usbFdRead = -1;
+static char* pciePlatformStateToStr(const pciePlatformState_t platformState) {
+    switch (platformState) {
+        case PCIE_PLATFORM_ANY_STATE: return "PCIE_PLATFORM_ANY_STATE";
+        case PCIE_PLATFORM_BOOTED: return "PCIE_PLATFORM_BOOTED";
+        case PCIE_PLATFORM_UNBOOTED: return "PCIE_PLATFORM_UNBOOTED";
+        default: return "";
     }
-    if (usbFdWrite != -1){
-        close(usbFdWrite);
-        usbFdWrite = -1;
-    }
-#endif  /*USE_LINK_JTAG*/
-#else
-    usbLinkClose((libusb_device_handle *) fd);
-#endif  /*USE_USB_VSC*/
-    return -1;
 }
-
 int pciePlatformClose(void *f)
 {
     int rc;
@@ -627,6 +361,29 @@ int tcpipPlatformClose(void *fd)
 #endif
 
 #endif
+    return -1;
+}
+
+
+
+int pciePlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length){
+    // Temporary open fd to boot device and then close it
+    int* pcieFd = NULL;
+    int rc = pcie_init(deviceDesc->name, (void**)&pcieFd);
+    if (rc) {
+        return rc;
+    }
+#if (!defined(_WIN32) && !defined(_WIN64))
+    rc = pcie_boot_device(*(int*)pcieFd, firmware, length);
+#else
+    rc = pcie_boot_device(pcieFd, firmware, length);
+#endif
+    pcie_close(pcieFd); // Will not check result for now
+    return rc;
+}
+
+int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length){
+    // TCPIP doesn't support a boot mechanism
     return -1;
 }
 

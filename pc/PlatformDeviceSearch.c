@@ -6,7 +6,7 @@
 
 #include "XLinkPlatform.h"
 #include "XLinkPlatformErrorUtils.h"
-#include "usb_boot.h"
+#include "usb_host.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
 #include "XLinkStringUtils.h"
@@ -106,18 +106,6 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
 int XLinkPlatformIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state) {
     if(!in_deviceDesc){
         return 0;
-    }
-
-    if(!strnlen(in_deviceDesc->name, XLINK_MAX_NAME_SIZE)) {
-        return 1;
-    }
-
-    if(in_deviceDesc->platform != X_LINK_ANY_PLATFORM &&
-        in_deviceDesc->protocol == X_LINK_USB_VSC) {
-        int namePid = get_pid_by_name(in_deviceDesc->name);
-        int platformPid = platformToPid(in_deviceDesc->platform, state);
-
-        return namePid == platformPid;
     }
 
     return 1;
