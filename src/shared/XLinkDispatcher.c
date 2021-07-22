@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -388,7 +388,7 @@ int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct
         return -1;
     }
 
-    int rc = XLink_sem_wait(id);
+    int rc = XLink_sem_timedwait(id, &abstime);
     int err = errno;
 
 #ifdef __PC__

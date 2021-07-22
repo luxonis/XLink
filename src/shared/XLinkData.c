@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -373,7 +373,7 @@ XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigne
     absTimeout.tv_nsec += (msTimeout - sec) * 1000000;
     int64_t secOver = absTimeout.tv_nsec / 1000000000;
     absTimeout.tv_nsec -= secOver * 1000000000;
-    absTimeout.tv_sec += secOver; 
+    absTimeout.tv_sec += secOver;
 
     int rc = addEventTimeout(event, absTimeout);
     if(rc != X_LINK_SUCCESS) return rc;

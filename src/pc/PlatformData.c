@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -18,13 +18,23 @@
 #include "XLinkLog.h"
 
 #if (defined(_WIN32) || defined(_WIN64))
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601  /* Windows 7. */
+#endif
 #include "win_usb.h"
 #include "win_time.h"
 #include "win_pthread.h"
+#include <winsock2.h>
+#include <Ws2tcpip.h>
+#pragma comment(lib, "Ws2_32.lib")
 #else
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <libusb.h>
-#endif  /*defined(_WIN32) || defined(_WIN64)*/
+typedef int SOCKET;
+#endif
 
 #ifdef USE_LINK_JTAG
 #include <sys/types.h>
@@ -70,14 +80,11 @@ static int usb_read(libusb_device_handle *f, void *data, size_t size);
 
 static int usbPlatformRead(void *fd, void *data, int size);
 static int pciePlatformRead(void *f, void *data, int size);
+static int tcpipPlatformRead(void *fd, void *data, int size);
 
 static int usbPlatformWrite(void *fd, void *data, int size);
 static int pciePlatformWrite(void *f, void *data, int size);
-
-int (*write_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*, void*, int) = \
-                            {usbPlatformWrite, usbPlatformWrite, pciePlatformWrite};
-int (*read_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*, void*, int) = \
-                            {usbPlatformRead, usbPlatformRead, pciePlatformRead};
+static int tcpipPlatformWrite(void *fd, void *data, int size);
 
 // ------------------------------------
 // Wrappers declaration. End.
@@ -91,12 +98,38 @@ int (*read_fcts[X_LINK_NMB_OF_PROTOCOLS])(void*, void*, int) = \
 
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 {
-    return write_fcts[deviceHandle->protocol](deviceHandle->xLinkFD, data, size);
+    switch (deviceHandle->protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformWrite(deviceHandle->xLinkFD, data, size);
+
+        case X_LINK_PCIE:
+            return pciePlatformWrite(deviceHandle->xLinkFD, data, size);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
 }
 
 int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 {
-    return read_fcts[deviceHandle->protocol](deviceHandle->xLinkFD, data, size);
+    switch (deviceHandle->protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformRead(deviceHandle->xLinkFD, data, size);
+
+        case X_LINK_PCIE:
+            return pciePlatformRead(deviceHandle->xLinkFD, data, size);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformRead(deviceHandle->xLinkFD, data, size);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
 }
 
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment)
@@ -330,6 +363,63 @@ int pciePlatformRead(void *f, void *data, int size)
 
     return 0;
 #endif
+}
+
+static int tcpipPlatformRead(void *fd, void *data, int size)
+{
+#if defined(USE_TCP_IP)
+    int nread = 0;
+    int rc = -1;
+
+    while(nread < size)
+    {
+        SOCKET sock = (SOCKET) fd;
+        rc = recv((SOCKET)fd, &((char*)data)[nread], size - nread, 0);
+        if(rc <= 0)
+        {
+            return -1;
+        }
+        else
+        {
+            nread += rc;
+            rc = -1;
+        }
+    }
+#endif
+    return 0;
+}
+
+static int tcpipPlatformWrite(void *fd, void *data, int size)
+{
+#if defined(USE_TCP_IP)
+    int byteCount = 0;
+    int rc = -1;
+
+    while(byteCount < size)
+    {
+        // Use send instead of write and ignore SIGPIPE
+        //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
+
+#if (defined(_WIN32) | defined(_WIN64))
+        int flags = 0;
+#else
+        int flags = MSG_NOSIGNAL;
+#endif
+
+        SOCKET sock = (SOCKET)fd;
+        rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
+        if(rc <= 0)
+        {
+            return -1;
+        }
+        else
+        {
+            byteCount += rc;
+            rc = -1;
+        }
+    }
+#endif
+    return 0;
 }
 
 // ------------------------------------

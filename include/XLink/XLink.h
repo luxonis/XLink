@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -134,7 +134,6 @@ UsbSpeed_t XLinkGetUSBSpeed(linkId_t id);
  */
 const char* XLinkGetMxSerial(linkId_t id);
 
-
 /**
  * @brief Returns enum string value
  * @return Pointer to null terminated string
@@ -158,7 +157,6 @@ const char* XLinkPlatformToStr(XLinkPlatform_t val);
  * @return Pointer to null terminated string
  */
 const char* XLinkDeviceStateToStr(XLinkDeviceState_t val);
-
 
 /**
  * @brief Returns enum string value

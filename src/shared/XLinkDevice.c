@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -125,9 +125,10 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     link->id = getNextAvailableLinkUniqueId();
     link->peerState = XLINK_UP;
     link->deviceHandle.xLinkFD = NULL;
+    link->deviceHandle.protocol = globalHandler->protocol;
 
     xLinkDeviceHandle_t temp = {0};
-    temp.protocol = X_LINK_ANY_PROTOCOL;
+    temp.protocol = globalHandler->protocol;
     XLINK_RET_IF_FAIL(DispatcherStart(&temp)); //myriad has one
 
     sem_wait(&pingSem);
@@ -495,6 +496,7 @@ const char* XLinkProtocolToStr(XLinkProtocol_t val) {
         case X_LINK_USB_CDC: return "X_LINK_USB_CDC";
         case X_LINK_PCIE: return "X_LINK_PCIE";
         case X_LINK_IPC: return "X_LINK_IPC";
+        case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
         case X_LINK_NMB_OF_PROTOCOLS: return "X_LINK_NMB_OF_PROTOCOLS";
         case X_LINK_ANY_PROTOCOL: return "X_LINK_ANY_PROTOCOL";
         default:
