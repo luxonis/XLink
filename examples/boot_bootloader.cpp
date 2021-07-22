@@ -29,6 +29,11 @@ int main(){
     status = XLinkFindAllSuitableDevices(X_LINK_FLASH_BOOTED, suitableDevice, deviceDescAll.data(), deviceDescAll.size(), &numdev);
     if(status != X_LINK_SUCCESS) throw std::runtime_error("Couldn't retrieve all connected devices");
 
+    if(numdev == 0){
+        std::cout << "No " << XLinkDeviceStateToStr(X_LINK_FLASH_BOOTED) << " devices found to reset" << std::endl;
+        return 0;
+    }
+
     for(unsigned i = 0; i < numdev; i++) {
         std::cout << "Resetting " << deviceDescAll.at(i).name << " ..." << std::endl;
         XLinkBootBootloader(&deviceDescAll.at(i));
