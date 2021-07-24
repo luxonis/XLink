@@ -5,14 +5,18 @@ cmake_minimum_required(VERSION 3.2)
 set(TARGET_NAME "XLink")
 project(${TARGET_NAME} LANGUAGES C CXX)
 
-include(XLink.cmake)
+include(cmake/XLink.cmake)
+include(cmake/Flags.cmake)
 
 # Add option - MX ID naming instead of usb port
 option(XLINK_USE_MX_ID_NAME "Use MX ID name instead of usb port" ON)
+# Build examples
+option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 # Build tests
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
 
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
+add_flag_source(src/shared/XLinkDevice.c "-Werror=switch-enum")
 
 if(WIN32)
     target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
@@ -64,6 +68,10 @@ endif()
 
 set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 99)
 
+# Examples
+if(XLINK_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
 
 # Tests
 if(XLINK_BUILD_TESTS)
@@ -77,7 +85,7 @@ install(TARGETS ${TARGET_NAME}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
-install(DIRECTORY shared/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 set(config_install_dir "${CMAKE_INSTALL_LIBDIR}/cmake/${TARGET_NAME}")
 export(TARGETS
