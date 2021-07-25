@@ -224,6 +224,24 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     return X_LINK_SUCCESS;
 }
 
+
+//Called only from app - per device
+XLinkError_t XLinkBootBootloader(const deviceDesc_t* deviceDesc)
+{
+
+    int connectStatus = XLinkPlatformBootBootloader(deviceDesc->name, deviceDesc->protocol);
+
+    if (connectStatus < 0) {
+        /**
+         * Connection may be unsuccessful at some amount of first tries.
+         * In this case, asserting the status provides enormous amount of logs in tests.
+         */
+        return X_LINK_COMMUNICATION_NOT_OPEN;
+    }
+
+    return X_LINK_SUCCESS;
+}
+
 XLinkError_t XLinkBootMemory(const deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size)
 {
     if (XLinkPlatformBootFirmware(deviceDesc, (const char*) buffer, size) == 0) {
@@ -435,6 +453,10 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
             return X_LINK_DEVICE_NOT_FOUND;
         case X_LINK_PLATFORM_TIMEOUT:
             return X_LINK_TIMEOUT;
+        case X_LINK_PLATFORM_ERROR:
+        case X_LINK_PLATFORM_DRIVER_NOT_LOADED:
+        case X_LINK_PLATFORM_INVALID_PARAMETERS:
+        case X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS:
         default:
             return X_LINK_ERROR;
     }
@@ -473,8 +495,8 @@ const char* XLinkProtocolToStr(XLinkProtocol_t val) {
         case X_LINK_USB_VSC: return "X_LINK_USB_VSC";
         case X_LINK_USB_CDC: return "X_LINK_USB_CDC";
         case X_LINK_PCIE: return "X_LINK_PCIE";
-        case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
         case X_LINK_IPC: return "X_LINK_IPC";
+        case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
         case X_LINK_NMB_OF_PROTOCOLS: return "X_LINK_NMB_OF_PROTOCOLS";
         case X_LINK_ANY_PROTOCOL: return "X_LINK_ANY_PROTOCOL";
         default:
@@ -508,6 +530,7 @@ const char* XLinkDeviceStateToStr(XLinkDeviceState_t val) {
         case X_LINK_BOOTED: return "X_LINK_BOOTED";
         case X_LINK_UNBOOTED: return "X_LINK_UNBOOTED";
         case X_LINK_BOOTLOADER: return "X_LINK_BOOTLOADER";
+        case X_LINK_FLASH_BOOTED: return "X_LINK_FLASH_BOOTED";
         default:
             return "INVALID_ENUM_VALUE";
             break;

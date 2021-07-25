@@ -3,6 +3,7 @@
 //
 
 #include <string.h>
+#include <stdbool.h>
 
 #include "XLinkPlatform.h"
 #include "XLinkPlatformErrorUtils.h"
@@ -74,6 +75,10 @@ typedef int SOCKET;
 static int pciePlatformConnect(UNUSED const char *devPathRead, const char *devPathWrite, void **fd);
 static int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
 
+static int usbPlatformBootBootloader(const char *name);
+static int pciePlatformBootBootloader(const char *name);
+static int tcpipPlatformBootBootloader(const char *name);
+
 static int pciePlatformClose(void *f);
 static int tcpipPlatformClose(void *fd);
 
@@ -106,7 +111,6 @@ void XLinkPlatformInit()
 
 int XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath)
 {
-    int rc = 0;
     FILE *file;
     long file_size;
 
@@ -129,7 +133,7 @@ int XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPa
         fclose(file);
         return -3;
     }
-    if(fread(image_buffer, 1, file_size, file) != file_size)
+    if((long) fread(image_buffer, 1, file_size, file) != file_size)
     {
         mvLog(MVLOG_ERROR, "cannot read file to image_buffer");
         fclose(file);
@@ -179,6 +183,24 @@ int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLin
 
         case X_LINK_TCP_IP:
             return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+}
+
+int XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol)
+{
+    switch (protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformBootBootloader(name);
+
+        case X_LINK_PCIE:
+            return pciePlatformBootBootloader(name);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformBootBootloader(name);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -250,6 +272,13 @@ const char* get_mx_serial(){
 // ------------------------------------
 
 
+int pciePlatformConnect(UNUSED const char *devPathRead,
+                        const char *devPathWrite,
+                        void **fd)
+{
+    return pcie_init(devPathWrite, fd);
+}
+
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if defined(USE_TCP_IP)
@@ -298,11 +327,26 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     return 0;
 }
 
-int pciePlatformConnect(UNUSED const char *devPathRead,
-                        const char *devPathWrite,
-                        void **fd)
+
+int usbPlatformBootBootloader(const char *name)
 {
-    return pcie_init(devPathWrite, fd);
+    if(usbLinkBootBootloader(name)){
+        return 0;
+    } else {
+        return -1;
+    }
+}
+
+int pciePlatformBootBootloader(const char *name)
+{
+    // TODO(themarpe)
+    return -1;
+}
+
+int tcpipPlatformBootBootloader(const char *name)
+{
+    // TODO (themarpe)
+    return -1;
 }
 
 

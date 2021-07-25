@@ -11,3 +11,9 @@ endmacro()
 
 # List devices
 add_example(list_devices list_devices.cpp)
+
+# Boot bootloader
+add_example(boot_bootloader boot_bootloader.cpp)
+
+# Boot firmware
+add_example(boot_firmware boot_firmware.cpp)

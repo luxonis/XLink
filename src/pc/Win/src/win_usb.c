@@ -16,7 +16,7 @@
 #include <stdint.h>
 #include "win_usb.h"
 #include "XLinkPublicDefines.h"
-#include "usb_boot.h"
+#include "usb_host.h"
 #include "usb_mx_id.h"
 #include "stdbool.h"
 
@@ -53,6 +53,7 @@ extern const char * usb_get_pid_name(int);
 extern int isMyriadDevice(const int idVendor, const int idProduct);
 extern int isBootedMyriadDevice(const int idVendor, const int idProduct);
 extern int isBootloaderMyriadDevice(const int idVendor, const int idProduct);
+extern int isFlashBootedMyriadDevice(const int idVendor, const int idProduct);
 extern int isNotBootedMyriadDevice(const int idVendor, const int idProduct);
 
 #if defined(_MSC_VER) && _MSC_VER < 1900
@@ -101,7 +102,7 @@ static const char *format_win32_msg(DWORD errId) {
 
 static void wperror(const char *errmsg) {
     DWORD errId = GetLastError();
-    mvLog(MVLOG_DEBUG, "%s: System err %d\n", errmsg, errId);
+    mvLog(MVLOG_ERROR, "%s: System err %d\n", errmsg, errId);
 }
 
 static void wstrerror(char *buff, const char *errmsg) {
@@ -271,13 +272,13 @@ UsbSpeed_t usb_get_usb_speed(usb_hwnd han){
     switch (devSpeed){
         case LowSpeed: return X_LINK_USB_SPEED_LOW;
         case FullSpeed: return X_LINK_USB_SPEED_FULL;
-        case HighSpeed: return X_LINK_USB_SPEED_HIGH;        
+        case HighSpeed: return X_LINK_USB_SPEED_HIGH;
     }
 
     */
 
     // return UNKNOWN for now
-    return X_LINK_USB_SPEED_UNKNOWN;    
+    return X_LINK_USB_SPEED_UNKNOWN;
 
 }
 
@@ -392,6 +393,59 @@ size_t usb_get_endpoint_size(usb_hwnd han, uint8_t ep) {
     if(han->eps[USB_DIR_IN].ep == ep)
         return han->eps[USB_DIR_IN].sz;
     return 0;
+}
+
+int usb_control_transfer(usb_hwnd han, uint8_t bmRequestType, uint8_t bRequest, uint16_t wValue, uint16_t wIndex, const void *buffer, size_t sz, uint32_t *wrote_bytes, int timeout_ms) {
+    ULONG wb = 0;
+    if(wrote_bytes != NULL)
+        *wrote_bytes = 0;
+    if(han == NULL)
+        return USB_ERR_INVALID;
+
+    // Timeout variables
+    ULONG prevTimeout = 0;
+    ULONG prevTimeoutSize = sizeof(prevTimeout);
+
+    // Get previous timeout on control endpoint (0)
+    if (!WinUsb_GetPipePolicy(han->winUsbHan, 0, PIPE_TRANSFER_TIMEOUT, &prevTimeoutSize, &prevTimeout)) {
+        wperror("WinUsb_GetPipePolicy");
+        return USB_ERR_FAILED;
+    }
+
+    // Set given timeout
+    ULONG timeout = timeout_ms;
+    if(!WinUsb_SetPipePolicy(han->winUsbHan, 0, PIPE_TRANSFER_TIMEOUT, sizeof(ULONG), &timeout)){
+        wperror("WinUsb_SetPipePolicy");
+        return USB_ERR_FAILED;
+    }
+
+    // Create setup packet
+    WINUSB_SETUP_PACKET setup = {
+        .RequestType = bmRequestType,
+        .Request = bRequest,
+        .Value = wValue,
+        .Index = wIndex,
+        .Length = sz
+    };
+
+    // Make control transfer
+    if(!WinUsb_ControlTransfer(han->winUsbHan, setup, buffer, sz, wrote_bytes, NULL)){
+        if(GetLastError() == ERROR_SEM_TIMEOUT){
+            mvLog(MVLOG_ERROR, "WinUsb_ControlTransfer timeout\n");
+            return USB_ERR_TIMEOUT;
+        }
+        wperror("WinUsb_ControlTransfer");
+        mvLog(MVLOG_ERROR, "WinUsb_ControlTransfer failed with error:=%d\n", GetLastError());
+        return USB_ERR_FAILED;
+    }
+
+    // Set back previous timeout
+    if (!WinUsb_SetPipePolicy(han->winUsbHan, 0, PIPE_TRANSFER_TIMEOUT, sizeof(prevTimeout), &prevTimeout)) {
+        wperror("WinUsb_SetPipePolicy");
+        return USB_ERR_FAILED;
+    }
+
+    return USB_ERR_NONE;
 }
 
 int usb_bulk_write(usb_hwnd han, uint8_t ep, const void *buffer, size_t sz, uint32_t *wrote_bytes, int timeout_ms) {
@@ -517,7 +571,7 @@ static const char* get_mx_id_device_path(HDEVINFO devInfo, SP_DEVINFO_DATA* devI
             // parse serial number (apperantly the way on Wins)
             sscanf(deviceInterfaceDetailData->DevicePath, "\\\\?\\usb#vid_%hx&pid_%hx#%[^#]", &det_vid, &det_pid, mx_id);
             mvLog(MVLOG_DEBUG, "mx id found: %s\n", mx_id);
-            
+
             if (devicePath != NULL) {
                 snprintf(device_path, sizeof(device_path), "%s", deviceInterfaceDetailData->DevicePath);
                 *devicePath = &device_path[0];
@@ -567,7 +621,7 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
     // Set final_addr as error first
     strncpy(final_addr, "<error>", sizeof(final_addr));
 
-    // generate unique (full) usb bus-port path 
+    // generate unique (full) usb bus-port path
     const char* compat_addr = gen_addr(devInfo, devInfoData, pid);
 
     // first check if entry already exists in the list (and is still valid)
@@ -626,7 +680,7 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
                 }
-                // Transfer as mxid_read_cmd size is less than 512B it should transfer all 
+                // Transfer as mxid_read_cmd size is less than 512B it should transfer all
                 if (size != transferred) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer written %d, expected %d", transferred, size);
 
@@ -734,7 +788,7 @@ typedef struct {
 } usb_dev_list;
 
 void usb_list_free_devices(usb_dev_list* list) {
-    
+
     // Free dev info
     SetupDiDestroyDeviceInfoList(list->devInfo);
 
@@ -769,11 +823,11 @@ int usb_get_device_list(usb_dev_list** refPDevList) {
     // create list
     pDevList->infos = calloc(MAX_NUM_DEVICES, sizeof(SP_DEVINFO_DATA));
     pDevList->vidpids = calloc(MAX_NUM_DEVICES, sizeof(vid_pid_pair));
-    
+
     for (i = 0; i < MAX_NUM_DEVICES; i++) {
         pDevList->infos[i].cbSize = sizeof(SP_DEVINFO_DATA);
     }
-    
+
     //    devInfoData.cbSize = sizeof(devInfoData);
     for (i = 0; SetupDiEnumDeviceInfo(pDevList->devInfo, i, pDevList->infos + i) && i < MAX_NUM_DEVICES; i++) {
         if (!SetupDiGetDeviceRegistryProperty(pDevList->devInfo, pDevList->infos + i, SPDRP_HARDWAREID, NULL, hwid_buff, sizeof(hwid_buff), NULL)) {
@@ -804,7 +858,7 @@ usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, 
 
     // TODO There is no global mutex as in linux version
     int res;
-    
+
     static usb_dev_list* devs = NULL;
     static int devs_cnt = 0;
     int count = 0;
@@ -845,6 +899,9 @@ usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, 
             // Any bootloader device
             || (vid == AUTO_VID && pid == DEFAULT_BOOTLOADER_PID
                 && isBootloaderMyriadDevice(idVendor, idProduct))
+            // Any flash booted device
+            || (vid == AUTO_VID && pid == DEFAULT_FLASH_BOOTED_PID
+                && isFlashBootedMyriadDevice(idVendor, idProduct))
             ) {
             if (device) {
 
@@ -855,7 +912,7 @@ usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, 
                 if (strncmp(addr, caddr, XLINK_MAX_NAME_SIZE) == 0)
                 {
                     mvLog(MVLOG_DEBUG, "Found Address: %s - VID/PID %04x:%04x", caddr, idVendor, idProduct);
-                    
+
                     // Create a copy of device path string. It will be freed
                     *device = strdup(devicePath);
                     devs_cnt = 0;
@@ -863,7 +920,7 @@ usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, 
                 }
             }
             else if (specificDevice) {
-                
+
                 // gen addr
                 const char* caddr = gen_addr_mx_id(devs->devInfo, devs->infos + i, idProduct, NULL);
 

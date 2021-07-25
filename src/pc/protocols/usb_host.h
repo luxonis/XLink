@@ -22,6 +22,7 @@ extern "C" {
 #define DEFAULT_UNBOOTPID_2485      0x2485
 #define DEFAULT_UNBOOTPID_2150      0x2150
 #define DEFAULT_BOOTLOADER_PID      0xf63c
+#define DEFAULT_FLASH_BOOTED_PID    0xf63d
 #define DEFAULT_CHUNKSZ             1024*1024
 
 

@@ -33,6 +33,23 @@ static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int initialized;
 
+struct UsbSetupPacket {
+  uint8_t  requestType;
+  uint8_t  request;
+  uint16_t value;
+  uint16_t index;
+  uint16_t length;
+};
+
+static UsbSetupPacket bootBootloaderPacket = {
+    .requestType = 0x00, // bmRequestType: device-directed
+    .request = 0xF5, // bRequest: custom
+    .value = 0x0DA1, // wValue: custom
+    .index = 0x0000, // wIndex
+    .length = 0 // not used
+};
+
+
 
 static std::mutex mutex;
 struct pair_hash {
@@ -592,6 +609,79 @@ libusb_device_handle *usbLinkOpen(const char *path)
     }
 
     return h;
+}
+
+
+bool usbLinkBootBootloader(const char *path) {
+
+    libusb_device *dev = nullptr;
+    refLibusbDeviceByName(path, &dev);
+    if(dev == NULL){
+        return 0;
+    }
+    libusb_device_handle *h = NULL;
+
+
+#if (defined(_WIN32) || defined(_WIN64) )
+
+    char last_open_dev_err[OPEN_DEV_ERROR_MESSAGE_LENGTH] = {0};
+    h = usb_open_device(dev, NULL, 0, last_open_dev_err, OPEN_DEV_ERROR_MESSAGE_LENGTH);
+    int libusb_rc = ((h != NULL) ? (0) : (-1));
+    if (libusb_rc < 0)
+    {
+        if(last_open_dev_err[0])
+            mvLog(MVLOG_DEBUG, "Last opened device name: %s", last_open_dev_err);
+
+        usb_close_device(h);
+        usb_free_device(dev);
+        return 0;
+    }
+
+    // Make control transfer
+    uint32_t transferred = 0;
+    usb_control_transfer(h,
+        bootBootloaderPacket.requestType,   // bmRequestType: device-directed
+        bootBootloaderPacket.request,   // bRequest: custom
+        bootBootloaderPacket.value, // wValue: custom
+        bootBootloaderPacket.index, // wIndex
+        NULL,   // data pointer
+        0,      // data size
+        &transferred,
+        1000    // timeout [ms]
+    );
+
+    // Ignore error, close the device
+    usb_close_device(h);
+    usb_free_device(dev);
+
+#else
+
+    int libusb_rc = libusb_open(dev, &h);
+    if (libusb_rc < 0)
+    {
+        libusb_unref_device(dev);
+        return 0;
+    }
+
+    // Make control transfer
+    libusb_control_transfer(h,
+        bootBootloaderPacket.requestType,   // bmRequestType: device-directed
+        bootBootloaderPacket.request,   // bRequest: custom
+        bootBootloaderPacket.value, // wValue: custom
+        bootBootloaderPacket.index, // wIndex
+        NULL,   // data pointer
+        0,      // data size
+        1000    // timeout [ms]
+    );
+
+    // Ignore error and close device
+    libusb_unref_device(dev);
+    libusb_close(h);
+
+#endif
+
+    return true;
+
 }
 
 void usbLinkClose(libusb_device_handle *f)

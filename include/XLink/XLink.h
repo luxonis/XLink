@@ -72,6 +72,13 @@ XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirement
 XLinkError_t XLinkConnect(XLinkHandler_t* handler);
 
 /**
+ * @brief Puts device into bootloader mode
+ * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkBootBootloader(const deviceDesc_t* deviceDesc);
+
+/**
  * @brief Boots firmware binary from memory to the remote device
  * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
  * @param buffer - mvcmd file contents
