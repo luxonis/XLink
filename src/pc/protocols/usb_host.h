@@ -7,6 +7,7 @@ extern "C" {
 #endif
 
 #include "XLink/XLink.h"
+#include <stdbool.h>
 
 #define AUTO_VID                    0
 #define AUTO_PID                    0
@@ -44,6 +45,7 @@ void initialize_usb_boot();
 int usb_boot(const char *addr, const void *mvcmd, unsigned size);
 int get_pid_by_name(const char* name);
 
+bool usbLinkBootBootloader(const char* path);
 int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
 int usbPlatformClose(void *fd);
 int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
