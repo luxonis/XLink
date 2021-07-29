@@ -207,13 +207,12 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
     }
 
     // iterate linked list of interface information
-    int family;
     int socket_count = 0;
     for(struct ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
     {
-        // check for ipv4 family
-        family = ifa->ifa_addr->sa_family;
-        if(ifa->ifa_addr != NULL && family == AF_INET)
+        // check for ipv4 family, and assign only AFTER ifa_addr != NULL
+        sa_family_t family;
+        if(ifa->ifa_addr != NULL && ((family = ifa->ifa_addr->sa_family) == AF_INET))
         {
             // Check if interface is up and running
             struct ifreq if_req;
