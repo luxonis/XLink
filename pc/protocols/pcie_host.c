@@ -1,6 +1,9 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
+
+// Allow windows.h to include more things for pcie case
+#undef WIN32_LEAN_AND_MEAN
 
 #include "XLinkPlatform.h"
 
@@ -158,7 +161,7 @@ int pcie_write(HANDLE fd, void * buf, size_t bufSize)
 
     Overlapped.hEvent = Event;
     ResetEvent(Overlapped.hEvent);
-    OutputCode = WriteFile(dev, buf, bufSize, NULL, &Overlapped);
+    OutputCode = WriteFile(dev, buf, (DWORD)bufSize, NULL, &Overlapped);
 
     if (OutputCode == FALSE) {
         if (GetLastError() == ERROR_IO_PENDING) {
@@ -235,7 +238,7 @@ int pcie_read(HANDLE fd, void * buf, size_t bufSize)
 
     Overlapped.hEvent = Event;
     ResetEvent(Overlapped.hEvent);
-    OutputCode = ReadFile(dev, buf, bufSize, NULL, &Overlapped);
+    OutputCode = ReadFile(dev, buf, (DWORD)bufSize, NULL, &Overlapped);
 
     if (OutputCode == FALSE) {
        if (GetLastError() == ERROR_IO_PENDING) {
@@ -533,9 +536,9 @@ pcieHostError_t pcie_reset_device(HANDLE fd)
 #endif
 
 #if !defined(_WIN32)
-pcieHostError_t pcie_boot_device(int fd, void *buffer, size_t length)
+pcieHostError_t pcie_boot_device(int fd, const char *buffer, size_t length)
 #else
-pcieHostError_t pcie_boot_device(HANDLE fd, void *buffer, size_t length)
+pcieHostError_t pcie_boot_device(HANDLE fd, const char  *buffer, size_t length)
 #endif
 {
     ASSERT_XLINK_PLATFORM_R(fd, PCIE_INVALID_PARAMETERS);
@@ -583,7 +586,7 @@ pcieHostError_t pcie_boot_device(HANDLE fd, void *buffer, size_t length)
 
     bResult = DeviceIoControl(fd,                    // device to be queried
                               MXLK_BOOT_DEV,                 // operation to perform
-                              buffer, length,
+                              (void*)buffer, (DWORD)length,
                               &output_buffer, sizeof(output_buffer), // output buffer
                               &junk,                         // # bytes returned
                               (LPOVERLAPPED) NULL);          // synchronous I/O

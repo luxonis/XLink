@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -50,9 +50,8 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
     const unsigned int devicesArraySize,
     unsigned int *out_amountOfFoundDevices);
 
-int XLinkPlatformBootMemoryRemote(deviceDesc_t* deviceDesc, uint8_t* buffer, long size);
-
-int XLinkPlatformBootRemote(deviceDesc_t* deviceDesc, const char* binaryPath);
+int XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath);
+int XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
                          XLinkProtocol_t protocol, void** fd);
 

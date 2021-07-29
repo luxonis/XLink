@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -47,10 +47,33 @@ streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,
 
     stream = getStreamByName(link, name);
     if (stream != NULL) {
+
         int streamAlreadyExists = (writeSize > stream->writeSize && stream->writeSize != 0)
             || (readSize > stream->readSize && stream->readSize != 0);
-        XLINK_OUT_WITH_LOG_IF(streamAlreadyExists,
-            mvLog(MVLOG_ERROR, "Stream with name:%s already exists: id=%ld\n", name, stream->id));
+
+        // Don't error out
+        // TODO(themarpe) - check if actually doesn't have any consequences 
+        if(streamAlreadyExists){
+            if (writeSize) {
+                stream->writeSize = writeSize;
+            }
+            if (readSize) {
+                stream->readSize = readSize;
+            }
+        }
+
+        // XLINK_OUT_WITH_LOG_IF(streamAlreadyExists,
+        //     mvLog(MVLOG_ERROR, "Stream with name:%s already exists: id=%ld\n", name, stream->id));
+        
+        // if(streamAlreadyExists){
+        //     //stream->writeSize = writeSize;
+        //     stream->readSize = readSize;
+        //     printf("write size was: %d and set read size to: %d\n", stream->writeSize, readSize);
+        //     mvLogDefaultLevelSet(MVLOG_DEBUG);
+        //     
+        // }
+
+
     } else {
         streamId_t nextStreamId = forcedId == INVALID_STREAM_ID ?
                                   getNextStreamUniqueId(link) : forcedId;

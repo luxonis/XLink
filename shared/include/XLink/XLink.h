@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -81,7 +81,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler);
  * @param size - size of buffer
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long size);
+XLinkError_t XLinkBootMemory(const deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size);
 
 /**
  * @brief Boots specified firmware binary to the remote device
@@ -89,7 +89,16 @@ XLinkError_t XLinkBootMemory(deviceDesc_t* deviceDesc, uint8_t* buffer, long siz
  * @param binaryPath - path to the *.mvcmd file
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkBoot(deviceDesc_t* deviceDesc, const char* binaryPath);
+XLinkError_t XLinkBoot(const deviceDesc_t* deviceDesc, const char* binaryPath);
+
+/**
+ * @brief Boots specified firmware binary to the remote device
+ * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
+ * @param firmware - firmware buffer
+ * @param length - firmware buffer length
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, unsigned long length);
 
 /**
  * @brief Resets the remote device and close all open local handles for this device
@@ -106,8 +115,47 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  */
 XLinkError_t XLinkResetAll();
 
+/**
+ * @brief Retrieves USB speed of certain connected device
+ * @return UsbSpeed_t enum describing the usb connection speed
+ */
 UsbSpeed_t XLinkGetUSBSpeed(linkId_t id);
+
+/**
+ * @brief Returns mx serial of current connected device
+ * @return pointer to mx serial string
+ */
 const char* XLinkGetMxSerial(linkId_t id);
+
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkErrorToStr(XLinkError_t val);
+
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkProtocolToStr(XLinkProtocol_t val);
+
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkPlatformToStr(XLinkPlatform_t val);
+
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkDeviceStateToStr(XLinkDeviceState_t val);
+
+/**
+ * @brief Returns enum string value
+ * @return Pointer to null terminated string
+ */
+const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val);
 
 #endif // __PC__
 
@@ -160,12 +208,32 @@ XLinkError_t XLinkCloseStream(streamId_t streamId);
 XLinkError_t XLinkWriteData(streamId_t streamId, const uint8_t* buffer, int size);
 
 /**
+ * @brief Sends a package to initiate the writing of data to a remote stream
+ * @warning Actual size of the written data is ALIGN_UP(size, 64)
+ * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
+ * @param[in] buffer – data buffer to be transmitted
+ * @param[in] size – size of the data to be transmitted
+ * @param[in] msTimeout – time in milliseconds after which operation times out
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success,  X_LINK_TIMEOUT when msTimeout time passes
+ */
+XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int msTimeout);
+
+/**
  * @brief Reads data from local stream. Will only have something if it was written to by the remote
  * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet - structure containing output data buffer and received size
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReadData(streamId_t streamId, streamPacketDesc_t** packet);
+
+/**
+ * @brief Reads data from local stream. Will only have something if it was written to by the remote
+ * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
+ * @param[out]  packet – structure containing output data buffer and received size
+ * @param[out]  msTimeout – time in milliseconds after which operation times out
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT when msTimeout time passes
+ */
+XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** packet, unsigned int msTimeout);
 
 /**
  * @brief Releases data from stream - This should be called after the data obtained from
@@ -205,10 +273,7 @@ XLinkError_t XLinkDisconnect(linkId_t id);
 
 XLinkError_t XLinkGetAvailableStreams(linkId_t id);
 
-XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int timeout);
 XLinkError_t XLinkAsyncWriteData();
-
-XLinkError_t XLinkReadDataWithTimeOut(streamId_t streamId, streamPacketDesc_t** packet, unsigned int timeout);
 
 XLinkError_t XLinkSetDeviceOpenTimeOutMsec(unsigned int msec);
 XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);

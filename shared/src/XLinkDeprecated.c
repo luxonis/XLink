@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -31,7 +31,7 @@ XLinkError_t getDeviceName(int index, char* name, int nameSize, XLinkPlatform_t 
     XLINK_RET_IF(nameSize <= 0);
 
     deviceDesc_t in_deviceRequirements = { 0 };
-    in_deviceRequirements.protocol = glHandler != NULL ? glHandler->protocol : USB_VSC;
+    in_deviceRequirements.protocol = glHandler != NULL ? glHandler->protocol : X_LINK_USB_VSC;
     in_deviceRequirements.platform = platform;
     memset(name, 0, nameSize);
 
@@ -79,7 +79,7 @@ XLinkError_t XLinkBootRemote(const char* deviceName, const char* binaryPath)
     XLINK_RET_IF(binaryPath == NULL);
 
     deviceDesc_t deviceDesc = { 0 };
-    deviceDesc.protocol = glHandler != NULL ? glHandler->protocol : USB_VSC;
+    deviceDesc.protocol = glHandler != NULL ? glHandler->protocol : X_LINK_USB_VSC;
     XLINK_RET_IF(mv_strcpy(deviceDesc.name, XLINK_MAX_NAME_SIZE, deviceName) != EOK);
 
     return XLinkBoot(&deviceDesc, binaryPath);
@@ -98,19 +98,6 @@ XLinkError_t XLinkGetAvailableStreams(linkId_t id)
 {
     (void)id;
     return X_LINK_NOT_IMPLEMENTED;
-}
-
-XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer,
-                                       int size, unsigned int timeout)
-{
-    (void)timeout;
-    return XLinkWriteData(streamId, buffer, size);
-}
-
-XLinkError_t XLinkReadDataWithTimeOut(streamId_t streamId, streamPacketDesc_t** packet, unsigned int timeout)
-{
-    (void)timeout;
-    return XLinkReadData(streamId, packet);
 }
 
 XLinkError_t XLinkAsyncWriteData()
@@ -133,35 +120,3 @@ XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec) {
 // ------------------------------------
 
 #endif // __PC__
-
-// ------------------------------------
-// Public helpers. Begin.
-// ------------------------------------
-
-const char* XLinkErrorToStr(XLinkError_t rc) {
-    switch (rc) {
-        case X_LINK_SUCCESS:
-            return "X_LINK_SUCCESS";
-        case X_LINK_ALREADY_OPEN:
-            return "X_LINK_ALREADY_OPEN";
-        case X_LINK_COMMUNICATION_NOT_OPEN:
-            return "X_LINK_COMMUNICATION_NOT_OPEN";
-        case X_LINK_COMMUNICATION_FAIL:
-            return "X_LINK_COMMUNICATION_FAIL";
-        case X_LINK_COMMUNICATION_UNKNOWN_ERROR:
-            return "X_LINK_COMMUNICATION_UNKNOWN_ERROR";
-        case X_LINK_DEVICE_NOT_FOUND:
-            return "X_LINK_DEVICE_NOT_FOUND";
-        case X_LINK_TIMEOUT:
-            return "X_LINK_TIMEOUT";
-        case X_LINK_OUT_OF_MEMORY:
-            return "X_LINK_OUT_OF_MEMORY";
-        case X_LINK_ERROR:
-        default:
-            return "X_LINK_ERROR";
-    }
-}
-
-// ------------------------------------
-// Public helpers. End.
-// ------------------------------------

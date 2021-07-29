@@ -1,12 +1,10 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-extern int usb_loglevel;
 
 #define AUTO_VID                    0
 #define AUTO_PID                    0
@@ -21,6 +19,7 @@ extern int usb_loglevel;
 #define DEFAULT_UNBOOTVID           0x03E7
 #define DEFAULT_UNBOOTPID_2485      0x2485
 #define DEFAULT_UNBOOTPID_2150      0x2150
+#define DEFAULT_BOOTLOADER_PID      0xf63c
 #define DEFAULT_CHUNKSZ             1024*1024
 
 

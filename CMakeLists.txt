@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2020 Intel Corporation
+# Copyright (C) 2018-2021 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 #
 cmake_minimum_required(VERSION 3.2)
@@ -7,22 +7,29 @@ project(${TARGET_NAME} LANGUAGES C CXX)
 
 include(XLink.cmake)
 
+# Add option - MX ID naming instead of usb port
+option(XLINK_USE_MX_ID_NAME "Use MX ID name instead of usb port" ON)
+# Build tests
+option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
+
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
 
-if(NOT WIN32)
+if(WIN32)
+    target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
+else()
     target_include_directories(${TARGET_NAME}
-            PRIVATE
-            "${LIBUSB_INCLUDE_DIR}")
+        PRIVATE "${LIBUSB_INCLUDE_DIR}"
+    )
 
     target_link_libraries(${TARGET_NAME}
-            PUBLIC
-            Threads::Threads
-            ${LIBUSB_LIBRARY})
+        PRIVATE Threads::Threads
+        PUBLIC ${LIBUSB_LIBRARY}
+    )
 endif()
 
 if(MINGW)
     target_link_libraries(${TARGET_NAME}
-        PUBLIC  
+        PUBLIC
             libwinusb.a
             libsetupapi.a
     )
@@ -35,15 +42,19 @@ target_include_directories(${TARGET_NAME}
     PRIVATE
         ${XLINK_PLATFORM_INCLUDE}
         ${XLINK_PRIVATE_INCLUDE}
+        ${XLINK_INCLUDE}/XLink
     )
 
 target_compile_definitions(${TARGET_NAME}
     PRIVATE
-        __PC__
         HAVE_STRUCT_TIMESPEC
         _CRT_SECURE_NO_WARNINGS
         USE_USB_VSC
-    )
+        USE_TCP_IP
+    PUBLIC
+        __PC__
+        XLINK_USE_MX_ID_NAME=${XLINK_USE_MX_ID_NAME}
+)
 
 if (ENABLE_MYRIAD_NO_BOOT)
     target_compile_definitions(${TARGET_NAME}
@@ -52,6 +63,12 @@ if (ENABLE_MYRIAD_NO_BOOT)
 endif()
 
 set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 99)
+
+
+# Tests
+if(XLINK_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
 
 include(GNUInstallDirs)
 install(TARGETS ${TARGET_NAME}

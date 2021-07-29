@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 Intel Corporation
+// Copyright (C) 2018-2021 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 //
 
@@ -19,8 +19,9 @@
  * mset mvLogLevel_unitname 2
  * Will set log level to warnings and above
  */
-#ifndef MVLOG_H__
-#define MVLOG_H__
+
+#include "XLinkLog.h"
+
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -53,20 +54,6 @@ extern int pthread_getname_np (pthread_t , char *, size_t);
 #include <rtems/bspIo.h>
 #endif
 
-// Windows-only
-#if (defined (WINNT) || defined(_WIN32) || defined(_WIN64) )
-#define __attribute__(x)
-#define FUNCATTR_WEAK static
-#else
-#define FUNCATTR_WEAK
-#endif
-
-#ifndef MVLOG_UNIT_NAME
-#define MVLOG_UNIT_NAME global
-#endif
-
-#define _MVLOGLEVEL(UNIT_NAME)  mvLogLevel_ ## UNIT_NAME
-#define  MVLOGLEVEL(UNIT_NAME) _MVLOGLEVEL(UNIT_NAME)
 
 #define MVLOG_STR(x) _MVLOG_STR(x)
 #define _MVLOG_STR(x)  #x
@@ -102,18 +89,6 @@ extern int pthread_getname_np (pthread_t , char *, size_t);
 #define MVLOG_FATAL_COLOR ANSI_COLOR_RED
 #endif
 
-#ifndef MVLOG_MAXIMUM_THREAD_NAME_SIZE
-#define MVLOG_MAXIMUM_THREAD_NAME_SIZE 16
-#endif
-
-typedef enum mvLog_t{
-    MVLOG_DEBUG = 0,
-    MVLOG_INFO,
-    MVLOG_WARN,
-    MVLOG_ERROR,
-    MVLOG_FATAL,
-    MVLOG_LAST,
-} mvLog_t;
 
 #ifdef __shave__
 __attribute__((section(".laststage")))
@@ -127,27 +102,28 @@ static const char mvLogHeader[MVLOG_LAST][30] =
         MVLOG_FATAL_COLOR "F:"
     };
 
-// #ifdef __shave__
-// __attribute__((section(".laststage")))
-// #endif
-FUNCATTR_WEAK mvLog_t __attribute__ ((weak)) MVLOGLEVEL(MVLOG_UNIT_NAME) = MVLOG_LAST;
 
-// #ifdef __shave__
-// __attribute__((section(".laststage")))
-// #endif
-FUNCATTR_WEAK mvLog_t __attribute__ ((weak)) MVLOGLEVEL(default) = MVLOG_ERROR;
+// Define global and default
+mvLog_t MVLOGLEVEL(global) = MVLOG_LAST;
+mvLog_t MVLOGLEVEL(default) = MVLOG_ERROR;
+
+void XLinkLogGetThreadName(char *buf, size_t len);
+
+void XLinkLogGetThreadName(char *buf, size_t len){
+    pthread_getname_np(pthread_self(), buf, len);
+}
 
 #ifdef __shave__
 __attribute__((section(".laststage")))
 #endif
-static int __attribute__ ((unused))
-logprintf(enum mvLog_t lvl, const char * func, const int line,
+int __attribute__ ((unused))
+logprintf(mvLog_t curLogLvl, mvLog_t lvl, const char * func, const int line,
           const char * format, ...)
 {
-    if((MVLOGLEVEL(MVLOG_UNIT_NAME) == MVLOG_LAST && lvl < MVLOGLEVEL(default)))
+    if((curLogLvl == MVLOG_LAST && lvl < MVLOGLEVEL(default)))
         return 0;
 
-    if((MVLOGLEVEL(MVLOG_UNIT_NAME) < MVLOG_LAST && lvl < MVLOGLEVEL(MVLOG_UNIT_NAME)))
+    if((curLogLvl < MVLOG_LAST && lvl < curLogLvl))
         return 0;
 
     const char headerFormat[] = "%s [%s] [%10" PRId64 "] [%s] %s:%d\t";
@@ -167,7 +143,7 @@ logprintf(enum mvLog_t lvl, const char * func, const int line,
 #if defined MA2450 || defined __shave__
     snprintf(threadName, sizeof(threadName), "ThreadName_N/A");
 #elif !defined(ANDROID)
-    pthread_getname_np(pthread_self(), threadName, sizeof(threadName));
+    XLinkLogGetThreadName(threadName, sizeof(threadName));
 #endif
 
 #ifdef __RTEMS__
@@ -196,14 +172,3 @@ logprintf(enum mvLog_t lvl, const char * func, const int line,
     va_end (args);
     return 0;
 }
-
-#define mvLog(lvl, format, ...)                                 \
-    logprintf(lvl, __func__, __LINE__, format, ##__VA_ARGS__)
-
-// Set log level for the current unit. Note that the level must be smaller than the global default
-#define mvLogLevelSet(lvl) if(lvl < MVLOG_LAST){ MVLOGLEVEL(MVLOG_UNIT_NAME) = lvl; }
-// Set the global log level. Can be used to prevent modules from hiding messages (enable all of them with a single change)
-// This should be an application setting, not a per module one
-#define mvLogDefaultLevelSet(lvl) if(lvl < MVLOG_LAST){ MVLOGLEVEL(default) = lvl; }
-
-#endif
