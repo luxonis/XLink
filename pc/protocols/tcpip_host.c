@@ -57,6 +57,8 @@ typedef int SOCKET;
 #define DEVICE_DISCOVERY_RES_TIMEOUT_SEC    0.2
 #define DEVICE_RES_TIMEOUT_MSEC             20
 
+#define SKIP_DISCOVERY_FOR_TARGETED_DEVICE  true
+
 #ifdef HAS_DEBUG
 #define DEBUG(...) do { printf(__VA_ARGS__); } while(0)
 #else
@@ -287,6 +289,13 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
 
     bool check_target_ip = false;
     if(target_ip != NULL && strlen(target_ip) > 0){
+        if(SKIP_DISCOVERY_FOR_TARGETED_DEVICE && devices_size > 0){
+            strncpy(devices[0].name, target_ip, sizeof(devices[0].name));
+            devices[0].platform = X_LINK_MYRIAD_X;
+            devices[0].protocol = X_LINK_TCP_IP;
+            *device_count = 1;
+            return X_LINK_PLATFORM_SUCCESS;
+        }
         check_target_ip = true;
     }
 
