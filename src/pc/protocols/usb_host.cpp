@@ -29,6 +29,11 @@ static constexpr std::chrono::milliseconds DEFAULT_CONNECT_TIMEOUT{20000};
 static constexpr std::chrono::milliseconds DEFAULT_SEND_FILE_TIMEOUT{10000};
 static constexpr auto USB1_CHUNKSZ = 64;
 
+static constexpr int USB_ENDPOINT_IN = 0x81;
+static constexpr int USB_ENDPOINT_OUT = 0x01;
+
+static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
+
 static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int initialized;
@@ -41,12 +46,12 @@ struct UsbSetupPacket {
   uint16_t length;
 };
 
-static UsbSetupPacket bootBootloaderPacket = {
-    .requestType = 0x00, // bmRequestType: device-directed
-    .request = 0xF5, // bRequest: custom
-    .value = 0x0DA1, // wValue: custom
-    .index = 0x0000, // wIndex
-    .length = 0 // not used
+static UsbSetupPacket bootBootloaderPacket{
+    0x00, // bmRequestType: device-directed
+    0xF5, // bRequest: custom
+    0x0DA1, // wValue: custom
+    0x0000, // wIndex
+    0 // not used
 };
 
 
@@ -622,7 +627,7 @@ bool usbLinkBootBootloader(const char *path) {
     libusb_device_handle *h = NULL;
 
 
-#if (defined(_WIN32) || defined(_WIN64) )
+#if (defined(_WIN32) || defined(_WIN64) ) && 0
 
     char last_open_dev_err[OPEN_DEV_ERROR_MESSAGE_LENGTH] = {0};
     h = usb_open_device(dev, NULL, 0, last_open_dev_err, OPEN_DEV_ERROR_MESSAGE_LENGTH);
@@ -822,5 +827,134 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
     if(!rc) {
         mvLog(MVLOG_DEBUG, "Boot successful, device address %s", deviceDesc->name);
     }
+    return rc;
+}
+
+
+
+int usb_read(libusb_device_handle *f, void *data, size_t size)
+{
+    const int chunk_size = DEFAULT_CHUNKSZ;
+    while(size > 0)
+    {
+        int bt, ss = (int)size;
+        if(ss > chunk_size)
+            ss = chunk_size;
+        int rc = libusb_bulk_transfer(f, USB_ENDPOINT_IN,(unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+        if(rc)
+            return rc;
+        data = ((char *)data) + bt;
+        size -= bt;
+    }
+    return 0;
+}
+
+int usb_write(libusb_device_handle *f, const void *data, size_t size)
+{
+    const int chunk_size = DEFAULT_CHUNKSZ;
+    while(size > 0)
+    {
+        int bt, ss = (int)size;
+        if(ss > chunk_size)
+            ss = chunk_size;
+        int rc = libusb_bulk_transfer(f, USB_ENDPOINT_OUT, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+        if(rc)
+            return rc;
+        data = (char *)data + bt;
+        size -= bt;
+    }
+    return 0;
+}
+
+int usbPlatformRead(void* fd, void* data, int size)
+{
+    int rc = 0;
+#ifndef USE_USB_VSC
+    int nread =  0;
+#ifdef USE_LINK_JTAG
+    while (nread < size){
+        nread += read(usbFdWrite, &((char*)data)[nread], size - nread);
+        printf("read %d %d\n", nread, size);
+    }
+#else
+    if(usbFdRead < 0)
+    {
+        return -1;
+    }
+
+    while(nread < size)
+    {
+        int toRead = (PACKET_LENGTH && (size - nread > PACKET_LENGTH)) \
+                        ? PACKET_LENGTH : size - nread;
+
+        while(toRead > 0)
+        {
+            rc = read(usbFdRead, &((char*)data)[nread], toRead);
+            if ( rc < 0)
+            {
+                return -2;
+            }
+            toRead -=rc;
+            nread += rc;
+        }
+        unsigned char acknowledge = 0xEF;
+        int wc = write(usbFdRead, &acknowledge, sizeof(acknowledge));
+        if (wc != sizeof(acknowledge))
+        {
+            return -2;
+        }
+    }
+#endif  /*USE_LINK_JTAG*/
+#else
+    rc = usb_read((libusb_device_handle *) fd, data, size);
+#endif  /*USE_USB_VSC*/
+    return rc;
+}
+
+int usbPlatformWrite(void *fd, void *data, int size)
+{
+    int rc = 0;
+#ifndef USE_USB_VSC
+    int byteCount = 0;
+#ifdef USE_LINK_JTAG
+    while (byteCount < size){
+        byteCount += write(usbFdWrite, &((char*)data)[byteCount], size - byteCount);
+        printf("write %d %d\n", byteCount, size);
+    }
+#else
+    if(usbFdWrite < 0)
+    {
+        return -1;
+    }
+    while(byteCount < size)
+    {
+       int toWrite = (PACKET_LENGTH && (size - byteCount > PACKET_LENGTH)) \
+                        ? PACKET_LENGTH:size - byteCount;
+       int wc = write(usbFdWrite, ((char*)data) + byteCount, toWrite);
+
+       if ( wc != toWrite)
+       {
+           return -2;
+       }
+
+       byteCount += toWrite;
+       unsigned char acknowledge;
+       int rc;
+       rc = read(usbFdWrite, &acknowledge, sizeof(acknowledge));
+
+       if ( rc < 0)
+       {
+           return -2;
+       }
+
+       if (acknowledge != 0xEF)
+       {
+           return -2;
+       }
+    }
+#endif  /*USE_LINK_JTAG*/
+#else
+    rc = usb_write((libusb_device_handle *) fd, data, size);
+#endif  /*USE_USB_VSC*/
     return rc;
 }

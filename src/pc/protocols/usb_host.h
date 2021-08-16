@@ -50,6 +50,9 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 int usbPlatformClose(void *fd);
 int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 
+int usbPlatformRead(void *fd, void *data, int size);
+int usbPlatformWrite(void *fd, void *data, int size);
+
 #ifdef __cplusplus
 }
 #endif

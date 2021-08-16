@@ -16,7 +16,6 @@
 #include "XLinkLog.h"
 
 #if (defined(_WIN32) || defined(_WIN64))
-#include "win_usb.h"
 #include "win_time.h"
 
 #define OPEN_DEV_ERROR_MESSAGE_LENGTH 128
@@ -97,14 +96,15 @@ static int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char*
 
 void XLinkPlatformInit()
 {
-#if (defined(_WIN32) || defined(_WIN64))
-    initialize_usb_boot();
 
-#ifdef USE_TCP_IP
-    WSADATA wsa_data;
-    WSAStartup(MAKEWORD(2,2), &wsa_data);
+        libusb_init(NULL);
+#if (defined(_WIN32) || defined(_WIN64)) && 0
+    initialize_usb_boot();
 #endif
 
+#if (defined(_WIN32) || defined(_WIN64)) && defined(USE_TCP_IP)
+    WSADATA wsa_data;
+    WSAStartup(MAKEWORD(2,2), &wsa_data);
 #endif
 }
 

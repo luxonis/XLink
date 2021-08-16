@@ -19,17 +19,20 @@ if(WIN32)
     list(APPEND XLINK_SOURCES ${XLINK_PLATFORM_SRC})
 else()
     find_package(Threads REQUIRED)
+endif()
 
-    find_path(LIBUSB_INCLUDE_DIR NAMES libusb.h PATH_SUFFIXES "include" "libusb" "libusb-1.0")
-    find_library(LIBUSB_LIBRARY NAMES usb-1.0 PATH_SUFFIXES "lib")
 
-    if(NOT LIBUSB_INCLUDE_DIR OR NOT LIBUSB_LIBRARY)
-        message(FATAL_ERROR "libusb is required")
-    endif()
+find_path(LIBUSB_INCLUDE_DIR NAMES libusb.h PATH_SUFFIXES "include" "libusb" "libusb-1.0")
+find_library(LIBUSB_LIBRARY NAMES usb-1.0 PATH_SUFFIXES "lib")
 
+if(NOT LIBUSB_INCLUDE_DIR OR NOT LIBUSB_LIBRARY)
+    message(FATAL_ERROR "libusb is required")
+endif()
+
+if(APPLE)
     set(XLINK_PLATFORM_INCLUDE "${XLINK_ROOT_DIR}/src/pc/MacOS" )
     list(APPEND XLINK_SOURCES "${XLINK_ROOT_DIR}/src/pc/MacOS/pthread_semaphore.c")
-endif(WIN32)
+endif()
 
 #This is for the Movidius team
 set(XLINK_INCLUDE_DIRECTORIES ${XLINK_INCLUDE} ${LIBUSB_INCLUDE_DIR})

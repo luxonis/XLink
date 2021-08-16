@@ -5,6 +5,9 @@
 // Allow windows.h to include more things for pcie case
 #undef WIN32_LEAN_AND_MEAN
 
+// Required for pcie
+#pragma comment(lib, "setupapi.lib")
+
 #include "XLinkPlatform.h"
 
 #include <stdio.h>

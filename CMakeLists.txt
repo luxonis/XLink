@@ -21,15 +21,15 @@ add_flag_source(src/shared/XLinkDevice.c "-Werror=switch-enum")
 if(WIN32)
     target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
 else()
-    target_include_directories(${TARGET_NAME}
-        PRIVATE "${LIBUSB_INCLUDE_DIR}"
-    )
-
-    target_link_libraries(${TARGET_NAME}
-        PRIVATE Threads::Threads
-        PUBLIC ${LIBUSB_LIBRARY}
-    )
+    target_link_libraries(${TARGET_NAME} PRIVATE Threads::Threads)
 endif()
+
+target_include_directories(${TARGET_NAME}
+    PRIVATE "${LIBUSB_INCLUDE_DIR}"
+)
+target_link_libraries(${TARGET_NAME}
+    PUBLIC ${LIBUSB_LIBRARY}
+)
 
 if(MINGW)
     target_link_libraries(${TARGET_NAME}
