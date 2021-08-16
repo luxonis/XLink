@@ -14,8 +14,14 @@
 
 
 #if (defined(_WIN32) || defined(_WIN64))
+#include <winsock2.h>
+#include <Ws2tcpip.h>
 typedef SOCKET TCPIP_SOCKET;
 #else
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <unistd.h>
 typedef int TCPIP_SOCKET;
 #endif
 

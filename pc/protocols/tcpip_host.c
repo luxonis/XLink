@@ -120,7 +120,7 @@ static tcpipHostError_t tcpip_create_socket_broadcast(TCPIP_SOCKET* out_sock)
 
     // add socket option for broadcast
     int rc = 1;
-    if(setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &rc, sizeof(rc)) < 0)
+    if(setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (char *) &rc, sizeof(rc)) < 0)
     {
         return TCPIP_HOST_ERROR;
     }
@@ -142,7 +142,7 @@ static tcpipHostError_t tcpip_create_socket_broadcast(TCPIP_SOCKET* out_sock)
     read_timeout.tv_sec = 0;
     read_timeout.tv_usec = MSEC_TO_USEC(DEVICE_RES_TIMEOUT_MSEC);
 #endif
-    if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof(read_timeout)) < 0)
+    if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &read_timeout, sizeof(read_timeout)) < 0)
     {
         return TCPIP_HOST_ERROR;
     }
@@ -183,7 +183,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
         MIB_IPADDRROW addr = ipaddrtable->table[i];
         broadcast.sin_addr.s_addr = (addr.dwAddr & addr.dwMask)
             | (addr.dwMask ^ (DWORD)0xffffffff);
-        sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr*) & broadcast, sizeof(broadcast));
+        sendto(sock, (const char *) &send_buffer, sizeof(send_buffer), 0, (struct sockaddr*) & broadcast, sizeof(broadcast));
 
 #ifdef HAS_DEBUG
         char ip_broadcast_str[INET_ADDRSTRLEN] = { 0 };
@@ -315,7 +315,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
         struct sockaddr_in dev_addr;
         uint32_t len = sizeof(dev_addr);
 
-        int ret = recvfrom(sock, &recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr*) & dev_addr, &len);
+        int ret = recvfrom(sock, (char *) &recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr*) & dev_addr, &len);
         if(ret > 0)
         {
             DEBUG("Received UDP response, length: %d\n", ret);
