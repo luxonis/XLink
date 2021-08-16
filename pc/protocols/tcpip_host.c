@@ -37,7 +37,6 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <ifaddrs.h>
-typedef int SOCKET;
 #endif
 
 /* **************************************************************************/
@@ -104,9 +103,9 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
 }
 
 
-static tcpipHostError_t tcpip_create_socket_broadcast(SOCKET* out_sock)
+static tcpipHostError_t tcpip_create_socket_broadcast(TCPIP_SOCKET* out_sock)
 {
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    TCPIP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
  #if (defined(_WIN32) || defined(_WIN64) )
     if(sock == INVALID_SOCKET)
     {
@@ -154,7 +153,7 @@ static tcpipHostError_t tcpip_create_socket_broadcast(SOCKET* out_sock)
 
 
 
-static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
+static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
 
 #if (defined(_WIN32) || defined(_WIN64) )
 
@@ -264,7 +263,7 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
 /* **************************************************************************/
 /*      Public Function Definitions                                         */
 /* **************************************************************************/
-tcpipHostError_t tcpip_close_socket(SOCKET sock)
+tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET sock)
 {
 #if (defined(_WIN32) || defined(_WIN64) )
     if(sock != INVALID_SOCKET)
@@ -291,7 +290,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
     }
 
     // Create ANY receiving socket first
-    SOCKET sock;
+    TCPIP_SOCKET sock;
     if(tcpip_create_socket_broadcast(&sock) != TCPIP_HOST_SUCCESS){
         return X_LINK_PLATFORM_ERROR;
     }
