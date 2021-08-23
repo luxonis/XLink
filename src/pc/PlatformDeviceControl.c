@@ -696,8 +696,7 @@ int pciePlatformBootBootloader(const char *name)
 
 int tcpipPlatformBootBootloader(const char *name)
 {
-    // TODO (themarpe)
-    return -1;
+    return tcpip_boot_bootloader(name);
 }
 
 int usbPlatformClose(void *fd)
