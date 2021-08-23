@@ -13,6 +13,19 @@
 #include "XLinkPublicDefines.h"
 
 
+#if (defined(_WIN32) || defined(_WIN64))
+#include <winsock2.h>
+#include <Ws2tcpip.h>
+typedef SOCKET TCPIP_SOCKET;
+#else
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <unistd.h>
+typedef int TCPIP_SOCKET;
+#endif
+
+
 /* **************************************************************************/
 /*      Public Macro Definitions                                            */
 /* **************************************************************************/
@@ -66,11 +79,11 @@ typedef struct
 /**
  * @brief       Close socket
  *
- * @param[in]   sockfd Socket file descriptor
+ * @param[in]   socket Socket
  * @retval      TCPIP_HOST_ERROR Failed to close socket
  * @retval      TCPIP_HOST_SUCCESS Success to close socket
 */
-tcpipHostError_t tcpip_close_socket(int sockfd);
+tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET socket);
 
 /**
  * @brief       Broadcast message and get all devices responses with their IPs
