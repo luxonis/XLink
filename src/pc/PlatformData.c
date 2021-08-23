@@ -13,6 +13,7 @@
 #include "XLinkStringUtils.h"
 #include "usb_boot.h"
 #include "pcie_host.h"
+#include "tcpip_host.h"
 
 #define MVLOG_UNIT_NAME PlatformData
 #include "XLinkLog.h"
@@ -33,7 +34,6 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <libusb.h>
-typedef int SOCKET;
 #endif
 
 #ifdef USE_LINK_JTAG
@@ -373,8 +373,8 @@ static int tcpipPlatformRead(void *fd, void *data, int size)
 
     while(nread < size)
     {
-        SOCKET sock = (SOCKET) fd;
-        rc = recv((SOCKET)fd, &((char*)data)[nread], size - nread, 0);
+        TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
+        rc = recv((TCPIP_SOCKET)fd, &((char*)data)[nread], size - nread, 0);
         if(rc <= 0)
         {
             return -1;
@@ -406,7 +406,7 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
         int flags = MSG_NOSIGNAL;
 #endif
 
-        SOCKET sock = (SOCKET)fd;
+        TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
         rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
         if(rc <= 0)
         {

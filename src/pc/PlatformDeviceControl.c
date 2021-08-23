@@ -79,7 +79,6 @@ static UsbSetupPacket bootBootloaderPacket = {
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
-typedef int SOCKET;
 #endif
 
 #endif /* USE_TCP_IP */
@@ -634,7 +633,7 @@ int pciePlatformConnect(UNUSED const char *devPathRead,
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if defined(USE_TCP_IP)
-    SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+    TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0)
     {
         tcpip_close_socket(sock);
@@ -674,7 +673,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
         return -1;
     }
 
-    *((SOCKET*)fd) = sock;
+    *((TCPIP_SOCKET*)fd) = sock;
 #endif
     return 0;
 }
@@ -753,7 +752,7 @@ int tcpipPlatformClose(void *fd)
     int status = 0;
 
 #ifdef _WIN32
-    SOCKET sock = (SOCKET) fd;
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
     status = shutdown(sock, SD_BOTH);
     if (status == 0) { status = closesocket(sock); }
     return status;
