@@ -30,7 +30,7 @@ jobs:
         sudo apt-get install libusb-1.0-0
 
     - name: configure
-      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON
+      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON
 
     - name: build
       run: cmake --build build --parallel
