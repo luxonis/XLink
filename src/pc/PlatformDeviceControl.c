@@ -640,6 +640,18 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
         return -1;
     }
 
+    // Disable sigpipe reception on send
+    #if !defined(SIGPIPE)
+        // Pipe signal does not exist, there no sigpipe to ignore on send
+    #elif defined(SO_NOSIGPIPE)
+        const int set = 1;
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+    #elif defined(MSG_NOSIGNAL)
+        // handled on write
+    #else
+        #error Can not disable SIGPIPE
+    #endif
+
     struct sockaddr_in serv_addr = { 0 };
 
     size_t len = strlen(devPathWrite);
