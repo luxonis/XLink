@@ -23,6 +23,10 @@
 
 #define MAX_PATH_LENGTH (255)
 
+#if (defined(_WIN32) || defined(_WIN64))
+#include "win_time.h"
+#endif
+
 // ------------------------------------
 // Global fields. Begin.
 // ------------------------------------
