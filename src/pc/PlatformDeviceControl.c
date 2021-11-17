@@ -543,7 +543,14 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 
     if (connect(usbFdWrite, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        exit(1);
+        mvLog(MVLOG_ERROR, "connect(usbFdWrite,...) returned < 0\n");
+        if (usbFdRead >= 0)
+            close(usbFdRead);
+        if (usbFdWrite >= 0)
+            close(usbFdWrite);
+        usbFdRead = -1;
+        usbFdWrite = -1;
+        return X_LINK_PLATFORM_ERROR;
     }
     return 0;
 
