@@ -400,11 +400,19 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
         // Use send instead of write and ignore SIGPIPE
         //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
 
-#if (defined(_WIN32) | defined(_WIN64))
         int flags = 0;
-#else
-        int flags = MSG_NOSIGNAL;
-#endif
+
+        // Disable sigpipe reception on send
+        #if !defined(SIGPIPE)
+            // Pipe signal does not exist, there no sigpipe to ignore on send
+        #elif defined(SO_NOSIGPIPE)
+            // handled on socket creation
+        #elif defined(MSG_NOSIGNAL)
+            // Use flag NOSIGNAL on send call
+            flags = MSG_NOSIGNAL;
+        #else
+            #error Can not disable SIGPIPE
+        #endif
 
         TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
         rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
