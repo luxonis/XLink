@@ -34,6 +34,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <libusb.h>
+#include <signal.h>
 #endif
 
 #ifdef USE_LINK_JTAG
@@ -401,17 +402,9 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
         //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
 
         int flags = 0;
-
-        // Disable sigpipe reception on send
-        #if !defined(SIGPIPE)
-            // Pipe signal does not exist, there no sigpipe to ignore on send
-        #elif defined(SO_NOSIGPIPE)
-            // handled on socket creation
-        #elif defined(MSG_NOSIGNAL)
+        #if defined(MSG_NOSIGNAL)
             // Use flag NOSIGNAL on send call
             flags = MSG_NOSIGNAL;
-        #else
-            #error Can not disable SIGPIPE
         #endif
 
         TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
