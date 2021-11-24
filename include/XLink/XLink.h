@@ -75,6 +75,13 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
 XLinkError_t XLinkConnect(XLinkHandler_t* handler);
 
 /**
+ * @brief Puts device into bootloader mode
+ * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkBootBootloader(const deviceDesc_t* deviceDesc);
+
+/**
  * @brief Boots firmware binary from memory to the remote device
  * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
  * @param buffer - mvcmd file contents
@@ -108,6 +115,15 @@ XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmw
  */
 
 XLinkError_t XLinkResetRemote(linkId_t id);
+
+/**
+ * @brief Resets the remote device and close all open local handles for this device
+ * @warning This function should be used in a host application
+ * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+
+XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs);
 
 /**
  * @brief Closes all and release all memory

@@ -23,6 +23,10 @@
 
 #define MAX_PATH_LENGTH (255)
 
+#if (defined(_WIN32) || defined(_WIN64))
+#include "win_time.h"
+#endif
+
 // ------------------------------------
 // Global fields. Begin.
 // ------------------------------------
@@ -225,6 +229,24 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     return X_LINK_SUCCESS;
 }
 
+
+//Called only from app - per device
+XLinkError_t XLinkBootBootloader(const deviceDesc_t* deviceDesc)
+{
+
+    int connectStatus = XLinkPlatformBootBootloader(deviceDesc->name, deviceDesc->protocol);
+
+    if (connectStatus < 0) {
+        /**
+         * Connection may be unsuccessful at some amount of first tries.
+         * In this case, asserting the status provides enormous amount of logs in tests.
+         */
+        return X_LINK_COMMUNICATION_NOT_OPEN;
+    }
+
+    return X_LINK_SUCCESS;
+}
+
 XLinkError_t XLinkBootMemory(const deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size)
 {
     if (XLinkPlatformBootFirmware(deviceDesc, (const char*) buffer, size) == 0) {
@@ -277,6 +299,59 @@ XLinkError_t XLinkResetRemote(linkId_t id)
     }
 
     return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
+{
+    xLinkDesc_t* link = getLinkById(id);
+    XLINK_RET_IF(link == NULL);
+
+    if (getXLinkState(link) != XLINK_UP) {
+        mvLog(MVLOG_WARN, "Link is down, close connection to device without reset");
+        XLinkPlatformCloseRemote(&link->deviceHandle);
+        return X_LINK_COMMUNICATION_NOT_OPEN;
+    }
+
+    // Add event to reset device. After sending it, dispatcher will close fd link
+    xLinkEvent_t event = {0};
+    event.header.type = XLINK_RESET_REQ;
+    event.deviceHandle = link->deviceHandle;
+    mvLog(MVLOG_DEBUG, "sending reset remote event\n");
+
+    struct timespec start, end;
+    clock_gettime(CLOCK_REALTIME, &start);
+
+    struct timespec absTimeout = start;
+    int64_t sec = timeoutMs / 1000;
+    absTimeout.tv_sec += sec;
+    absTimeout.tv_nsec += (timeoutMs - sec) * 1000000;
+    int64_t secOver = absTimeout.tv_nsec / 1000000000;
+    absTimeout.tv_nsec -= secOver * 1000000000;
+    absTimeout.tv_sec += secOver;
+
+    xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);
+    if(ev == NULL) {
+        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
+            TypeToStr(event.header.type), event.header.id, event.header.streamName);
+        return X_LINK_ERROR;
+    }
+
+    XLinkError_t ret = DispatcherWaitEventCompleteTimeout(&link->deviceHandle, absTimeout);
+
+    if(ret != X_LINK_SUCCESS){
+        // Close remote causes to close any links which unblocks the previous events
+        // It cleans the rest of dispatcher properly
+        XLinkPlatformCloseRemote(&link->deviceHandle);
+    }
+
+    // Wait for dispatcher to be closed
+    if(XLink_sem_wait(&link->dispatcherClosedSem)) {
+        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
+        return X_LINK_ERROR;
+    }
+
+    return ret;
+
 }
 
 XLinkError_t XLinkResetAll()
@@ -436,6 +511,9 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
             return X_LINK_DEVICE_NOT_FOUND;
         case X_LINK_PLATFORM_TIMEOUT:
             return X_LINK_TIMEOUT;
+        case X_LINK_PLATFORM_ERROR:
+        case X_LINK_PLATFORM_DRIVER_NOT_LOADED:
+        case X_LINK_PLATFORM_INVALID_PARAMETERS:
         default:
             return X_LINK_ERROR;
     }
@@ -474,8 +552,8 @@ const char* XLinkProtocolToStr(XLinkProtocol_t val) {
         case X_LINK_USB_VSC: return "X_LINK_USB_VSC";
         case X_LINK_USB_CDC: return "X_LINK_USB_CDC";
         case X_LINK_PCIE: return "X_LINK_PCIE";
-        case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
         case X_LINK_IPC: return "X_LINK_IPC";
+        case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
         case X_LINK_NMB_OF_PROTOCOLS: return "X_LINK_NMB_OF_PROTOCOLS";
         case X_LINK_ANY_PROTOCOL: return "X_LINK_ANY_PROTOCOL";
         default:
@@ -509,6 +587,7 @@ const char* XLinkDeviceStateToStr(XLinkDeviceState_t val) {
         case X_LINK_BOOTED: return "X_LINK_BOOTED";
         case X_LINK_UNBOOTED: return "X_LINK_UNBOOTED";
         case X_LINK_BOOTLOADER: return "X_LINK_BOOTLOADER";
+        case X_LINK_FLASH_BOOTED: return "X_LINK_FLASH_BOOTED";
         default:
             return "INVALID_ENUM_VALUE";
             break;
