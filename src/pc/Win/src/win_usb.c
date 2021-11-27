@@ -619,6 +619,7 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
     static char device_path[1024];
 
     // Set final_addr as error first
+    final_addr[sizeof(final_addr) - 1] = 0;
     strncpy(final_addr, "<error>", sizeof(final_addr));
 
     // generate unique (full) usb bus-port path
@@ -636,6 +637,7 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
         return NULL;
     }
     // Create a local copy (which is valid until the next gen_addr_mx_id call
+    device_path[sizeof(device_path) - 1] = 0;
     strncpy(device_path, devicePath, sizeof(device_path));
     if (refDevicePath != NULL) {
         *refDevicePath = device_path;
@@ -734,6 +736,7 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
         } else {
 
             // copy serial retrieved from booted device (device path OS cached)
+            mx_id[sizeof(mx_id) - 1] = 0;
             strncpy(mx_id, booted_mx_id, sizeof(mx_id));
 
         }

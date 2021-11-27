@@ -147,13 +147,15 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                 continue;
             }
 
-            // TODO, check platform
+            // TODO(themarpe) - check platform
 
             // Everything passed, fillout details of found device
             out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
             out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
             out_foundDevices[numDevicesFound].state = state;
+            memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
             strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
+            memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
             strncpy(out_foundDevices[numDevicesFound].mxid, mxId.c_str(), sizeof(out_foundDevices[numDevicesFound].mxid));
             numDevicesFound++;
 

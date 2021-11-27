@@ -8,8 +8,6 @@ project(${TARGET_NAME} LANGUAGES C CXX)
 include(cmake/XLink.cmake)
 include(cmake/Flags.cmake)
 
-# Add option - MX ID naming instead of usb port
-option(XLINK_USE_MX_ID_NAME "Use MX ID name instead of usb port" ON)
 # Build examples
 option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 # Build tests
@@ -57,7 +55,6 @@ target_compile_definitions(${TARGET_NAME}
         USE_TCP_IP
     PUBLIC
         __PC__
-        XLINK_USE_MX_ID_NAME=${XLINK_USE_MX_ID_NAME}
 )
 
 if (ENABLE_MYRIAD_NO_BOOT)
