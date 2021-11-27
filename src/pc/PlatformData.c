@@ -24,7 +24,11 @@
 #endif
 #include "win_usb.h"
 #include "win_time.h"
-#include "win_pthread.h"
+#ifdef __GNUC__
+    #include <pthread.h>
+#else
+    #include "win_pthread.h"
+#endif
 #include <winsock2.h>
 #include <Ws2tcpip.h>
 #pragma comment(lib, "Ws2_32.lib")

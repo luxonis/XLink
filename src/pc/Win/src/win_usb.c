@@ -848,7 +848,7 @@ int usb_get_device_list(usb_dev_list** refPDevList) {
 
 
 #if (defined(_WIN32) || defined(_WIN64) )
-usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, void** device, int vid, int pid)
+int win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, void** device, int vid, int pid)
 {
     if (!addr)
         return USB_BOOT_ERROR;
@@ -906,7 +906,7 @@ usbBootError_t win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, 
             if (device) {
 
                 // device path to be retrieved from gen_addr_* call
-                const char* devicePath = NULL;
+                char* devicePath = NULL;
                 // gen addr
                 const char* caddr = gen_addr_mx_id(devs->devInfo, devs->infos + i, idProduct, &devicePath);
                 if (strncmp(addr, caddr, XLINK_MAX_NAME_SIZE) == 0)
