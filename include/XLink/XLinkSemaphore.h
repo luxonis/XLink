@@ -12,15 +12,9 @@
 #define _XLINKSEMAPHORE_H
 
 # if (defined(_WIN32) || defined(_WIN64))
-    #ifdef __GNUC__
-        #include <pthread.h>
-        #include <semaphore.h>
-        #include <synchapi.h>
-    #else
-        #include "win_pthread.h"
-        #include "win_semaphore.h"
-        #include "win_synchapi.h"
-    #endif
+#  include "win_pthread.h"
+#  include "win_semaphore.h"
+#  include "win_synchapi.h"
 # else
 #  include <pthread.h>
 #  ifdef __APPLE__

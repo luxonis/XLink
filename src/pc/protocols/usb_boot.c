@@ -15,11 +15,7 @@
 #if (defined(_WIN32) || defined(_WIN64) )
 #include "win_usb.h"
 #include "win_time.h"
-#ifdef __GNUC__
-    #include <pthread.h>
-#else
-    #include "win_pthread.h"
-#endif
+#include "win_pthread.h"
 #else
 #include <libusb.h>
 #include <unistd.h>

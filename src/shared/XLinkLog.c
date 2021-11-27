@@ -32,12 +32,7 @@
 #endif
 
 #if (defined (WINNT) || defined(_WIN32) || defined(_WIN64) )
-// Detect mingw compiler and conditionally include win_pthread.h
-#ifdef __GNUC__
-    #include <pthread.h>
-#else
-    #include "win_pthread.h"
-#endif
+#include "win_pthread.h"
 #else
 #ifndef __shave__	// SHAVE does not support threads
 #include <pthread.h>

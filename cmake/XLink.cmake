@@ -14,14 +14,6 @@ if(WIN32)
     set(XLINK_PLATFORM_INCLUDE ${XLINK_ROOT_DIR}/src/pc/Win/include)
 
     file(GLOB XLINK_PLATFORM_SRC "${XLINK_ROOT_DIR}/src/pc/Win/src/*.c")
-
-    if(MINGW)
-        # Remove win_pthread.c, win_semaphore.c, and win_synchapi.c (use MinGW impl.)
-        list(REMOVE_ITEM XLINK_PLATFORM_SRC "${XLINK_ROOT_DIR}/src/pc/Win/src/win_pthread.c")
-        list(REMOVE_ITEM XLINK_PLATFORM_SRC "${XLINK_ROOT_DIR}/src/pc/Win/src/win_semaphore.c")
-        list(REMOVE_ITEM XLINK_PLATFORM_SRC "${XLINK_ROOT_DIR}/src/pc/Win/src/win_synchapi.c")
-    endif()
-
     list(APPEND XLINK_SOURCES "${XLINK_ROOT_DIR}/src/pc/protocols/usb_mx_id.c")
     list(APPEND XLINK_SOURCES ${XLINK_PLATFORM_SRC})
 else()

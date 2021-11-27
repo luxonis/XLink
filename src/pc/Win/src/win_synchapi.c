@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#ifdef __GNUC__
+#include <synchapi.h>
+#else
 #include "win_synchapi.h"
 
 int pthread_cond_init(pthread_cond_t* __cond, const pthread_condattr_t* __cond_attr)
@@ -69,3 +72,6 @@ int pthread_cond_broadcast(pthread_cond_t *__cond)
     WakeAllConditionVariable(&__cond->_cv);
     return 0;
 }
+
+#endif
+
