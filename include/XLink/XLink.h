@@ -114,6 +114,15 @@ XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmw
 XLinkError_t XLinkResetRemote(linkId_t id);
 
 /**
+ * @brief Resets the remote device and close all open local handles for this device
+ * @warning This function should be used in a host application
+ * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+
+XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs);
+
+/**
  * @brief Closes all and release all memory
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */

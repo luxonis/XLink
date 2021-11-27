@@ -37,7 +37,6 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <ifaddrs.h>
-typedef int SOCKET;
 #endif
 
 /* **************************************************************************/
@@ -91,12 +90,10 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     {
         return X_LINK_BOOTLOADER;
     }
-    /* TODO(themarpe) - when merged with flash_booted
     else if(state == TCPIP_HOST_STATE_FLASH_BOOTED)
     {
         return X_LINK_FLASH_BOOTED;
     }
-    */
     else
     {
         return X_LINK_ANY_STATE;
@@ -104,9 +101,9 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
 }
 
 
-static tcpipHostError_t tcpip_create_socket_broadcast(SOCKET* out_sock)
+static tcpipHostError_t tcpip_create_socket(TCPIP_SOCKET* out_sock, bool broadcast, int timeout_ms)
 {
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    TCPIP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
  #if (defined(_WIN32) || defined(_WIN64) )
     if(sock == INVALID_SOCKET)
     {
@@ -121,9 +118,12 @@ static tcpipHostError_t tcpip_create_socket_broadcast(SOCKET* out_sock)
 
     // add socket option for broadcast
     int rc = 1;
-    if(setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &rc, sizeof(rc)) < 0)
+    if(broadcast)
     {
-        return TCPIP_HOST_ERROR;
+        if(setsockopt(sock, SOL_SOCKET, SO_BROADCAST, (char *) &rc, sizeof(rc)) < 0)
+        {
+            return TCPIP_HOST_ERROR;
+        }
     }
 
 #if (defined(_WIN32) || defined(_WIN64) )
@@ -137,13 +137,13 @@ static tcpipHostError_t tcpip_create_socket_broadcast(SOCKET* out_sock)
 
     // Specify timeout
 #if (defined(_WIN32) || defined(_WIN64) )
-    int read_timeout = DEVICE_RES_TIMEOUT_MSEC;
+    int read_timeout = timeout_ms;
 #else
     struct timeval read_timeout;
     read_timeout.tv_sec = 0;
-    read_timeout.tv_usec = MSEC_TO_USEC(DEVICE_RES_TIMEOUT_MSEC);
+    read_timeout.tv_usec = MSEC_TO_USEC(timeout_ms);
 #endif
-    if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof(read_timeout)) < 0)
+    if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &read_timeout, sizeof(read_timeout)) < 0)
     {
         return TCPIP_HOST_ERROR;
     }
@@ -152,9 +152,14 @@ static tcpipHostError_t tcpip_create_socket_broadcast(SOCKET* out_sock)
     return TCPIP_HOST_SUCCESS;
 }
 
+static tcpipHostError_t tcpip_create_socket_broadcast(TCPIP_SOCKET* out_sock)
+{
+    return tcpip_create_socket(out_sock, true, DEVICE_RES_TIMEOUT_MSEC);
+}
 
 
-static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
+
+static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
 
 #if (defined(_WIN32) || defined(_WIN64) )
 
@@ -184,7 +189,7 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
         MIB_IPADDRROW addr = ipaddrtable->table[i];
         broadcast.sin_addr.s_addr = (addr.dwAddr & addr.dwMask)
             | (addr.dwMask ^ (DWORD)0xffffffff);
-        sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr*) & broadcast, sizeof(broadcast));
+        sendto(sock, (const char *) &send_buffer, sizeof(send_buffer), 0, (struct sockaddr*) & broadcast, sizeof(broadcast));
 
 #ifdef HAS_DEBUG
         char ip_broadcast_str[INET_ADDRSTRLEN] = { 0 };
@@ -207,13 +212,12 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
     }
 
     // iterate linked list of interface information
-    int family;
     int socket_count = 0;
     for(struct ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
     {
-        // check for ipv4 family
-        family = ifa->ifa_addr->sa_family;
-        if(ifa->ifa_addr != NULL && family == AF_INET)
+        // check for ipv4 family, and assign only AFTER ifa_addr != NULL
+        sa_family_t family;
+        if(ifa->ifa_addr != NULL && ((family = ifa->ifa_addr->sa_family) == AF_INET))
         {
             // Check if interface is up and running
             struct ifreq if_req;
@@ -265,7 +269,7 @@ static tcpipHostError_t tcpip_send_broadcast(SOCKET sock){
 /* **************************************************************************/
 /*      Public Function Definitions                                         */
 /* **************************************************************************/
-tcpipHostError_t tcpip_close_socket(SOCKET sock)
+tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET sock)
 {
 #if (defined(_WIN32) || defined(_WIN64) )
     if(sock != INVALID_SOCKET)
@@ -292,7 +296,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
     }
 
     // Create ANY receiving socket first
-    SOCKET sock;
+    TCPIP_SOCKET sock;
     if(tcpip_create_socket_broadcast(&sock) != TCPIP_HOST_SUCCESS){
         return X_LINK_PLATFORM_ERROR;
     }
@@ -317,7 +321,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
         struct sockaddr_in dev_addr;
         uint32_t len = sizeof(dev_addr);
 
-        int ret = recvfrom(sock, &recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr*) & dev_addr, &len);
+        int ret = recvfrom(sock, (char *) &recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr*) & dev_addr, &len);
         if(ret > 0)
         {
             DEBUG("Received UDP response, length: %d\n", ret);
@@ -356,6 +360,42 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
     {
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
+
+    return X_LINK_PLATFORM_SUCCESS;
+}
+
+
+xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
+    if(name == NULL || name[0] == 0){
+        return X_LINK_PLATFORM_ERROR;
+    }
+
+    // Create socket for UDP unicast
+    TCPIP_SOCKET sock;
+    if(tcpip_create_socket(&sock, false, 100) != TCPIP_HOST_SUCCESS){
+        return X_LINK_PLATFORM_ERROR;
+    }
+
+    // TODO(themarpe) - Add IPv6 capabilities
+    // send unicast reboot to bootloader
+    struct sockaddr_in device_address;
+    device_address.sin_family = AF_INET;
+    device_address.sin_port = htons(BROADCAST_UDP_PORT);
+
+    // Convert address to binary
+    #if (defined(_WIN32) || defined(__USE_W32_SOCKETS)) && (_WIN32_WINNT <= 0x0501)
+        device_address.sin_addr.s_addr = inet_addr(name);  // for XP
+    #else
+        inet_pton(AF_INET, name, &device_address.sin_addr.s_addr);
+    #endif
+
+    tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_RESET;
+    if(sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr *) &device_address, sizeof(device_address)) < 0)
+    {
+        return X_LINK_PLATFORM_ERROR;
+    }
+
+    tcpip_close_socket(sock);
 
     return X_LINK_PLATFORM_SUCCESS;
 }

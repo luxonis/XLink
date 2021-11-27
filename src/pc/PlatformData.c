@@ -13,6 +13,7 @@
 #include "XLinkStringUtils.h"
 #include "usb_host.h"
 #include "pcie_host.h"
+#include "tcpip_host.h"
 
 #define MVLOG_UNIT_NAME PlatformData
 #include "XLinkLog.h"
@@ -33,7 +34,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <libusb.h>
-typedef int SOCKET;
+#include <signal.h>
 #endif
 
 #ifdef USE_LINK_JTAG
@@ -370,7 +371,7 @@ static int tcpipPlatformRead(void *fd, void *data, int size)
 #if defined(USE_TCP_IP)
     int nread = 0;
     int rc = -1;
-    SOCKET sock = (SOCKET) ((intptr_t) fd);
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
 
     while(nread < size)
     {
@@ -394,18 +395,18 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
 #if defined(USE_TCP_IP)
     int byteCount = 0;
     int rc = -1;
-    SOCKET sock = (SOCKET) ((intptr_t) fd);
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
 
     while(byteCount < size)
     {
         // Use send instead of write and ignore SIGPIPE
         //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
 
-#if (defined(_WIN32) | defined(_WIN64))
         int flags = 0;
-#else
-        int flags = MSG_NOSIGNAL;
-#endif
+        #if defined(MSG_NOSIGNAL)
+            // Use flag NOSIGNAL on send call
+            flags = MSG_NOSIGNAL;
+        #endif
 
         rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
         if(rc <= 0)
