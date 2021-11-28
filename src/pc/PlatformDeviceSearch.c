@@ -47,7 +47,7 @@ static xLinkPlatformErrorCode_t getTcpIpDevices(const deviceDesc_t in_deviceRequ
 // ------------------------------------
 
 xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
-                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
+                                                     deviceDesc_t* out_foundDevices, unsigned sizeFoundDevices,
                                                      unsigned int *out_amountOfFoundDevices) {
     memset(out_foundDevices, sizeFoundDevices, sizeof(deviceDesc_t));
     xLinkPlatformErrorCode_t USB_rc;
@@ -74,22 +74,24 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             USB_rc = getUSBDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
             *out_amountOfFoundDevices += numFoundDevices;
             out_foundDevices += numFoundDevices;
-            sizeFoundDevices -= numFoundDevices;
             // Found enough devices, return
             if (numFoundDevices >= sizeFoundDevices) {
                 return X_LINK_PLATFORM_SUCCESS;
+            } else {
+                sizeFoundDevices -= numFoundDevices;
             }
 
 
             /* TODO(themarpe) - reenable PCIe
             PCIe_rc = getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
             // Found enough devices, return
+            out_foundDevices += numFoundDevices;
             if (numFoundDevices >= sizeFoundDevices) {
                 return X_LINK_PLATFORM_SUCCESS;
+            } else {
+                sizeFoundDevices -= numFoundDevices;
             }
             *out_amountOfFoundDevices += numFoundDevices;
-            out_foundDevices += numFoundDevices;
-            sizeFoundDevices -= numFoundDevices;
             */
 
             // Try find TCPIP device
@@ -100,6 +102,8 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             // Found enough devices, return
             if (numFoundDevices >= sizeFoundDevices) {
                 return X_LINK_PLATFORM_SUCCESS;
+            } else {
+                sizeFoundDevices -= numFoundDevices;
             }
 
             if(*out_amountOfFoundDevices <= 0){

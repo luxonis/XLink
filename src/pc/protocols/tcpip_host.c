@@ -345,7 +345,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 
 
     // loop to receive message response from devices
-    int num_devices_match = 0;
+    unsigned num_devices_match = 0;
     // Loop through all sockets and received messages that arrived
     double t1 = seconds();
     do {

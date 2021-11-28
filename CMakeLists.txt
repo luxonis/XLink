@@ -76,6 +76,9 @@ else()
     target_compile_features(${TARGET_NAME} INTERFACE cxx_std_11)
 endif()
 
+# Add flags
+add_default_flags(${TARGET_NAME})
+
 # Examples
 if(XLINK_BUILD_EXAMPLES)
     add_subdirectory(examples)
