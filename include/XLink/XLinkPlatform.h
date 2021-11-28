@@ -41,8 +41,8 @@ void XLinkPlatformInit();
  * @brief Return Myriad device description which meets the requirements
  */
 xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
-                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                     unsigned int *out_amountOfFoundDevices);
+                                                     deviceDesc_t* out_foundDevices, unsigned sizeFoundDevices,
+                                                     unsigned *out_amountOfFoundDevices);
 
 xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
     XLinkDeviceState_t state,

@@ -8,8 +8,6 @@ project(${TARGET_NAME} LANGUAGES C CXX)
 include(cmake/XLink.cmake)
 include(cmake/Flags.cmake)
 
-# Add option - MX ID naming instead of usb port
-option(XLINK_USE_MX_ID_NAME "Use MX ID name instead of usb port" ON)
 # Build examples
 option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 # Build tests
@@ -57,7 +55,6 @@ target_compile_definitions(${TARGET_NAME}
         USE_TCP_IP
     PUBLIC
         __PC__
-        XLINK_USE_MX_ID_NAME=${XLINK_USE_MX_ID_NAME}
 )
 
 if (ENABLE_MYRIAD_NO_BOOT)
@@ -66,7 +63,21 @@ if (ENABLE_MYRIAD_NO_BOOT)
         NO_BOOT)
 endif()
 
+# Set C99 standard
 set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 99)
+# Set compiler features (c++11), and disables extensions (g++11)
+set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 11)
+set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD_REQUIRED ON)
+set_property(TARGET ${TARGET_NAME} PROPERTY CXX_EXTENSIONS OFF)
+# Add interface transitive property (C++11)
+if(${CMAKE_VERSION} VERSION_LESS "3.8.0")
+    target_compile_features(${TARGET_NAME} INTERFACE cxx_range_for)
+else()
+    target_compile_features(${TARGET_NAME} INTERFACE cxx_std_11)
+endif()
+
+# Add flags
+add_default_flags(${TARGET_NAME})
 
 # Examples
 if(XLINK_BUILD_EXAMPLES)
