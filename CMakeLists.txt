@@ -1,7 +1,16 @@
 # Copyright (C) 2018-2021 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
-#
+# With additions of Luxonis
+
 cmake_minimum_required(VERSION 3.2)
+
+include("cmake/HunterGate.cmake")
+HunterGate(
+    URL "https://github.com/cpp-pm/hunter/archive/v0.23.258.tar.gz"
+    SHA1 "062a19ab13ce8dffa9a882b6ce3e43bdabdf75d3"
+    LOCAL # Local config for dependencies
+)
+
 set(TARGET_NAME "XLink")
 project(${TARGET_NAME} LANGUAGES C CXX)
 
@@ -19,7 +28,16 @@ add_flag_source(src/shared/XLinkDevice.c "-Werror=switch-enum")
 if(WIN32)
     target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
 else()
-    target_link_libraries(${TARGET_NAME} PRIVATE Threads::Threads)
+    # Add libusb dependency
+    hunter_add_package(libusb)
+    find_package(libusb-1.0 CONFIG REQUIRED)
+
+    target_link_libraries(${TARGET_NAME}
+        PRIVATE
+            Threads::Threads
+            PkgConfig::libusb-1.0
+    )
+
 endif()
 
 target_include_directories(${TARGET_NAME}
