@@ -25,19 +25,16 @@ option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
 add_flag_source(src/shared/XLinkDevice.c "-Werror=switch-enum")
 
+# Add libusb dependency
+hunter_add_package(luxonis-libusb)
+find_package(usb-1.0 CONFIG REQUIRED)
+target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
+
 if(WIN32)
     target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
 else()
-    # Add libusb dependency
-    hunter_add_package(libusb)
-    find_package(libusb-1.0 CONFIG REQUIRED)
-
-    target_link_libraries(${TARGET_NAME}
-        PRIVATE
-            Threads::Threads
-            PkgConfig::libusb-1.0
-    )
-
+    find_package(Threads REQUIRED)
+    target_link_libraries(${TARGET_NAME} PRIVATE Threads::Threads)
 endif()
 
 target_include_directories(${TARGET_NAME}

@@ -16,9 +16,7 @@
 #include <cstring>
 
 // libraries
-// After CMake libusb gets introduced
-//#include <libusb-1.0/libusb.h>
-#include <libusb.h>
+#include <libusb-1.0/libusb.h>
 
 constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
@@ -59,10 +57,10 @@ static UsbSetupPacket bootBootloaderPacket{
 
 
 static std::mutex mutex;
+static libusb_context* context;
 
-static libusb_context context;
 int usbInitialize(){
-    libusb_init(&context);
+    return libusb_init(&context);
 }
 
 struct pair_hash {

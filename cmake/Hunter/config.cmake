@@ -1,9 +1,9 @@
 # libusb without udev
 hunter_config(
-    libusb
-    VERSION "1.0.24"
-    URL "https://github.com/libusb/libusb/archive/v1.0.24.tar.gz"
-    SHA1 "125ed27fa2590048ee47adbab930eb28c39fab09"
+    luxonis-libusb
+    VERSION "1.0.24-cmake"
+    URL "https://github.com/luxonis/libusb/archive/2ea8c929dd28db443f8b7e8cdc37b12476f80eac.tar.gz"
+    SHA1 "e0f07065a9b232cd65d00434ee6eadd5d8c5028b"
     CMAKE_ARGS
-        EXTRA_FLAGS=--disable-udev
+        WITH_UDEV=OFF
 )

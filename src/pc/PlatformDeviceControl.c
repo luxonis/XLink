@@ -15,16 +15,6 @@
 #define MVLOG_UNIT_NAME PlatformDeviceControl
 #include "XLinkLog.h"
 
-#if (defined(_WIN32) || defined(_WIN64))
-#include "win_time.h"
-
-#define OPEN_DEV_ERROR_MESSAGE_LENGTH 128
-
-#else
-#include <unistd.h>
-#include <libusb.h>
-#endif  /*defined(_WIN32) || defined(_WIN64)*/
-
 #ifndef USE_USB_VSC
 #include <sys/wait.h>
 #include <sys/un.h>
