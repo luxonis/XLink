@@ -59,6 +59,12 @@ static UsbSetupPacket bootBootloaderPacket{
 
 
 static std::mutex mutex;
+
+static libusb_context context;
+int usbInitialize(){
+    libusb_init(&context);
+}
+
 struct pair_hash {
     template <class T1, class T2>
     std::size_t operator() (const std::pair<T1, T2> &pair) const {
@@ -631,40 +637,6 @@ bool usbLinkBootBootloader(const char *path) {
     libusb_device_handle *h = NULL;
 
 
-#if (defined(_WIN32) || defined(_WIN64) ) && 0
-
-    char last_open_dev_err[OPEN_DEV_ERROR_MESSAGE_LENGTH] = {0};
-    h = usb_open_device(dev, NULL, 0, last_open_dev_err, OPEN_DEV_ERROR_MESSAGE_LENGTH);
-    int libusb_rc = ((h != NULL) ? (0) : (-1));
-    if (libusb_rc < 0)
-    {
-        if(last_open_dev_err[0])
-            mvLog(MVLOG_DEBUG, "Last opened device name: %s", last_open_dev_err);
-
-        usb_close_device(h);
-        usb_free_device(dev);
-        return 0;
-    }
-
-    // Make control transfer
-    uint32_t transferred = 0;
-    usb_control_transfer(h,
-        bootBootloaderPacket.requestType,   // bmRequestType: device-directed
-        bootBootloaderPacket.request,   // bRequest: custom
-        bootBootloaderPacket.value, // wValue: custom
-        bootBootloaderPacket.index, // wIndex
-        NULL,   // data pointer
-        0,      // data size
-        &transferred,
-        1000    // timeout [ms]
-    );
-
-    // Ignore error, close the device
-    usb_close_device(h);
-    usb_free_device(dev);
-
-#else
-
     int libusb_rc = libusb_open(dev, &h);
     if (libusb_rc < 0)
     {
@@ -686,8 +658,6 @@ bool usbLinkBootBootloader(const char *path) {
     // Ignore error and close device
     libusb_unref_device(dev);
     libusb_close(h);
-
-#endif
 
     return true;
 

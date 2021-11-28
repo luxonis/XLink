@@ -95,12 +95,10 @@ static int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char*
 
 void XLinkPlatformInit()
 {
+    usbInitialize();
 
-        libusb_init(NULL);
-#if (defined(_WIN32) || defined(_WIN64)) && 0
-    initialize_usb_boot();
-#endif
-
+    // TODO(themarpe) - move to tcpip_host
+    //tcpipInitialize();
 #if (defined(_WIN32) || defined(_WIN64)) && defined(USE_TCP_IP)
     WSADATA wsa_data;
     WSAStartup(MAKEWORD(2,2), &wsa_data);
