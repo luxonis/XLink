@@ -5,9 +5,6 @@
 // Allow windows.h to include more things for pcie case
 #undef WIN32_LEAN_AND_MEAN
 
-// Required for pcie
-#pragma comment(lib, "setupapi.lib")
-
 #include "XLinkPlatform.h"
 
 #include <stdio.h>
@@ -21,6 +18,8 @@
 #include <ctype.h>
 
 #if (defined(_WIN32) || defined(_WIN64))
+// Required for pcie
+#pragma comment(lib, "setupapi.lib")
 #include "win_time.h"
 #include <windows.h>
 #include <setupapi.h>
