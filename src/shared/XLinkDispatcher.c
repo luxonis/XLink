@@ -82,6 +82,8 @@ typedef struct {
     eventQueueHandler_t lQueue; //local queue
     eventQueueHandler_t rQueue; //remote queue
     localSem_t eventSemaphores[MAXIMUM_SEMAPHORES];
+
+    uint32_t dispatcherLinkDown;
 } xLinkSchedulerState_t;
 
 
@@ -102,6 +104,7 @@ xLinkSchedulerState_t schedulerState[MAX_SCHEDULERS];
 sem_t addSchedulerSem;
 
 static pthread_mutex_t clean_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t reset_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // ------------------------------------
 // Global fields declaration. End.
@@ -215,6 +218,7 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
     schedulerState[idx].queueProcPriority = 0;
 
     schedulerState[idx].resetXLink = 0;
+    schedulerState[idx].dispatcherLinkDown = 0;
     schedulerState[idx].deviceHandle = *deviceHandle;
     schedulerState[idx].schedulerId = idx;
 
@@ -304,6 +308,15 @@ int DispatcherClean(xLinkDeviceHandle_t *deviceHandle) {
     XLINK_RET_IF(curr == NULL);
 
     return dispatcherClean(curr);
+}
+
+int DispatcherReset(xLinkDeviceHandle_t *deviceHandle) {
+    XLINK_RET_IF(deviceHandle == NULL);
+
+    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+    XLINK_RET_IF(curr == NULL);
+
+    return dispatcherReset(curr);
 }
 
 xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
@@ -663,7 +676,7 @@ static void* eventSchedulerRun(void* ctx)
     }
 
     if (dispatcherReset(curr) != 0) {
-        mvLog(MVLOG_WARN, "Failed to reset");
+        mvLog(MVLOG_WARN, "Failed to reset or was already reset");
     }
 
     if (curr->resetXLink != 1) {
@@ -940,6 +953,16 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
 {
     ASSERT_XLINK(curr != NULL);
 
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&reset_mutex), 1);
+    if (curr->dispatcherLinkDown == 1) {
+        mvLog(MVLOG_WARN,"Scheduler has already been reset");
+        if(pthread_mutex_unlock(&reset_mutex) != 0) {
+            mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex");
+        }
+
+        return 1;
+    }
+
     glControlFunc->closeDeviceFd(&curr->deviceHandle);
     if(dispatcherClean(curr)) {
         mvLog(MVLOG_INFO, "Failed to clean dispatcher");
@@ -951,7 +974,15 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
     }
 
     glControlFunc->closeLink(curr->deviceHandle.xLinkFD, 1);
+
+    // Set dispatcher link state "down", to disallow resetting again
+    curr->dispatcherLinkDown = 1;
     mvLog(MVLOG_DEBUG,"Reset Successfully\n");
+
+    if(pthread_mutex_unlock(&reset_mutex) != 0) {
+        mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
+    }
+
     return 0;
 }
 
