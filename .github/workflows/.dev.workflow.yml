@@ -20,8 +20,8 @@ jobs:
         os: [macos-latest, windows-latest, ubuntu-latest]
         compiler: [default]
         include:
-          - compiler: mingw
-            os: windows-latest
+          - os: windows-latest
+            compiler: mingw
 
     steps:
     - uses: actions/checkout@v2
