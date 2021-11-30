@@ -10,7 +10,7 @@ extern "C"
 {
 #endif
 
-#ifdef NDEBUG  // Release configuration
+#if 1  // Release configuration
 
     #ifndef ASSERT_XLINK
     #define ASSERT_XLINK(condition) do { \
