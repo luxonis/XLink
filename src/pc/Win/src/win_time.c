@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#ifdef __GNUC__
+#include <sys/time.h>
+#include <unistd.h>
+#else
 #include "win_time.h"
 
 int clock_gettime(int dummy, struct timespec *spec)
@@ -13,3 +17,6 @@ int clock_gettime(int dummy, struct timespec *spec)
     spec->tv_nsec = wintime % 10000000LL * 100;      //nano-seconds
     return 0;
 }
+
+#endif // __GNUC__
+
