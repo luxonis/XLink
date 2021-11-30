@@ -5,9 +5,8 @@ on:
     branches-ignore:
       - xlink_upstream
   pull_request:
-    branches:
-      - master
-      - develop
+    branches-ignore:
+      - xlink_upstream
 
 
 
