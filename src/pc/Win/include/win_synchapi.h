@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#ifdef __GNUC__
+#include <synchapi.h>
+#else
 #ifndef WIN_SYNCHAPI
 #define WIN_SYNCHAPI
 
@@ -39,3 +42,5 @@ int pthread_cond_broadcast(pthread_cond_t* __cond);
 #endif
 
 #endif /* WIN_MUTEX */
+#endif
+

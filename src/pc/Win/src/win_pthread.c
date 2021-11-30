@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#ifdef __GNUC__
+#include <pthread.h>
+#else
 #include "win_pthread.h"
 #include <string.h>
 #include <stdlib.h>
@@ -220,3 +223,6 @@ int pthread_getname_np(pthread_t target_thread, char *buf, size_t len)
     mv_strncpy(buf, len, data, len - 1);
     return 0;
 }
+
+#endif
+
