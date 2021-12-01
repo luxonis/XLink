@@ -40,9 +40,8 @@ jobs:
 
     - name: Setup MinGW compiler
       if: matrix.compiler == 'mingw'
-      uses: egor-tensin/setup-mingw@v2
-      with:
-        platform: x64
+      run: |
+        choco install mingw
 
     - name: configure
       if: matrix.compiler == 'default'
