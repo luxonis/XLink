@@ -81,7 +81,7 @@ int __attribute__ ((unused)) logprintf(mvLog_t curLogLvl, mvLog_t lvl, const cha
     logprintf(MVLOGLEVEL(MVLOG_UNIT_NAME), lvl, __func__, __LINE__, format, ##__VA_ARGS__)
 
 // Set log level for the current unit. Note that the level must be smaller than the global default
-inline void mvLogLevelSet(mvLog_t lvl){
+static inline void mvLogLevelSet(mvLog_t lvl){
     if(lvl < MVLOG_LAST){
         MVLOGLEVEL(MVLOG_UNIT_NAME) = lvl;
     }

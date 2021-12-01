@@ -498,7 +498,11 @@ int DispatcherUnblockEvent(eventId_t id, xLinkEventType_t type, streamId_t strea
 int pthread_t_compare(pthread_t a, pthread_t b)
 {
 #if (defined(_WIN32) || defined(_WIN64) )
+#ifdef __GNUC__
+    return  (a == b);
+#else
     return ((a.tid == b.tid));
+#endif
 #else
     return  (a == b);
 #endif

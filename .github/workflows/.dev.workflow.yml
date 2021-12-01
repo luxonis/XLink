@@ -5,9 +5,8 @@ on:
     branches-ignore:
       - xlink_upstream
   pull_request:
-    branches:
-      - master
-      - develop
+    branches-ignore:
+      - xlink_upstream
 
 
 
@@ -18,6 +17,10 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
+        compiler: [default]
+        include:
+          - os: windows-latest
+            compiler: mingw
 
     steps:
     - uses: actions/checkout@v2
@@ -35,8 +38,19 @@ jobs:
         sudo apt-get install libusb-1.0-0-dev
         sudo apt-get install libusb-1.0-0
 
+    - name: Setup MinGW compiler
+      if: matrix.compiler == 'mingw'
+      run: |
+        choco install mingw
+        choco upgrade mingw
+
     - name: configure
+      if: matrix.compiler == 'default'
       run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON
+
+    - name: configure
+      if: matrix.compiler == 'mingw'
+      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -G"MinGW Makefiles"
 
     - name: build
       run: cmake --build build --parallel

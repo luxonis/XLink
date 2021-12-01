@@ -36,6 +36,8 @@ if(MINGW)
         PUBLIC
             libwinusb.a
             libsetupapi.a
+            ws2_32
+            Iphlpapi.lib
     )
 endif()
 

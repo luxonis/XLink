@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#ifdef __GNUC__
+#include <pthread.h>
+#else
 #ifndef WIN_PTHREADS
 #define WIN_PTHREADS
 
@@ -95,3 +98,5 @@ int pthread_detach(pthread_t thread);
 #endif
 
 #endif /* WIN_PTHREADS */
+#endif
+
