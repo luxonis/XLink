@@ -42,6 +42,7 @@ jobs:
       if: matrix.compiler == 'mingw'
       run: |
         choco install mingw
+        choco upgrade mingw
 
     - name: configure
       if: matrix.compiler == 'default'
