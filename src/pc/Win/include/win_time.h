@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#ifdef __GNUC__
+#include <sys/time.h>
+#include <unistd.h>
+#else
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -36,3 +40,6 @@ int clock_gettime(int, struct timespec *);
 #ifdef __cplusplus
 }
 #endif
+
+#endif // __GNUC__
+
