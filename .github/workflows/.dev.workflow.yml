@@ -38,11 +38,11 @@ jobs:
         sudo apt-get install libusb-1.0-0-dev
         sudo apt-get install libusb-1.0-0
 
-    # - name: Setup MinGW compiler
-    #   if: matrix.compiler == 'mingw'
-    #   run: |
-    #     choco install mingw
-    #     choco upgrade mingw
+    - name: Setup MinGW compiler
+      if: matrix.compiler == 'mingw'
+      run: |
+        choco install mingw
+        choco upgrade mingw
 
     - name: configure
       if: matrix.compiler == 'default'
