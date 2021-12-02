@@ -336,7 +336,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     struct timespec absTimeout = start;
     int64_t sec = timeoutMs / 1000;
     absTimeout.tv_sec += sec;
-    absTimeout.tv_nsec += (timeoutMs - sec) * 1000000;
+    absTimeout.tv_nsec += (timeoutMs - (sec*1000)) * 1000000;
     int64_t secOver = absTimeout.tv_nsec / 1000000000;
     absTimeout.tv_nsec -= secOver * 1000000000;
     absTimeout.tv_sec += secOver;
@@ -353,7 +353,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     if(ret != X_LINK_SUCCESS){
         // Close remote causes to close any links which unblocks the previous events
         // It cleans the rest of dispatcher properly
-        XLinkPlatformCloseRemote(&link->deviceHandle);
+        DispatcherReset(&link->deviceHandle);
     }
 
     // Wait for dispatcher to be closed
