@@ -11,8 +11,18 @@ HunterGate(
     LOCAL # Local config for dependencies
 )
 
+### Constants
 set(TARGET_NAME "XLink")
+
+# Create project
 project(${TARGET_NAME} LANGUAGES C CXX)
+
+set(PROJECT_EXPORT_GROUP "${PROJECT_NAME}Targets")
+
+# Set default installation directory
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "Installation Directory" FORCE)
+endif()
 
 include(cmake/XLink.cmake)
 include(cmake/Flags.cmake)
@@ -21,13 +31,18 @@ include(cmake/Flags.cmake)
 option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 # Build tests
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
+# Debug option
+set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instead of Hunter")
 
+# add_library(${TARGET_NAME} ${XLINK_SOURCES})
+# TMPTMP
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
 add_flag_source(src/shared/XLinkDevice.c "-Werror=switch-enum")
 
-# Add libusb dependency
-hunter_add_package(luxonis-libusb)
-find_package(usb-1.0 CONFIG REQUIRED)
+# Add dependencies
+include(cmake/XLinkDependencies.cmake)
+
+# Link to libusb
 target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
 
 if(WIN32)
@@ -47,13 +62,17 @@ endif()
 
 target_include_directories(${TARGET_NAME}
     PUBLIC
-        $<INSTALL_INTERFACE:include>
+        "$<INSTALL_INTERFACE:include>"
         "$<BUILD_INTERFACE:${XLINK_INCLUDE}>"
     PRIVATE
         ${XLINK_PLATFORM_INCLUDE}
         ${XLINK_PRIVATE_INCLUDE}
         ${XLINK_INCLUDE}/XLink
     )
+
+if(XLINK_LIBUSB_LOCAL)
+    target_compile_definitions(${TARGET_NAME} PRIVATE XLINK_LIBUSB_LOCAL)
+endif()
 
 target_compile_definitions(${TARGET_NAME}
     PRIVATE
@@ -97,21 +116,43 @@ if(XLINK_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
+# Installation
+
 include(GNUInstallDirs)
-install(TARGETS ${TARGET_NAME}
-    EXPORT "${TARGET_NAME}Config"
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-)
 
+# Export targets (capability to import current build directory)
+export(TARGETS ${TARGET_NAME} FILE "${PROJECT_NAME}Targets.cmake")
+
+# Dependencies file
+configure_file("cmake/${PROJECT_NAME}Dependencies.cmake" ${PROJECT_NAME}Dependencies.cmake COPYONLY)
+
+# Configure config file (one for exporting build directory, one for installation)
+file(RELATIVE_PATH XLINK_DEPENDENCIES_INSTALLATION_PATH_REL "${CMAKE_CURRENT_BINARY_DIR}" "${HUNTER_INSTALL_PREFIX}")
+configure_file(cmake/${PROJECT_NAME}Config.cmake.in ${PROJECT_NAME}Config.cmake @ONLY)
+
+# Config for installation
+set(XLINK_DEPENDENCIES_INSTALLATION_PATH_REL "./dependencies")
+configure_file(cmake/${PROJECT_NAME}Config.cmake.in _install/${PROJECT_NAME}Config.cmake @ONLY)
+
+# Install targets
+install(
+    TARGETS ${TARGET_NAME}
+    EXPORT ${PROJECT_EXPORT_GROUP}
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+)
+#Install include folder
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-set(config_install_dir "${CMAKE_INSTALL_LIBDIR}/cmake/${TARGET_NAME}")
-export(TARGETS
-        ${TARGET_NAME}
-    FILE "${config_install_dir}/${TARGET_NAME}Config.cmake"
+# Install Hunter dependencies
+install(DIRECTORY "${HUNTER_INSTALL_PREFIX}/" DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/dependencies")
+# Install export group (information about targets)
+install(EXPORT ${PROJECT_EXPORT_GROUP}
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
 )
-install(EXPORT
-    "${TARGET_NAME}Config"
-    DESTINATION "${config_install_dir}"
+# Install CMake specific files
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/_install/${PROJECT_NAME}Config.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Dependencies.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
 )

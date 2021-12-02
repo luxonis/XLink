@@ -81,7 +81,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
           prevEvent.deviceHandle.xLinkFD);
 
     if(rc < 0) {
-        mvLog(MVLOG_DEBUG,"%s() Read failed %d\n", __func__, (int)rc);
+        mvLog(MVLOG_WARN,"%s() Read failed %d\n", __func__, (int)rc);
         return rc;
     }
 

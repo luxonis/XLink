@@ -16,7 +16,11 @@
 #include <cstring>
 
 // libraries
+#ifdef XLINK_LIBUSB_LOCAL
+#include <libusb.h>
+#else
 #include <libusb-1.0/libusb.h>
+#endif
 
 constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
@@ -59,7 +63,14 @@ static UsbSetupPacket bootBootloaderPacket{
 static std::mutex mutex;
 static libusb_context* context;
 
-int usbInitialize(){
+int usbInitialize(void* options){
+    #ifdef __ANDROID__
+        // If Android, set the options as JavaVM (to default context)
+        if(options != nullptr){
+            libusb_set_option(NULL, libusb_option::LIBUSB_OPTION_ANDROID_JAVAVM, options);
+        }
+    #endif
+
     return libusb_init(&context);
 }
 
@@ -81,17 +92,6 @@ static std::string getLibusbDeviceMxId(XLinkDeviceState_t state, std::string dev
 static const char* xlink_libusb_strerror(int x);
 
 
-void __attribute__((constructor)) usb_library_load()
-{
-    initialized = !libusb_init(NULL);
-}
-
-void __attribute__((destructor)) usb_library_unload()
-{
-    if(initialized) {
-        libusb_exit(NULL);
-    }
-}
 
 extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
@@ -101,7 +101,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
 
     // Get list of usb devices
     static libusb_device **devs = NULL;
-    auto numDevices = libusb_get_device_list(NULL, &devs);
+    auto numDevices = libusb_get_device_list(context, &devs);
     if(numDevices < 0) {
         mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
         return X_LINK_PLATFORM_ERROR;
@@ -189,7 +189,7 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libu
 
     // Get list of usb devices
     static libusb_device **devs = NULL;
-    auto numDevices = libusb_get_device_list(NULL, &devs);
+    auto numDevices = libusb_get_device_list(context, &devs);
     if(numDevices < 0) {
         mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
         return X_LINK_PLATFORM_ERROR;
@@ -563,13 +563,22 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
-    h = usb_open_device(dev, &endpoint);
+    auto t2 = steady_clock::now();
+    do {
+        if((h = usb_open_device(dev, &endpoint)) != nullptr){
+            break;
+        }
+        std::this_thread::sleep_for(milliseconds(100));
+    } while(steady_clock::now() - t2 < DEFAULT_CONNECT_TIMEOUT);
 
-    rc = send_file(h, endpoint, mvcmd, size, bcdusb);
     if (h) {
+        rc = send_file(h, endpoint, mvcmd, size, bcdusb);
         libusb_release_interface(h, 0);
         libusb_close(h);
+    } else {
+        rc = X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
     }
+
     if (dev) {
         libusb_unref_device(dev);
     }

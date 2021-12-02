@@ -83,9 +83,9 @@ static int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char*
 // XLinkPlatform API implementation. Begin.
 // ------------------------------------
 
-void XLinkPlatformInit()
+void XLinkPlatformInit(void* options)
 {
-    usbInitialize();
+    usbInitialize(options);
 
     // TODO(themarpe) - move to tcpip_host
     //tcpipInitialize();

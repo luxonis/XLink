@@ -54,6 +54,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
     xLinkPlatformErrorCode_t PCIe_rc;
     xLinkPlatformErrorCode_t TCPIP_rc;
     unsigned numFoundDevices = 0;
+    *out_amountOfFoundDevices = 0;
 
     switch (in_deviceRequirements.protocol){
         case X_LINK_USB_CDC:
@@ -71,6 +72,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
         case X_LINK_ANY_PROTOCOL:
 
             // Find first correct USB Device
+            numFoundDevices = 0;
             USB_rc = getUSBDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
             *out_amountOfFoundDevices += numFoundDevices;
             out_foundDevices += numFoundDevices;
@@ -83,6 +85,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
 
 
             /* TODO(themarpe) - reenable PCIe
+            numFoundDevices = 0;
             PCIe_rc = getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
             // Found enough devices, return
             out_foundDevices += numFoundDevices;
@@ -95,6 +98,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             */
 
             // Try find TCPIP device
+            numFoundDevices = 0;
             TCPIP_rc = getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
             *out_amountOfFoundDevices += numFoundDevices;
             out_foundDevices += numFoundDevices;

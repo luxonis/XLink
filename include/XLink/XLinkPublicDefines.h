@@ -109,6 +109,7 @@ typedef struct XLinkGlobalHandler_t
 {
     int profEnable;
     XLinkProf_t profilingData;
+    void* options;
 
     //Deprecated fields. Begin.
     int loglevel;

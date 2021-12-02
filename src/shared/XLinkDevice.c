@@ -44,6 +44,8 @@ linkId_t nextUniqueLinkId = 0; //incremental number, doesn't get decremented.
 // ------------------------------------
 
 
+static pthread_mutex_t init_mutex = PTHREAD_MUTEX_INITIALIZER;
+static uint32_t init_once = 0;
 
 // ------------------------------------
 // Helpers declaration. Begin.
@@ -70,6 +72,12 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc);
 
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
 {
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&init_mutex), X_LINK_ERROR);
+    if(init_once){
+        return X_LINK_SUCCESS;
+    }
+    init_once = 1;
+
 #ifndef __PC__
     mvLogLevelSet(MVLOG_FATAL);
     mvLogDefaultLevelSet(MVLOG_FATAL);
@@ -83,7 +91,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     }
     int i;
 
-    XLinkPlatformInit();
+    XLinkPlatformInit(globalHandler->options);
 
     //Using deprecated fields. Begin.
     int loglevel = globalHandler->loglevel;
@@ -137,6 +145,11 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
 
     sem_wait(&pingSem);
 #endif
+
+    int status = pthread_mutex_unlock(&init_mutex);
+    if(status){
+        return X_LINK_ERROR;
+    }
 
     return X_LINK_SUCCESS;
 }
