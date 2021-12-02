@@ -240,6 +240,11 @@ std::string getLibusbDevicePath(libusb_device *dev) {
         // shouldn't happen!
         return "<error>";
     }
+    if(count == 0){
+        // Only bus number is available
+        return devicePath;
+    }
+
     for (int i = 0; i < count - 1; i++){
         devicePath += std::to_string(portNumbers[i]) + ".";
     }

@@ -404,12 +404,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     // return total device found
     *device_count = num_devices_match;
 
-    // if at least one device matched, return OK otherwise return not found
-    if(num_devices_match <= 0)
-    {
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
-    }
-
+    // Return success if search was successful (even if no devices found)
     return X_LINK_PLATFORM_SUCCESS;
 }
 

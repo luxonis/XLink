@@ -110,15 +110,11 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
                 sizeFoundDevices -= numFoundDevices;
             }
 
-            if(*out_amountOfFoundDevices <= 0){
-                return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
-            }
-
             return X_LINK_PLATFORM_SUCCESS;
 
         default:
             mvLog(MVLOG_WARN, "Unknown protocol");
-            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
 
     return X_LINK_PLATFORM_SUCCESS;

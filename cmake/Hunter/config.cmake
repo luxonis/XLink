@@ -2,8 +2,8 @@
 hunter_config(
     libusb-luxonis
     VERSION "1.0.24-cmake"
-    URL "https://github.com/luxonis/libusb/archive/57dc3a52a1ce09f617bd282c66c25485961e3361.tar.gz"
-    SHA1 "098ee4702ceee9ff65bb4e1f69280b3eccc38c95"
+    URL "https://github.com/luxonis/libusb/archive/603ea0c74b6119c8fec25c20d4358462ee1309d4.tar.gz"
+    SHA1 "46ed5287889efa4e78d23741facd70fb432d6914"
     CMAKE_ARGS
         WITH_UDEV=OFF
 )
