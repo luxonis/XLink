@@ -114,7 +114,11 @@ mvLog_t MVLOGLEVEL(default) = MVLOG_ERROR;
 void XLinkLogGetThreadName(char *buf, size_t len);
 
 void XLinkLogGetThreadName(char *buf, size_t len){
+#if !defined(__ANDROID__) || (defined(HAVE_ANDROID_PTHREAD_GETNAME_NP))
     pthread_getname_np(pthread_self(), buf, len);
+#else
+    buf[0] = 0;
+#endif
 }
 
 #ifdef __shave__
