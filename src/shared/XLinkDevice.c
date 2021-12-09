@@ -452,6 +452,8 @@ const char* XLinkGetMxSerial(linkId_t id){
 // Helpers implementation. Begin.
 // ------------------------------------
 
+// BUGBUG not thread-safe, e.g. multiple threads from an app -- each thread creating
+// a connection to a different device
 static linkId_t getNextAvailableLinkUniqueId()
 {
     linkId_t start = nextUniqueLinkId;
@@ -478,6 +480,8 @@ static linkId_t getNextAvailableLinkUniqueId()
     return INVALID_LINK_ID;
 }
 
+// BUGBUG not thread-safe, e.g. multiple threads from an app -- each thread creating
+// a connection to a different device
 static xLinkDesc_t* getNextAvailableLink() {
     int i;
     for (i = 0; i < MAX_LINKS; i++) {

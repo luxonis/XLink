@@ -15,6 +15,7 @@
 
 #include "XLinkMacros.h"
 #include "XLinkPrivateFields.h"
+#include "XLinkPlatform.h"
 
 #ifdef MVLOG_UNIT_NAME
 #undef MVLOG_UNIT_NAME
@@ -223,6 +224,81 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
     }
 
     return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkReadMoveData(streamId_t streamId, streamPacketDesc_t* const packet)
+{
+    XLINK_RET_IF(packet == NULL);
+
+    float opTime = 0;
+    xLinkDesc_t *link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId = EXTRACT_STREAM_ID(streamId);
+
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamId, XLINK_READ_REQ,
+                     0, NULL, link->deviceHandle);
+    event.header.flags.bitField.moveSemantic = 1;
+    XLINK_RET_IF(addEventWithPerf(&event, &opTime));
+
+    if (!event.data)
+    {
+        return X_LINK_ERROR;
+    }
+    *packet = *(streamPacketDesc_t *)event.data;
+
+    // free the allocation from movePacketFromStream()
+    // done within this same XLink module so the same C runtime is used
+    free(event.data);
+
+    if (glHandler->profEnable)
+    {
+        glHandler->profilingData.totalReadBytes += packet->length;
+        glHandler->profilingData.totalReadTime += opTime;
+    }
+
+    return XLinkReleaseData(streamId);
+}
+
+XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t streamId, streamPacketDesc_t* const packet, const unsigned int msTimeout)
+{
+    XLINK_RET_IF(packet == NULL);
+
+    float opTime = 0;
+    xLinkDesc_t *link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId = EXTRACT_STREAM_ID(streamId);
+
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamId, XLINK_READ_REQ,
+                     0, NULL, link->deviceHandle);
+    event.header.flags.bitField.moveSemantic = 1;
+
+    const XLinkError_t rc = addEventWithPerfTimeout(&event, &opTime, msTimeout);
+    if(rc == X_LINK_TIMEOUT) return rc;
+    else XLINK_RET_IF(rc);
+
+    if (!event.data)
+    {
+        return X_LINK_ERROR;
+    }
+    *packet = *(streamPacketDesc_t *)event.data;
+
+    // free the allocation from movePacketFromStream()
+    // done within this same XLink module so the same C runtime is used
+    free(event.data);
+
+    if (glHandler->profEnable)
+    {
+        glHandler->profilingData.totalReadBytes += packet->length;
+        glHandler->profilingData.totalReadTime += opTime;
+    }
+
+    return XLinkReleaseData(streamId);
+}
+
+void XLinkDeallocateMoveData(void* const data, const uint32_t length) {
+    XLinkPlatformDeallocateData(data, ALIGN_UP_INT32((int32_t)length, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
 }
 
 XLinkError_t XLinkReleaseData(streamId_t streamId)
