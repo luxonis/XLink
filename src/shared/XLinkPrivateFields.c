@@ -65,6 +65,7 @@ streamId_t getStreamIdByName(xLinkDesc_t* link, const char* name)
 
 streamDesc_t* getStreamById(void* fd, streamId_t id)
 {
+    XLINK_RET_ERR_IF(id == INVALID_STREAM_ID, NULL);
     xLinkDesc_t* link = getLink(fd);
     XLINK_RET_ERR_IF(link == NULL, NULL);
     int stream;
