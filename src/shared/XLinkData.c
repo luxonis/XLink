@@ -257,7 +257,14 @@ XLinkError_t XLinkReadMoveData(streamId_t streamId, streamPacketDesc_t* const pa
         glHandler->profilingData.totalReadTime += opTime;
     }
 
-    return XLinkReleaseData(streamId);
+    const XLinkError_t retVal = XLinkReleaseData(streamId);
+    if (retVal != X_LINK_SUCCESS) {
+        // severe error; deallocate here as the caller might forget to dealloc on errors; or be less able to manage
+        XLinkPlatformDeallocateData(packet->data, ALIGN_UP_INT32((int32_t)packet->length, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
+        packet->data = NULL;
+        packet->length = 0;
+    }
+    return retVal;
 }
 
 XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t streamId, streamPacketDesc_t* const packet, const unsigned int msTimeout)
@@ -294,7 +301,14 @@ XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t streamId, streamPacketDesc_
         glHandler->profilingData.totalReadTime += opTime;
     }
 
-    return XLinkReleaseData(streamId);
+    const XLinkError_t retVal = XLinkReleaseData(streamId);
+    if (retVal != X_LINK_SUCCESS) {
+        // severe error; deallocate here as the caller might forget to dealloc on errors; or be less able to manage
+        XLinkPlatformDeallocateData(packet->data, ALIGN_UP_INT32((int32_t)packet->length, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
+        packet->data = NULL;
+        packet->length = 0;
+    }
+    return retVal;
 }
 
 void XLinkDeallocateMoveData(void* const data, const uint32_t length) {

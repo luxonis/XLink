@@ -253,7 +253,7 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
 
 /**
  * @brief Reads data from local stream and moves ownership. Will only have something if it was written to by the remote
- * @note Caller is responsible for deallocating streamPacketDesc_t::data
+ * @note Caller is responsible for deallocating with XLinkDeallocateMoveData(streamPacketDesc_t::data, streamPacketDesc_t::length)
  * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet - structure containing output data buffer and received size
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
@@ -262,7 +262,7 @@ XLinkError_t XLinkReadMoveData(streamId_t streamId, streamPacketDesc_t* const pa
 
 /**
  * @brief Reads data from local stream and moves ownership. Will only have something if it was written to by the remote
- * @note Caller is responsible for deallocating streamPacketDesc_t::data
+ * @note Caller is responsible for deallocating with XLinkDeallocateMoveData(streamPacketDesc_t::data, streamPacketDesc_t::length)
  * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet - structure containing output data buffer and received size
  * @param[in]   msTimeout – time in milliseconds after which operation times out
