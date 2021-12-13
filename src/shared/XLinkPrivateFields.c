@@ -19,19 +19,34 @@
 
 xLinkDesc_t* getLinkById(linkId_t id)
 {
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, NULL);
+
     int i;
-    for (i = 0; i < MAX_LINKS; i++)
-        if (availableXLinks[i].id == id)
+    for (i = 0; i < MAX_LINKS; i++) {
+        if (availableXLinks[i].id == id) {
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
             return &availableXLinks[i];
+        }
+    }
+
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
     return NULL;
 }
 
 xLinkDesc_t* getLink(void* fd)
 {
+
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, NULL);
+
     int i;
-    for (i = 0; i < MAX_LINKS; i++)
-        if (availableXLinks[i].deviceHandle.xLinkFD == fd)
+    for (i = 0; i < MAX_LINKS; i++) {
+        if (availableXLinks[i].deviceHandle.xLinkFD == fd) {
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
             return &availableXLinks[i];
+        }
+    }
+
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
     return NULL;
 }
 
