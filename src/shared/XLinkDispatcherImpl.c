@@ -24,6 +24,8 @@
 
 static int isStreamSpaceEnoughFor(streamDesc_t* stream, uint32_t size);
 
+// moves packet and its data out of XLink; caller is responsible for freeing data resource
+static streamPacketDesc_t* movePacketFromStream(streamDesc_t *stream);
 static streamPacketDesc_t* getPacketFromStream(streamDesc_t* stream);
 static int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize);
 static int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size);
@@ -95,7 +97,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     return handleIncomingEvent(event);
 }
 
-//this function should be called only for remote requests
+//this function should be called only for local requests
 int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 {
     streamDesc_t* stream;
@@ -148,7 +150,15 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
                 XLINK_SET_EVENT_FAILED_AND_SERVE(event);
                 break;
             }
-            streamPacketDesc_t* packet = getPacketFromStream(stream);
+
+            streamPacketDesc_t* packet;
+            if (event->header.flags.bitField.moveSemantic) {
+                packet = movePacketFromStream(stream);
+            }
+            else {
+                packet = getPacketFromStream(stream);
+            }
+
             if (packet){
                 //the read can be served with this packet
                 event->data = packet;
@@ -445,6 +455,15 @@ void dispatcherCloseLink(void* fd, int fullClose)
         return;
     }
 
+    // TODO investigate race condition that is (probably) later caught
+    // due to changing the global `xLinkDesc_t availableXLinks[MAX_LINKS]`
+    // without any thread protection. The dispatcher thread can be calling this function
+    // while an app thread calls `XLinkReadData()` which calls `getLinkByStreamId()` which calls
+    // both `getLinkById()` and `getXLinkState()`. The latter two read the global `availableXLinks`
+    // and depending on the two threads execution timing could result in the xlink being invalidated
+    // after the app's thread did the "is xlink valid" test. This leads to the app's thread
+    // creating an `xLinkEvent_t` with outdated xlink info. When that event gets to the
+    // event processing loop, the validity of the xlink state will be checked again and be handled
     if (!fullClose) {
         link->peerState = XLINK_DOWN;
         return;
@@ -461,10 +480,48 @@ void dispatcherCloseLink(void* fd, int fullClose)
             continue;
         }
 
+        // added semaphore protection similar to getStreamById()/releaseStream() pair.
+        // blockedPackets are actually packets gotten/checkedout by API and not yet released
+        // so when a packet is checkout, e.g. XLinkStream::read() or XLinkStream::readRaw()
+        // then while the app is acting on that packet, this function's code will call
+        // releasePacketFromStream() which will destroy that packet while it is being used by
+        // the app thread -- leading to memory violation/crash. Using the new move-semantics can
+        // help mitigate this.
+        // Also, there is a problem with the ordering of packet get/release throughout the XLink
+        // code. For example, in this while() loop...this thread is assuming that it is the only
+        // thread that has ever gotten a packet. Errant. Imagine the app thread gets 2 packets that
+        // were stored in slots 0 and 1. These two packets are at the "front" of the queue and
+        // marked as gotten/blocked. Now this while loop's thread runs, it getPacketFromStream()
+        // a NEW packet stored in slot 2. And then this loop calls releasePacketFromStream(). Notice
+        // none of these APIs have packet indices or ids. releasePacketFromStream() always
+        // releases/destroys the packet at the "front" of the circular queue. So it destroys the
+        // packet in slot 0 (instead of the packet it just now got from slot 2). That slot 0 packet
+        // is still being used by the app -- leading to memory violation/crash.
+        // BUGBUG Due to the ordering issues, apps should prefer the move semantic XLinkReadMoveData()
+        // to protect the packets they read from unexpected deallocation
+        XLink_sem_wait(&stream->sem);
         while (getPacketFromStream(stream) || stream->blockedPackets) {
             releasePacketFromStream(stream, NULL);
         }
-
+        XLink_sem_post(&stream->sem);
+        // BUGBUG race condition between above/below functions calls where another thread can grab semaphore and
+        // add/remove packets, or operate on stream. Imagine the dispatcher thread processing a XLINK_READ_REQ
+        // event as part of normal event message handling. While at the same time, the app thread
+        // calls `XLinkResetRemoteTimeout()`. The latter can lead to the app thread itself arriving at this function.
+        // Depending on the execution timing of those two threads, it could lead to the app's thread getting the
+        // semaphore first and running the while() loop above. The dispatcher thread is blocked waiting on the semaphore.
+        // Then the app's thread releases the semaphore and the OS pauses it. That causes the dispatcher thread to
+        // be unblocked and it starts to run the function `getPacketFromStream()` and gets memory pointers from the
+        // circular buffer. Meanwhile, the OS unpauses the app's thread so it calls the next function XLinkStreamReset()
+        // which memset(0) the entire stream struct. This will lead to unpredictable results -- sometimes leaked
+        // memory...sometimes app crash.
+        // TODO Two things to help address this bug is to:
+        //   1) use move semantic, this prevents the memset(0) from causing leak/crash
+        //   2) change getStreamById() and getStreamByName()
+        // Both of those getStreamxxx() funcs look for a valid xlink (without semaphore protection) and then wait
+        // on the stream semaphore. Improvements could be:
+        //   a) make a new xlink-specific semaphore and wait on it
+        //   b) re-order the funcs to wait on the stream semaphore first then within that protection check for a valid xlink.
         XLinkStreamReset(stream);
     }
 
@@ -506,6 +563,31 @@ streamPacketDesc_t* getPacketFromStream(streamDesc_t* stream)
     if (stream->availablePackets)
     {
         ret = &stream->packets[stream->firstPacketUnused];
+        stream->availablePackets--;
+        CIRCULAR_INCREMENT(stream->firstPacketUnused,
+                           XLINK_MAX_PACKETS_PER_STREAM);
+        stream->blockedPackets++;
+    }
+    return ret;
+}
+
+streamPacketDesc_t* movePacketFromStream(streamDesc_t* stream)
+{
+    streamPacketDesc_t *ret = NULL;
+    if (stream->availablePackets)
+    {
+        ret = malloc(sizeof(streamPacketDesc_t));
+        ret->data = NULL;
+        ret->length = 0;
+
+        // copy fields of first unused packet
+        *ret = stream->packets[stream->firstPacketUnused];
+
+        // mark packet to no longer own data; keep length for later ack's
+        // BUGBUG still concerned with order of get/move and release of packets
+        stream->packets[stream->firstPacketUnused].data = NULL;
+
+        // update circular buffer indices
         stream->availablePackets--;
         CIRCULAR_INCREMENT(stream->firstPacketUnused,
                            XLINK_MAX_PACKETS_PER_STREAM);

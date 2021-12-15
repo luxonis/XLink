@@ -483,6 +483,8 @@ static linkId_t getNextAvailableLinkUniqueId()
     return INVALID_LINK_ID;
 }
 
+// BUGBUG not thread-safe, e.g. multiple threads from an app -- each thread creating
+// a connection to a different device
 static xLinkDesc_t* getNextAvailableLink() {
 
     XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, NULL);
