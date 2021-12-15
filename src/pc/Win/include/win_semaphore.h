@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#ifdef __GNUC__
+#include <semaphore.h>
+#else
 #ifndef _SEMAPHORE_H_
 #define _SEMAPHORE_H_
 
@@ -68,3 +71,5 @@ int sem_destroy(sem_t *sem);
 
 
 #endif /* _SEMAPHORE_H_ */
+#endif
+

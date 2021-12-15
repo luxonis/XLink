@@ -4,6 +4,9 @@
 
 //lightweight semaphone wrapper
 
+#ifdef __GNUC__
+#include <semaphore.h>
+#else
 #include "win_semaphore.h"
 #include "win_time.h"
 
@@ -129,3 +132,6 @@ int sem_destroy(sem_t *sem){
     *sem = NULL;
     return 0;
 }
+
+#endif
+
