@@ -349,7 +349,9 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
 
             return NULL;
         }
+        const uint32_t tmpMoveSem = event->header.flags.bitField.moveSemantic;
         event->header.flags.raw = 0;
+        event->header.flags.bitField.moveSemantic = tmpMoveSem;
         ev = addNextQueueElemToProc(curr, &curr->lQueue, event, sem, origin);
     } else {
         ev = addNextQueueElemToProc(curr, &curr->rQueue, event, NULL, origin);
