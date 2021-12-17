@@ -487,9 +487,12 @@ void dispatcherCloseLink(void* fd, int fullClose)
         while (getPacketFromStream(stream) || stream->blockedPackets) {
             releasePacketFromStream(stream, NULL);
         }
+        memset(stream, 0, sizeof(*stream));
         stream->id = INVALID_STREAM_ID;
         XLink_sem_post(&stream->sem);
-        XLinkStreamReset(stream);
+        if(XLink_sem_destroy(&stream->sem)) {
+            mvLog(MVLOG_DEBUG, "Cannot destroy semaphore\n");
+        }
     }
 
     if(XLink_sem_destroy(&link->dispatcherClosedSem)) {
