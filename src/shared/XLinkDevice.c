@@ -507,7 +507,6 @@ static xLinkDesc_t* getNextAvailableLink() {
     }
 
     xLinkDesc_t* link = &availableXLinks[i];
-    link->id = id;
 
     if (XLink_sem_init(&link->dispatcherClosedSem, 0 ,0)) {
         mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
@@ -515,6 +514,7 @@ static xLinkDesc_t* getNextAvailableLink() {
         return NULL;
     }
 
+    link->id = id;
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
 
     return link;
