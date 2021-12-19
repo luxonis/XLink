@@ -33,18 +33,3 @@ XLinkError_t XLinkStreamInitialize(
 
     return X_LINK_SUCCESS;
 }
-
-void XLinkStreamReset(streamDesc_t* stream) {
-    if(stream == NULL) {
-        return;
-    }
-
-    if(XLink_sem_destroy(&stream->sem)) {
-        mvLog(MVLOG_DEBUG, "Cannot destroy semaphore\n");
-    }
-
-    // sets all stream fields, including the packets circular buffer to NULL
-    // with no check to see if something is open, packet is "blocked", etc.
-    memset(stream, 0, sizeof(*stream));
-    stream->id = INVALID_STREAM_ID;
-}

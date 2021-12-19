@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include "stdlib.h"
@@ -65,16 +66,19 @@ streamId_t getStreamIdByName(xLinkDesc_t* link, const char* name)
 
 streamDesc_t* getStreamById(void* fd, streamId_t id)
 {
-    XLINK_RET_ERR_IF(id == INVALID_STREAM_ID, NULL);
     xLinkDesc_t* link = getLink(fd);
     XLINK_RET_ERR_IF(link == NULL, NULL);
     int stream;
     for (stream = 0; stream < XLINK_MAX_STREAMS; stream++) {
         if (link->availableStreams[stream].id == id) {
-            XLink_sem_wait(&link->availableStreams[stream].sem);
-            if(link->availableStreams[stream].id == INVALID_STREAM_ID){
+
+            int rc;
+            while(((rc = XLink_sem_wait(&link->availableStreams[stream].sem)) == -1) && errno == EINTR)
+                continue;
+            if(rc || link->availableStreams[stream].id == INVALID_STREAM_ID) {
                 return NULL;
             }
+
             return &link->availableStreams[stream];
         }
     }
@@ -88,10 +92,14 @@ streamDesc_t* getStreamByName(xLinkDesc_t* link, const char* name)
     for (stream = 0; stream < XLINK_MAX_STREAMS; stream++) {
         if (link->availableStreams[stream].id != INVALID_STREAM_ID &&
             strcmp(link->availableStreams[stream].name, name) == 0) {
-            XLink_sem_wait(&link->availableStreams[stream].sem);
-            if(link->availableStreams[stream].id == INVALID_STREAM_ID){
+
+            int rc;
+            while(((rc = XLink_sem_wait(&link->availableStreams[stream].sem)) == -1) && errno == EINTR)
+                continue;
+            if(rc || link->availableStreams[stream].id == INVALID_STREAM_ID) {
                 return NULL;
             }
+
             return &link->availableStreams[stream];
         }
     }
