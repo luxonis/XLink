@@ -959,7 +959,7 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
 }
 
 static int dispatcherDeviceFdDown(xLinkSchedulerState_t* curr){
-
+    ASSERT_XLINK(curr != NULL);
     XLINK_RET_ERR_IF(pthread_mutex_lock(&reset_mutex), 1);
     int ret = 0;
 
@@ -974,7 +974,7 @@ static int dispatcherDeviceFdDown(xLinkSchedulerState_t* curr){
     }
 
     if(pthread_mutex_unlock(&reset_mutex) != 0) {
-        mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex");
+        mvLog(MVLOG_ERROR, "Failed to unlock reset_mutex");
         ret = 1;
     }
 
@@ -1018,6 +1018,7 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
 
     if(pthread_mutex_unlock(&reset_mutex) != 0) {
         mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
+        return 1;
     }
 
     return 0;
