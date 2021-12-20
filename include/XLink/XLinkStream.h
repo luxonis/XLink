@@ -37,4 +37,6 @@ typedef struct{
 XLinkError_t XLinkStreamInitialize(
     streamDesc_t* stream, streamId_t id, const char* name);
 
+void XLinkStreamReset(streamDesc_t* stream);
+
 #endif //_XLINKSTREAM_H
