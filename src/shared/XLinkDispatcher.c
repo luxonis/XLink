@@ -388,6 +388,8 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle)
         DispatcherAddEvent(EVENT_LOCAL, &event);
         id = getSem(pthread_self(), curr);
         if (id == NULL || XLink_sem_wait(id)) {
+            // Calling non-thread safe dispatcherReset from external thread
+            // TODO - investigate further and resolve
             dispatcherReset(curr);
         }
     }
@@ -421,6 +423,8 @@ int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct
             DispatcherAddEvent(EVENT_LOCAL, &event);
             id = getSem(pthread_self(), curr);
             if (id == NULL || XLink_sem_wait(id)) {
+                // Calling non-thread safe dispatcherReset from external thread
+                // TODO - investigate further and resolve
                 dispatcherReset(curr);
             }
         }
