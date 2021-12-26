@@ -61,7 +61,7 @@ typedef struct xLinkDesc_t {
     XLink_sem_t dispatcherClosedSem;
     UsbSpeed_t usbConnSpeed;
     char mxSerialId[XLINK_MAX_MX_ID_SIZE];
-    
+
     //Deprecated fields. Begin.
     int hostClosedFD;
     //Deprecated fields. End.
@@ -138,6 +138,7 @@ typedef struct xLinkEventHeader_t{
             uint32_t bufferFull : 1;
             uint32_t sizeTooBig : 1;
             uint32_t noSuchStream : 1;
+            uint32_t moveSemantic : 1;
         }bitField;
     }flags;
 }xLinkEventHeader_t;

@@ -6,17 +6,14 @@
 #define MVMACROS_H__
 
 #define CIRCULAR_INCREMENT(x, maxVal) \
-    { \
-         x++; \
-         if (x == maxVal) \
-             x = 0; \
+    {                                 \
+        x = (++x) % maxVal;           \
     }
 
 #define CIRCULAR_INCREMENT_BASE(x, maxVal, base) \
-    { \
-        x++; \
-        if (x == maxVal) \
-            x = base; \
+    {                                            \
+        if (++x == maxVal)                       \
+            x = base;                            \
     }
 
 
