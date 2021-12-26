@@ -476,19 +476,16 @@ void dispatcherCloseLink(void* fd, int fullClose)
 
     for (int index = 0; index < XLINK_MAX_STREAMS; index++) {
         streamDesc_t* stream = &link->availableStreams[index];
-        if (!stream) {
-            continue;
-        }
 
         // TODO integrate pending changes
         // * use move semantic, this prevents the memset(0) from causing leak/crash
         // * make new xlink-specific semaphore and wait on it during xlink lookup, create, etc.
-        XLink_sem_wait(&stream->sem);
+
         while (getPacketFromStream(stream) || stream->blockedPackets) {
             releasePacketFromStream(stream, NULL);
         }
-        stream->id = INVALID_STREAM_ID;
-        XLink_sem_post(&stream->sem);
+
+        // XLink reset stream
         XLinkStreamReset(stream);
     }
 

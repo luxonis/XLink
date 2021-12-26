@@ -52,7 +52,7 @@ streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,
             || (readSize > stream->readSize && stream->readSize != 0);
 
         // Don't error out
-        // TODO(themarpe) - check if actually doesn't have any consequences 
+        // TODO(themarpe) - check if actually doesn't have any consequences
         if(streamAlreadyExists){
             if (writeSize) {
                 stream->writeSize = writeSize;
@@ -64,13 +64,13 @@ streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,
 
         // XLINK_OUT_WITH_LOG_IF(streamAlreadyExists,
         //     mvLog(MVLOG_ERROR, "Stream with name:%s already exists: id=%ld\n", name, stream->id));
-        
+
         // if(streamAlreadyExists){
         //     //stream->writeSize = writeSize;
         //     stream->readSize = readSize;
         //     printf("write size was: %d and set read size to: %d\n", stream->writeSize, readSize);
         //     mvLogDefaultLevelSet(MVLOG_DEBUG);
-        //     
+        //
         // }
 
 

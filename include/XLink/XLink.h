@@ -285,15 +285,6 @@ void XLinkDeallocateMoveData(void* const data, const uint32_t length);
  */
 XLinkError_t XLinkReleaseData(streamId_t streamId);
 
-/**
- * @brief Reads fill level of the local or remote queues
- * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
- * @param[in]   isRemote - 0 - local queue; any other value - remote queue
- * @param[out]  fillLevel - fill level of the selected queue
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
- */
-XLinkError_t XLinkGetFillLevel(streamId_t streamId, int isRemote, int* fillLevel);
-
 // ------------------------------------
 // Device streams management. End.
 // ------------------------------------
@@ -319,6 +310,9 @@ XLinkError_t XLinkAsyncWriteData();
 
 XLinkError_t XLinkSetDeviceOpenTimeOutMsec(unsigned int msec);
 XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);
+
+// unsafe
+XLinkError_t XLinkGetFillLevel(streamId_t streamId, int isRemote, int* fillLevel);
 
 #endif // __PC__
 

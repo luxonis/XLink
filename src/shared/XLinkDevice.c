@@ -343,9 +343,9 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     XLinkError_t ret = DispatcherWaitEventCompleteTimeout(&link->deviceHandle, absTimeout);
 
     if(ret != X_LINK_SUCCESS){
-        // Close remote causes to close any links which unblocks the previous events
-        // It cleans the rest of dispatcher properly
-        DispatcherReset(&link->deviceHandle);
+        // Closing device link unblocks any blocked events
+        // Afterwards the dispatcher can properly cleanup in its own thread
+        DispatcherDeviceFdDown(&link->deviceHandle);
     }
 
     // Wait for dispatcher to be closed
