@@ -4,6 +4,7 @@
 
 #pragma comment(lib, "winusb.lib")
 #pragma comment(lib, "setupapi.lib")
+#pragma comment(lib, "cfgmgr32.lib")
 //#define _CRT_SECURE_NO_WARNINGS
 
 #define INITGUID
@@ -11,6 +12,7 @@
 #include <winusb.h>
 #include <usbiodef.h>
 #include <setupapi.h>
+#include <cfgmgr32.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -590,7 +592,21 @@ static const char* get_mx_id_device_path(HDEVINFO devInfo, SP_DEVINFO_DATA* devI
             mvLog(MVLOG_DEBUG, "mx id found: %s\n", mx_id);
 
             if (devicePath != NULL) {
-                snprintf(device_path, sizeof(device_path), "%s", deviceInterfaceDetailData->DevicePath);
+                // This could be a composite device, in which case we must retrieve the XLink VSC interface path
+                DEVINST devInstNext;
+                if (CM_Get_Child(&devInstNext, devInfoData->DevInst, 0) == CR_SUCCESS) {
+                    char id[256] = "";
+                    CM_Get_Device_IDA(devInstNext, id, sizeof(id), 0);
+                    // Getting the full path through the Win32 API is utterly complicated, TODO fix up later
+                    for (int i = 0; id[i] != 0 && i < sizeof(id); i++) {
+                        if (id[i] == '\\') id[i] = '#';
+                    }
+                    const char *winusb_guid = "8FE6D4D7-49DD-41E7-9486-49AFC6BFE475";
+                    snprintf(device_path, sizeof(device_path), "\\\\?\\%s#{%s}", id, winusb_guid);
+                }
+                else {
+                    snprintf(device_path, sizeof(device_path), "%s", deviceInterfaceDetailData->DevicePath);
+                }
                 *devicePath = &device_path[0];
             }
             free(deviceInterfaceDetailData);
