@@ -460,9 +460,9 @@ XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigne
     struct timespec absTimeout = start;
     int64_t sec = msTimeout / 1000;
     absTimeout.tv_sec += sec;
-    absTimeout.tv_nsec += (msTimeout - (sec*1000)) * 1000000;
+    absTimeout.tv_nsec += (long)((msTimeout - (sec * 1000)) * 1000000);
     int64_t secOver = absTimeout.tv_nsec / 1000000000;
-    absTimeout.tv_nsec -= secOver * 1000000000;
+    absTimeout.tv_nsec -= (long)(secOver * 1000000000);
     absTimeout.tv_sec += secOver;
 
     int rc = addEventTimeout(event, absTimeout);

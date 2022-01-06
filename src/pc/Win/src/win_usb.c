@@ -139,28 +139,36 @@ int usb_can_find_by_guid(void) {
 
 static usb_dev retreive_dev_path(HDEVINFO devInfo, SP_DEVICE_INTERFACE_DATA *ifaceData) {
     usb_dev res;
-    PSP_DEVICE_INTERFACE_DETAIL_DATA detData;
-    ULONG len, reqLen;
+    ULONG reqLen = 0;
 
-    if(!SetupDiGetDeviceInterfaceDetail(devInfo, ifaceData, NULL, 0, &reqLen, NULL)) {
-        if(GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-            wperror("SetupDiEnumDeviceInterfaces");
+    if (SetupDiGetDeviceInterfaceDetail(devInfo, ifaceData, NULL, 0, &reqLen, NULL) || (GetLastError() != ERROR_INSUFFICIENT_BUFFER) || !reqLen)
+    {
+        wperror("SetupDiGetDeviceInterfaceDetail");
             SetupDiDestroyDeviceInfoList(devInfo);
             return USB_DEV_NONE;
         }
+
+    PSP_DEVICE_INTERFACE_DETAIL_DATA detData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(reqLen);
+    if (!detData)
+    {
+        wperror("malloc for SetupDiGetDeviceInterfaceDetail");
+        SetupDiDestroyDeviceInfoList(devInfo);
+        return USB_DEV_NONE;
     }
-    detData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)_alloca(reqLen);
-    detData->cbSize = sizeof(*detData);
-    len = reqLen;
-    if(!SetupDiGetDeviceInterfaceDetail(devInfo, ifaceData, detData, len, &reqLen, NULL)) {
+
+    detData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
+    if (!SetupDiGetDeviceInterfaceDetail(devInfo, ifaceData, detData, reqLen, NULL, NULL))
+    {
         wperror("SetupDiGetDeviceInterfaceDetail");
+        free(detData);
         SetupDiDestroyDeviceInfoList(devInfo);
         return USB_DEV_NONE;
     }
     res = _strdup(detData->DevicePath);
     if(res == NULL) {
-        perror("strdup");
+        wperror("_strdup");
     }
+    free(detData);
     SetupDiDestroyDeviceInfoList(devInfo);
     return res;
 }
@@ -395,7 +403,8 @@ size_t usb_get_endpoint_size(usb_hwnd han, uint8_t ep) {
     return 0;
 }
 
-int usb_control_transfer(usb_hwnd han, uint8_t bmRequestType, uint8_t bRequest, uint16_t wValue, uint16_t wIndex, const void *buffer, size_t sz, uint32_t *wrote_bytes, int timeout_ms) {
+int usb_control_transfer(usb_hwnd han, uint8_t bmRequestType, uint8_t bRequest, uint16_t wValue, uint16_t wIndex, void *const buffer, size_t sz, uint32_t *wrote_bytes, int timeout_ms)
+{
     ULONG wb = 0;
     if(wrote_bytes != NULL)
         *wrote_bytes = 0;
@@ -425,11 +434,11 @@ int usb_control_transfer(usb_hwnd han, uint8_t bmRequestType, uint8_t bRequest, 
         .Request = bRequest,
         .Value = wValue,
         .Index = wIndex,
-        .Length = sz
-    };
+        .Length = (USHORT)sz};
 
     // Make control transfer
-    if(!WinUsb_ControlTransfer(han->winUsbHan, setup, buffer, sz, wrote_bytes, NULL)){
+    if (!WinUsb_ControlTransfer(han->winUsbHan, setup, buffer, (ULONG)sz, wrote_bytes, NULL))
+    {
         if(GetLastError() == ERROR_SEM_TIMEOUT){
             mvLog(MVLOG_ERROR, "WinUsb_ControlTransfer timeout\n");
             return USB_ERR_TIMEOUT;
@@ -547,22 +556,28 @@ static const char* get_mx_id_device_path(HDEVINFO devInfo, SP_DEVINFO_DATA* devI
 
     DWORD requiredLength = 0;
     SP_DEVICE_INTERFACE_DATA deviceInterfaceData;
-    PSP_DEVICE_INTERFACE_DETAIL_DATA deviceInterfaceDetailData = NULL;
 
     // Requires an interface GUID, for which I have none to specify
     deviceInterfaceData.cbSize = sizeof(SP_INTERFACE_DEVICE_DATA);
     if (!SetupDiEnumDeviceInterfaces(devInfo, devInfoData, &GUID_DEVINTERFACE_USB_DEVICE, 0, &deviceInterfaceData)) {
+        wperror("SetupDiEnumDeviceInterfaces");
         return NULL;
     }
 
     if (!SetupDiGetDeviceInterfaceDetail(devInfo, &deviceInterfaceData, NULL, 0, &requiredLength, NULL)) {
-        if (GetLastError() == ERROR_INSUFFICIENT_BUFFER && requiredLength > 0) {
-            deviceInterfaceDetailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)LocalAlloc(LPTR, requiredLength);
-
-
+        if (GetLastError() == ERROR_INSUFFICIENT_BUFFER && requiredLength)
+        {
+            PSP_DEVICE_INTERFACE_DETAIL_DATA deviceInterfaceDetailData = (PSP_DEVICE_INTERFACE_DETAIL_DATA)malloc(requiredLength);
+            if (!deviceInterfaceDetailData)
+            {
+                wperror("malloc for SetupDiGetDeviceInterfaceDetail");
+                return NULL;
+            }
             deviceInterfaceDetailData->cbSize = sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA);
 
             if (!SetupDiGetDeviceInterfaceDetail(devInfo, &deviceInterfaceData, deviceInterfaceDetailData, requiredLength, NULL, devInfoData)) {
+                wperror("SetupDiGetDeviceInterfaceDetail");
+                free(deviceInterfaceDetailData);
                 return NULL;
             }
 
@@ -576,19 +591,11 @@ static const char* get_mx_id_device_path(HDEVINFO devInfo, SP_DEVINFO_DATA* devI
                 snprintf(device_path, sizeof(device_path), "%s", deviceInterfaceDetailData->DevicePath);
                 *devicePath = &device_path[0];
             }
-
+            free(deviceInterfaceDetailData);
             return mx_id;
-
-
-            if (!deviceInterfaceDetailData) {
-                return NULL;
             }
         }
-        else {
-            return NULL;
-        }
-    }
-
+    wperror("SetupDiGetDeviceInterfaceDetail");
     return NULL;
 
 }
@@ -672,7 +679,7 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
 
                 const int send_ep = 0x01;
                 const int size = usb_mx_id_get_payload_size();
-                int transferred = 0;
+                uint32_t transferred = 0;
                 if ((libusb_rc = usb_bulk_write(handle, send_ep, usb_mx_id_get_payload(), size, &transferred, MX_ID_TIMEOUT)) < 0) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer send: %s", libusb_strerror(libusb_rc));
 
@@ -714,8 +721,9 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
                 rbuf[8] &= 0xF0;
 
                 // Convert to HEX presentation and store into mx_id
-                for (int i = 0; i < transferred; i++) {
-                    sprintf(mx_id + 2 * i, "%02X", rbuf[i]);
+                for (uint32_t i = 0; i < transferred; i++)
+                {
+                    sprintf(mx_id + (2 * (uintptr_t)i), "%02X", rbuf[i]);
                 }
 
                 // Indicate no error
@@ -808,6 +816,11 @@ int usb_get_device_list(usb_dev_list** refPDevList) {
     if (refPDevList == NULL) return -1;
 
     *refPDevList = calloc(1, sizeof(usb_dev_list));
+    if (!*refPDevList)
+    {
+        wperror("usb_get_device_list");
+        return -1;
+    }
     usb_dev_list* pDevList = *refPDevList;
     const int MAX_NUM_DEVICES = 128;
 
@@ -817,12 +830,29 @@ int usb_get_device_list(usb_dev_list** refPDevList) {
     pDevList->devInfo = SetupDiGetClassDevs(&GUID_DEVINTERFACE_USB_DEVICE, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (pDevList->devInfo == INVALID_HANDLE_VALUE) {
         wperror("SetupDiGetClassDevs");
+        free(*refPDevList);
+        *refPDevList = NULL;
         return -1;
     }
 
     // create list
     pDevList->infos = calloc(MAX_NUM_DEVICES, sizeof(SP_DEVINFO_DATA));
+    if (!pDevList->infos)
+    {
+        wperror("usb_get_device_list");
+        free(*refPDevList);
+        *refPDevList = NULL;
+        return -1;
+    }
     pDevList->vidpids = calloc(MAX_NUM_DEVICES, sizeof(vid_pid_pair));
+    if (!pDevList->vidpids)
+    {
+        wperror("usb_get_device_list");
+        free(pDevList->infos);
+        free(*refPDevList);
+        *refPDevList = NULL;
+        return -1;
+    }
 
     for (i = 0; i < MAX_NUM_DEVICES; i++) {
         pDevList->infos[i].cbSize = sizeof(SP_DEVINFO_DATA);
@@ -913,8 +943,8 @@ int win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, void** devi
                 {
                     mvLog(MVLOG_DEBUG, "Found Address: %s - VID/PID %04x:%04x", caddr, idVendor, idProduct);
 
-                    // Create a copy of device path string. It will be freed
-                    *device = strdup(devicePath);
+                    // Create a copy of device path string. It should be freed by usb_free_device()
+                    *device = _strdup(devicePath);
                     devs_cnt = 0;
                     return USB_BOOT_SUCCESS;
                 }

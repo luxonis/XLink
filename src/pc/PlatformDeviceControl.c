@@ -637,9 +637,12 @@ int pciePlatformConnect(UNUSED const char *devPathRead,
     return pcie_init(devPathWrite, fd);
 }
 
+// TODO add IPv6 to tcpipPlatformConnect()
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if defined(USE_TCP_IP)
+    if (!devPathWrite || !fd)
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0)
     {
@@ -656,8 +659,13 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     struct sockaddr_in serv_addr = { 0 };
 
     size_t len = strlen(devPathWrite);
-    char* devPathWriteBuff = (char*) malloc(len);
+    if (!len)
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    char *const devPathWriteBuff = (char *)malloc(len + 1);
+    if (!devPathWriteBuff)
+        return X_LINK_PLATFORM_ERROR;
     strncpy(devPathWriteBuff, devPathWrite, len);
+    devPathWriteBuff[len] = 0;
 
     char* serv_ip = strtok(devPathWriteBuff, ":");
     char* serv_port = strtok(NULL, ":");
@@ -671,7 +679,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
 
-    int ret = inet_pton(AF_INET, devPathWrite, &serv_addr.sin_addr);
+    int ret = inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr);
     free(devPathWriteBuff);
 
     if(ret <= 0)

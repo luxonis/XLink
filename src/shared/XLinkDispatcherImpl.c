@@ -251,7 +251,6 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 //this function should be called only for remote requests
 int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 {
-    streamDesc_t* stream;
     response->header.id = event->header.id;
     response->header.flags.raw = 0;
     mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
@@ -281,11 +280,12 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
         case XLINK_READ_REQ:
             break;
         case XLINK_READ_REL_REQ:
+        {
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_READ_REL_RESP;
             response->deviceHandle = event->deviceHandle;
-            stream = getStreamById(event->deviceHandle.xLinkFD,
-                                   event->header.streamId);
+            streamDesc_t *stream = getStreamById(event->deviceHandle.xLinkFD,
+                                                 event->header.streamId);
             ASSERT_XLINK(stream);
             stream->remoteFillLevel -= event->header.size;
             stream->remoteFillPacketLevel--;
@@ -307,6 +307,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                 (void) xxx;
             }
             break;
+        }
         case XLINK_CREATE_STREAM_REQ:
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_CREATE_STREAM_RESP;
@@ -543,6 +544,11 @@ streamPacketDesc_t* movePacketFromStream(streamDesc_t* stream)
     if (stream->availablePackets)
     {
         ret = malloc(sizeof(streamPacketDesc_t));
+        if (!ret)
+        {
+            mvLog(MVLOG_FATAL, "out of memory to move packet from stream\n");
+            return NULL;
+        }
         ret->data = NULL;
         ret->length = 0;
 

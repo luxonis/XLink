@@ -163,7 +163,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
 
 #if (defined(_WIN32) || defined(_WIN64) )
 
-    DWORD rv, size;
+    DWORD rv, size = 0;
     PMIB_IPADDRTABLE ipaddrtable;
 
     rv = GetIpAddrTable(NULL, &size, 0);
@@ -171,6 +171,8 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
         return TCPIP_HOST_ERROR;
     }
     ipaddrtable = (PMIB_IPADDRTABLE) malloc(size);
+    if (!ipaddrtable)
+        return TCPIP_HOST_ERROR;
 
     rv = GetIpAddrTable(ipaddrtable, &size, 0);
     if (rv != NO_ERROR) {
@@ -390,7 +392,7 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     #endif
 
     tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_RESET;
-    if(sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr *) &device_address, sizeof(device_address)) < 0)
+    if (sendto(sock, (const char *)&send_buffer, sizeof(send_buffer), 0, (struct sockaddr *)&device_address, sizeof(device_address)) < 0)
     {
         return X_LINK_PLATFORM_ERROR;
     }
