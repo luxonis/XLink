@@ -243,10 +243,36 @@ XLinkError_t XLinkReadData(streamId_t streamId, streamPacketDesc_t** packet);
  * @brief Reads data from local stream. Will only have something if it was written to by the remote
  * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet – structure containing output data buffer and received size
- * @param[out]  msTimeout – time in milliseconds after which operation times out
+ * @param[in]   msTimeout – time in milliseconds after which operation times out
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT when msTimeout time passes
  */
 XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** packet, unsigned int msTimeout);
+
+/**
+ * @brief Reads data from local stream and moves ownership. Will only have something if it was written to by the remote
+ * @note Caller is responsible for deallocating with XLinkDeallocateMoveData(streamPacketDesc_t::data, streamPacketDesc_t::length)
+ * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
+ * @param[out]  packet - structure containing output data buffer and received size
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkReadMoveData(streamId_t streamId, streamPacketDesc_t* const packet);
+
+/**
+ * @brief Reads data from local stream and moves ownership. Will only have something if it was written to by the remote
+ * @note Caller is responsible for deallocating with XLinkDeallocateMoveData(streamPacketDesc_t::data, streamPacketDesc_t::length)
+ * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
+ * @param[out]  packet - structure containing output data buffer and received size
+ * @param[in]   msTimeout – time in milliseconds after which operation times out
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT when msTimeout time passes
+ */
+XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t streamId, streamPacketDesc_t *const packet, const unsigned int msTimeout);
+
+/**
+ * @brief Deallocate memory within streamPacketDesc_t received from a previous call to XLinkReadMoveData() or XLinkReadMoveDataWithTimeout()
+ * @param[in]  data - streamPacketDesc_t::data pointer
+ * @param[in]  length - streamPacketDesc_t::length
+ */
+void XLinkDeallocateMoveData(void* const data, const uint32_t length);
 
 /**
  * @brief Releases data from stream - This should be called after the data obtained from
@@ -255,15 +281,6 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReleaseData(streamId_t streamId);
-
-/**
- * @brief Reads fill level of the local or remote queues
- * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
- * @param[in]   isRemote - 0 - local queue; any other value - remote queue
- * @param[out]  fillLevel - fill level of the selected queue
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
- */
-XLinkError_t XLinkGetFillLevel(streamId_t streamId, int isRemote, int* fillLevel);
 
 // ------------------------------------
 // Device streams management. End.
@@ -290,6 +307,9 @@ XLinkError_t XLinkAsyncWriteData();
 
 XLinkError_t XLinkSetDeviceOpenTimeOutMsec(unsigned int msec);
 XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);
+
+// unsafe
+XLinkError_t XLinkGetFillLevel(streamId_t streamId, int isRemote, int* fillLevel);
 
 #endif // __PC__
 
