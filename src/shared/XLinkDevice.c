@@ -322,15 +322,15 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     event.deviceHandle = link->deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
 
-    struct timespec start, end;
+    struct timespec start;
     clock_gettime(CLOCK_REALTIME, &start);
 
     struct timespec absTimeout = start;
     int64_t sec = timeoutMs / 1000;
     absTimeout.tv_sec += sec;
-    absTimeout.tv_nsec += (timeoutMs - (sec*1000)) * 1000000;
+    absTimeout.tv_nsec += (long)((timeoutMs - (sec * 1000)) * 1000000);
     int64_t secOver = absTimeout.tv_nsec / 1000000000;
-    absTimeout.tv_nsec -= secOver * 1000000000;
+    absTimeout.tv_nsec -= (long)(secOver * 1000000000);
     absTimeout.tv_sec += secOver;
 
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);

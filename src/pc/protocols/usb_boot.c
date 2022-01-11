@@ -45,7 +45,6 @@
 
 #define OPEN_DEV_ERROR_MESSAGE_LENGTH 128
 
-static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int connect_timeout = DEFAULT_CONNECT_TIMEOUT;
 static int initialized;
@@ -703,7 +702,6 @@ static libusb_device_handle *usb_open_device(libusb_device *dev, uint8_t *endpoi
         if( !(ifdesc->endpoint[i].bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK) )
         {
             *endpoint = ifdesc->endpoint[i].bEndpointAddress;
-            bulk_chunklen = ifdesc->endpoint[i].wMaxPacketSize;
             libusb_free_config_descriptor(cdesc);
             return h;
         }
