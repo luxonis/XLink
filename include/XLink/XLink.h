@@ -211,7 +211,7 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
  * @param[in] streamId - link Id obtained from XLinkOpenStream call
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkCloseStream(streamId_t streamId);
+XLinkError_t XLinkCloseStream(streamId_t const streamId);
 
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream
@@ -221,7 +221,7 @@ XLinkError_t XLinkCloseStream(streamId_t streamId);
  * @param[in] size - size of the data to be transmitted
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkWriteData(streamId_t streamId, const uint8_t* buffer, int size);
+XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer, int size);
 
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream
@@ -232,7 +232,7 @@ XLinkError_t XLinkWriteData(streamId_t streamId, const uint8_t* buffer, int size
  * @param[in] msTimeout – time in milliseconds after which operation times out
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success,  X_LINK_TIMEOUT when msTimeout time passes
  */
-XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int msTimeout);
+XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t* buffer, int size, unsigned int msTimeout);
 
 /**
  * @brief Reads data from local stream. Will only have something if it was written to by the remote
@@ -240,7 +240,7 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffe
  * @param[out]  packet - structure containing output data buffer and received size
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkReadData(streamId_t streamId, streamPacketDesc_t** packet);
+XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packet);
 
 /**
  * @brief Reads data from local stream. Will only have something if it was written to by the remote
@@ -249,7 +249,7 @@ XLinkError_t XLinkReadData(streamId_t streamId, streamPacketDesc_t** packet);
  * @param[in]   msTimeout – time in milliseconds after which operation times out
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT when msTimeout time passes
  */
-XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** packet, unsigned int msTimeout);
+XLinkError_t XLinkReadDataWithTimeout(streamId_t const streamId, streamPacketDesc_t** packet, unsigned int msTimeout);
 
 /**
  * @brief Reads data from local stream and moves ownership. Will only have something if it was written to by the remote
@@ -258,7 +258,7 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
  * @param[out]  packet - structure containing output data buffer and received size
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkReadMoveData(streamId_t streamId, streamPacketDesc_t* const packet);
+XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* const packet);
 
 /**
  * @brief Reads data from local stream and moves ownership. Will only have something if it was written to by the remote
@@ -268,7 +268,7 @@ XLinkError_t XLinkReadMoveData(streamId_t streamId, streamPacketDesc_t* const pa
  * @param[in]   msTimeout – time in milliseconds after which operation times out
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT when msTimeout time passes
  */
-XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t streamId, streamPacketDesc_t *const packet, const unsigned int msTimeout);
+XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t const streamId, streamPacketDesc_t *const packet, const unsigned int msTimeout);
 
 /**
  * @brief Deallocate memory within streamPacketDesc_t received from a previous call to XLinkReadMoveData() or XLinkReadMoveDataWithTimeout()
@@ -283,7 +283,7 @@ void XLinkDeallocateMoveData(void* const data, const uint32_t length);
  * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkReleaseData(streamId_t streamId);
+XLinkError_t XLinkReleaseData(streamId_t const streamId);
 
 // ------------------------------------
 // Device streams management. End.
@@ -312,7 +312,7 @@ XLinkError_t XLinkSetDeviceOpenTimeOutMsec(unsigned int msec);
 XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);
 
 // unsafe
-XLinkError_t XLinkGetFillLevel(streamId_t streamId, int isRemote, int* fillLevel);
+XLinkError_t XLinkGetFillLevel(streamId_t const streamId, int isRemote, int* fillLevel);
 
 #endif // __PC__
 
