@@ -69,31 +69,32 @@ int dispatcherEventSend(xLinkEvent_t *event)
 }
 
 int dispatcherEventReceive(xLinkEvent_t* event){
-    static xLinkEvent_t prevEvent = {0};
+    // static xLinkEvent_t prevEvent = {0};
     int rc = XLinkPlatformRead(&event->deviceHandle,
         &event->header, sizeof(event->header));
 
-    mvLog(MVLOG_DEBUG,"Incoming event %p: %s %d %p prevEvent: %s %d %p\n",
-          event,
-          TypeToStr(event->header.type),
-          (int)event->header.id,
-          event->deviceHandle.xLinkFD,
-          TypeToStr(prevEvent.header.type),
-          (int)prevEvent.header.id,
-          prevEvent.deviceHandle.xLinkFD);
-
+    // mvLog(MVLOG_DEBUG,"Incoming event %p: %s %d %p prevEvent: %s %d %p\n",
+    //       event,
+    //       TypeToStr(event->header.type),
+    //       (int)event->header.id,
+    //       event->deviceHandle.xLinkFD,
+    //       TypeToStr(prevEvent.header.type),
+    //       (int)prevEvent.header.id,
+    //       prevEvent.deviceHandle.xLinkFD);
+    
     if(rc < 0) {
         mvLog(MVLOG_DEBUG,"%s() Read failed %d\n", __func__, (int)rc);
         return rc;
     }
 
-    if (prevEvent.header.id == event->header.id &&
-        prevEvent.header.type == event->header.type &&
-        prevEvent.deviceHandle.xLinkFD == event->deviceHandle.xLinkFD) {
-        mvLog(MVLOG_FATAL,"Duplicate id detected. \n");
-    }
+    // TODO - reimplement duplicate ID detection
+    // if (prevEvent.header.id == event->header.id &&
+    //     prevEvent.header.type == event->header.type &&
+    //     prevEvent.deviceHandle.xLinkFD == event->deviceHandle.xLinkFD) {
+    //     mvLog(MVLOG_FATAL,"Duplicate id detected. \n");
+    // }
+    // prevEvent = *event;
 
-    prevEvent = *event;
     return handleIncomingEvent(event);
 }
 
@@ -449,10 +450,16 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
 
 void dispatcherCloseLink(void* fd, int fullClose)
 {
-    xLinkDesc_t* link = getLink(fd);
+
+    if (pthread_mutex_lock(&availableXLinksMutex) != 0) {
+        return;
+    }
+
+    xLinkDesc_t* link = getLinkUnsafe(fd);
 
     if (!link) {
         mvLog(MVLOG_WARN, "Dispatcher link is null");
+        pthread_mutex_unlock(&availableXLinksMutex);
         return;
     }
 
@@ -493,6 +500,8 @@ void dispatcherCloseLink(void* fd, int fullClose)
     if(XLink_sem_destroy(&link->dispatcherClosedSem)) {
         mvLog(MVLOG_DEBUG, "Cannot destroy dispatcherClosedSem\n");
     }
+
+    pthread_mutex_unlock(&availableXLinksMutex);
 }
 
 void dispatcherCloseDeviceFd(xLinkDeviceHandle_t* deviceHandle)

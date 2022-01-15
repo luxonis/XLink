@@ -30,7 +30,7 @@ typedef struct {
 
 XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc);
 XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle);
-int DispatcherClean(xLinkDeviceHandle_t *deviceHandle);
+int DispatcherReset(xLinkDeviceHandle_t *deviceHandle);
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle);
 
 xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event);

@@ -38,6 +38,7 @@ static XLinkError_t addEvent(xLinkEvent_t *event);
 static XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime);
 static XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigned int msTimeout);
 static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_link);
+static XLinkError_t getLinkUpDeviceHandleByStreamId(streamId_t const streamId, xLinkDeviceHandle_t* const out_handle);
 
 // ------------------------------------
 // Helpers declaration. End.
@@ -106,13 +107,13 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
 // and on the remote side we are freeing the read buffer
 XLinkError_t XLinkCloseStream(streamId_t const streamId)
 {
-    xLinkDesc_t* link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
     streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_CLOSE_STREAM_REQ,
-        0, NULL, link->deviceHandle);
+        0, NULL, deviceHandle);
 
     XLINK_RET_IF(addEvent(&event));
     return X_LINK_SUCCESS;
@@ -124,13 +125,13 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
     XLINK_RET_IF(buffer == NULL);
 
     float opTime = 0;
-    xLinkDesc_t* link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
     streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_REQ,
-        size,(void*)buffer, link->deviceHandle);
+        size,(void*)buffer, deviceHandle);
 
     XLINK_RET_IF(addEventWithPerf(&event, &opTime));
 
@@ -148,13 +149,13 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t*
     XLINK_RET_IF(buffer == NULL);
 
     float opTime = 0;
-    xLinkDesc_t* link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
     streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_REQ,
-        size,(void*)buffer, link->deviceHandle);
+        size,(void*)buffer, deviceHandle);
 
     XLinkError_t rc = addEventWithPerfTimeout(&event, &opTime, msTimeout);
     if(rc == X_LINK_TIMEOUT) return rc;
@@ -173,13 +174,13 @@ XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packe
     XLINK_RET_IF(packet == NULL);
 
     float opTime = 0;
-    xLinkDesc_t* link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
     streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_READ_REQ,
-        0, NULL, link->deviceHandle);
+        0, NULL, deviceHandle);
 
     XLINK_RET_IF(addEventWithPerf(&event, &opTime));
 
@@ -201,13 +202,13 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t const streamId, streamPacketDes
     XLINK_RET_IF(packet == NULL);
 
     float opTime = 0;
-    xLinkDesc_t* link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
     streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamId, XLINK_READ_REQ,
-        0, NULL, link->deviceHandle);
+        0, NULL, deviceHandle);
 
     XLinkError_t rc = addEventWithPerfTimeout(&event, &opTime, msTimeout);
     if(rc == X_LINK_TIMEOUT) return rc;
@@ -231,13 +232,13 @@ XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* co
     XLINK_RET_IF(packet == NULL);
 
     float opTime = 0;
-    xLinkDesc_t *link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
     streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_READ_REQ,
-                     0, NULL, link->deviceHandle);
+                     0, NULL, deviceHandle);
     event.header.flags.bitField.moveSemantic = 1;
     XLINK_RET_IF(addEventWithPerf(&event, &opTime));
 
@@ -272,13 +273,13 @@ XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t const streamId, streamPacke
     XLINK_RET_IF(packet == NULL);
 
     float opTime = 0;
-    xLinkDesc_t *link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
     streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_READ_REQ,
-                     0, NULL, link->deviceHandle);
+                     0, NULL, deviceHandle);
     event.header.flags.bitField.moveSemantic = 1;
 
     const XLinkError_t rc = addEventWithPerfTimeout(&event, &opTime, msTimeout);
@@ -317,37 +318,16 @@ void XLinkDeallocateMoveData(void* const data, const uint32_t length) {
 
 XLinkError_t XLinkReleaseData(streamId_t const streamId)
 {
-    xLinkDesc_t* link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
     streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_READ_REL_REQ,
-        0, NULL, link->deviceHandle);
+        0, NULL, deviceHandle);
 
     XLINK_RET_IF(addEvent(&event));
 
-    return X_LINK_SUCCESS;
-}
-
-XLinkError_t XLinkGetFillLevel(streamId_t const streamId, int isRemote, int* fillLevel)
-{
-    xLinkDesc_t* link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
-    streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
-
-    streamDesc_t* stream =
-        getStreamById(link->deviceHandle.xLinkFD, streamIdOnly);
-    ASSERT_XLINK(stream);
-
-    if (isRemote) {
-        *fillLevel = stream->remoteFillLevel;
-    }
-    else {
-        *fillLevel = stream->localFillLevel;
-    }
-
-    releaseStream(stream);
     return X_LINK_SUCCESS;
 }
 
@@ -486,6 +466,14 @@ static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_lin
 
     return X_LINK_SUCCESS;
 }
+
+static XLinkError_t getLinkUpDeviceHandleByStreamId(streamId_t const streamId, xLinkDeviceHandle_t* const out_handle) {
+    ASSERT_XLINK(out_handle != NULL);
+
+    linkId_t id = EXTRACT_LINK_ID(streamId);
+    return getLinkUpDeviceHandleById(id, out_handle);
+}
+
 // ------------------------------------
 // Helpers declaration. End.
 // ------------------------------------

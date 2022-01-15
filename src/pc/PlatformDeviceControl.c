@@ -46,7 +46,7 @@ int usbFdRead = -1;
 static UsbSpeed_t usb_speed_enum = X_LINK_USB_SPEED_UNKNOWN;
 static char mx_serial[XLINK_MAX_MX_ID_SIZE] = { 0 };
 #ifdef USE_USB_VSC
-static int statuswaittimeout = 5;
+static const int statuswaittimeout = 5;
 #endif
 
 typedef struct {
@@ -294,12 +294,9 @@ int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
 #ifdef USE_USB_VSC
 double seconds()
 {
-    static double s;
     struct timespec ts;
-
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    if(!s)
-        s = ts.tv_sec + ts.tv_nsec * 1e-9;
+    double s = ts.tv_sec + ts.tv_nsec * 1e-9;
     return ts.tv_sec + ts.tv_nsec * 1e-9 - s;
 }
 #endif
@@ -360,11 +357,12 @@ libusb_device_handle *usbLinkOpen(const char *path)
 
     libusb_device_handle *h = NULL;
 
-    // Retrieve mx id from name
-    for(int i = 0; i < XLINK_MAX_NAME_SIZE; i++){
-        if(path[i] == '-') break;
-        mx_serial[i] = path[i];
-    }
+    // TODO(themarpe) - thread safe alternative
+    // // Retrieve mx id from name
+    // for(int i = 0; i < XLINK_MAX_NAME_SIZE; i++){
+    //     if(path[i] == '-') break;
+    //     mx_serial[i] = path[i];
+    // }
 
 #if (defined(_WIN32) || defined(_WIN64) )
 
@@ -382,12 +380,14 @@ libusb_device_handle *usbLinkOpen(const char *path)
     }
     usb_free_device(dev);
 
-    // Get usb speed
-    usb_speed_enum = usb_get_usb_speed(h);
+    // TODO(themarpe) - reimplement thread safely
+    // // Get usb speed
+    // usb_speed_enum = usb_get_usb_speed(h);
 
 #else
 
-    usb_speed_enum = libusb_get_device_speed(dev);
+    // TODO(themarpe) - reimplement thread safely
+    // usb_speed_enum = libusb_get_device_speed(dev);
 
     int libusb_rc = libusb_open(dev, &h);
     if (libusb_rc < 0)

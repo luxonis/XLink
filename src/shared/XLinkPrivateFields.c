@@ -33,6 +33,31 @@ xLinkDesc_t* getLinkById(linkId_t id)
     return NULL;
 }
 
+XLinkError_t getLinkUpDeviceHandleById(linkId_t id, xLinkDeviceHandle_t* const out_handle)
+{
+    ASSERT_XLINK(out_handle);
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, X_LINK_ERROR);
+
+    int i;
+    for (i = 0; i < MAX_LINKS; i++) {
+        if (availableXLinks[i].id == id) {
+            // Copy handle out before unlocking the mutex
+            *out_handle = availableXLinks[i].deviceHandle;
+            // Check if state is up
+            if(availableXLinks[i].peerState != XLINK_UP){
+                XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, X_LINK_ERROR);
+                return X_LINK_COMMUNICATION_NOT_OPEN;
+            }
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, X_LINK_ERROR);
+            return X_LINK_SUCCESS;
+        }
+    }
+
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, X_LINK_ERROR);
+    // No valid id found
+    return X_LINK_ERROR;
+}
+
 xLinkDesc_t* getLink(void* fd)
 {
 
@@ -47,6 +72,19 @@ xLinkDesc_t* getLink(void* fd)
     }
 
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
+    return NULL;
+}
+
+xLinkDesc_t* getLinkUnsafe(void* fd)
+{
+
+    int i;
+    for (i = 0; i < MAX_LINKS; i++) {
+        if (availableXLinks[i].deviceHandle.xLinkFD == fd) {
+            return &availableXLinks[i];
+        }
+    }
+
     return NULL;
 }
 

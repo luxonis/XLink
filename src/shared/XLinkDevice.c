@@ -215,7 +215,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
     if (DispatcherWaitEventComplete(&link->deviceHandle)) {
-        DispatcherClean(&link->deviceHandle);
+        DispatcherReset(&link->deviceHandle);
         return X_LINK_TIMEOUT;
     }
 
