@@ -374,7 +374,7 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
 
                 // ///////////////////////
                 // Start
-                // WD Protection & MXID Retrieval Command 
+                // WD Protection & MXID Retrieval Command
                 transferred = 0;
                 libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT);
                 if (libusb_rc < 0 || usb_mx_id_get_payload_size() != transferred) {
