@@ -372,22 +372,15 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
                 const int send_ep = 0x01;
                 int transferred = 0;
 
-                ///////////////////////
-                /// WD Protection start
-                transferred = 0;
-                libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_wd_protection_start()), usb_mx_id_get_wd_protection_start_size(), &transferred, MX_ID_TIMEOUT);
-                if (libusb_rc < 0 || usb_mx_id_get_wd_protection_end_size() != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", libusb_strerror(libusb_rc), transferred, usb_mx_id_get_wd_protection_start_size());
-                    // retry
-                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
-                    continue;
-                }
-                
-                // MXID Retrieval Command
+                // ///////////////////////
+                // Start
+                // WD Protection & MXID Retrieval Command 
                 transferred = 0;
                 libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT);
                 if (libusb_rc < 0 || usb_mx_id_get_payload_size() != transferred) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_size());
+                    // Mark as error and retry
+                    libusb_rc = -1;
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
@@ -401,21 +394,26 @@ static const char *gen_addr(struct libusb_device_descriptor* pDesc, libusb_devic
                 libusb_rc = libusb_bulk_transfer(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT);
                 if (libusb_rc < 0 || expectedMxIdReadSize != transferred) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", libusb_strerror(libusb_rc), transferred, expectedMxIdReadSize);
+                    // Mark as error and retry
+                    libusb_rc = -1;
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
                 }
 
-                ///////////////////////
-                /// WD Protection end
+                // WD Protection end
                 transferred = 0;
-                libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_wd_protection_end()), usb_mx_id_get_wd_protection_end_size(), &transferred, MX_ID_TIMEOUT);
-                if (libusb_rc < 0 || usb_mx_id_get_wd_protection_end_size() != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", libusb_strerror(libusb_rc), transferred, usb_mx_id_get_wd_protection_end_size());
+                libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload_end()), usb_mx_id_get_payload_end_size(), &transferred, MX_ID_TIMEOUT);
+                if (libusb_rc < 0 || usb_mx_id_get_payload_end_size() != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_end_size());
+                    // Mark as error and retry
+                    libusb_rc = -1;
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
                 }
+                // End
+                ///////////////////////
 
                 // Release claimed interface
                 // ignore error as it doesn't matter
