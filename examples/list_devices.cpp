@@ -17,7 +17,7 @@ struct DeviceInfo {
 
 int main(){
 
-    mvLogDefaultLevelSet(MVLOG_LAST);
+    mvLogDefaultLevelSet(MVLOG_WARN);
     auto status = XLinkInitialize(&xlinkGlobalHandler);
     if(X_LINK_SUCCESS != status) {
         throw std::runtime_error("Couldn't initialize XLink");
