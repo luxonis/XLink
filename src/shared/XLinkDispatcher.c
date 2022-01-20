@@ -98,6 +98,7 @@ typedef struct {
     localSem_t eventSemaphores[MAXIMUM_SEMAPHORES];
 
     uint32_t dispatcherLinkDown;
+    uint32_t dispatcherDeviceFdDown;
 } xLinkSchedulerState_t;
 
 
@@ -167,6 +168,8 @@ static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr);
 
 static int dispatcherClean(xLinkSchedulerState_t* curr);
 static int dispatcherReset(xLinkSchedulerState_t* curr);
+static int dispatcherDeviceFdDown(xLinkSchedulerState_t* curr);
+
 static void dispatcherFreeEvents(eventQueueHandler_t *queue, xLinkEventState_t state);
 
 static XLinkError_t sendEvents(xLinkSchedulerState_t* curr);
@@ -341,13 +344,13 @@ int DispatcherClean(xLinkDeviceHandle_t *deviceHandle) {
     return dispatcherClean(curr);
 }
 
-int DispatcherReset(xLinkDeviceHandle_t *deviceHandle) {
+int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle){
     XLINK_RET_IF(deviceHandle == NULL);
 
     xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
     XLINK_RET_IF(curr == NULL);
 
-    return dispatcherReset(curr);
+    return dispatcherDeviceFdDown(curr);
 }
 
 xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
@@ -383,7 +386,9 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
 
             return NULL;
         }
+        const uint32_t tmpMoveSem = event->header.flags.bitField.moveSemantic;
         event->header.flags.raw = 0;
+        event->header.flags.bitField.moveSemantic = tmpMoveSem;
         ev = addNextQueueElemToProc(curr, &curr->lQueue, event, sem, origin);
     } else {
         ev = addNextQueueElemToProc(curr, &curr->rQueue, event, NULL, origin);
@@ -439,6 +444,8 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
             while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
                 continue;
             if (id == NULL || rc) {
+            // Calling non-thread safe dispatcherReset from external thread
+            // TODO - investigate further and resolve
                 dispatcherReset(curr);
             }
         }
@@ -472,6 +479,8 @@ int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct
             DispatcherAddEvent(EVENT_LOCAL, &event);
             id = getSem(pthread_self(), curr);
             if (id == NULL || XLink_sem_wait(id)) {
+                // Calling non-thread safe dispatcherReset from external thread
+                // TODO - investigate further and resolve
                 dispatcherReset(curr);
             }
         }
@@ -1080,6 +1089,29 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     return 0;
 }
 
+static int dispatcherDeviceFdDown(xLinkSchedulerState_t* curr){
+    ASSERT_XLINK(curr != NULL);
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&reset_mutex), 1);
+    int ret = 0;
+
+    if (curr->dispatcherDeviceFdDown == 0) {
+
+        glControlFunc->closeDeviceFd(&curr->deviceHandle);
+        // Specify device FD was already closed
+        curr->dispatcherDeviceFdDown = 1;
+
+    } else {
+        ret = 1;
+    }
+
+    if(pthread_mutex_unlock(&reset_mutex) != 0) {
+        mvLog(MVLOG_ERROR, "Failed to unlock reset_mutex");
+        ret = 1;
+    }
+
+    return ret;
+}
+
 static int dispatcherReset(xLinkSchedulerState_t* curr)
 {
     ASSERT_XLINK(curr != NULL);
@@ -1094,7 +1126,12 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
         return 1;
     }
 
-    glControlFunc->closeDeviceFd(&curr->deviceHandle);
+    if(!curr->dispatcherDeviceFdDown){
+        glControlFunc->closeDeviceFd(&curr->deviceHandle);
+        // Specify device FD was already closed
+        curr->dispatcherDeviceFdDown = 1;
+    }
+
     if(dispatcherClean(curr)) {
         mvLog(MVLOG_INFO, "Failed to clean dispatcher");
     }
@@ -1112,6 +1149,7 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
 
     if(pthread_mutex_unlock(&reset_mutex) != 0) {
         mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
+        return 1;
     }
 
     return 0;

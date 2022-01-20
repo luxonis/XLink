@@ -24,6 +24,8 @@
 
 static int isStreamSpaceEnoughFor(streamDesc_t* stream, uint32_t size);
 
+// moves packet and its data out of XLink; caller is responsible for freeing data resource
+static streamPacketDesc_t* movePacketFromStream(streamDesc_t *stream);
 static streamPacketDesc_t* getPacketFromStream(streamDesc_t* stream);
 static int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize);
 static int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize, uint8_t* data);
@@ -96,7 +98,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     return handleIncomingEvent(event);
 }
 
-//this function should be called only for remote requests
+//this function should be called only for local requests
 int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 {
     streamDesc_t* stream;
@@ -148,7 +150,15 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
                 XLINK_SET_EVENT_FAILED_AND_SERVE(event);
                 break;
             }
-            streamPacketDesc_t* packet = getPacketFromStream(stream);
+
+            streamPacketDesc_t* packet;
+            if (event->header.flags.bitField.moveSemantic) {
+                packet = movePacketFromStream(stream);
+            }
+            else {
+                packet = getPacketFromStream(stream);
+            }
+
             if (packet){
                 //the read can be served with this packet
                 event->data = packet;
@@ -257,7 +267,6 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 //this function should be called only for remote requests
 int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 {
-    streamDesc_t* stream;
     response->header.id = event->header.id;
     response->header.flags.raw = 0;
     mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
@@ -289,7 +298,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_READ_REL_SPEC_RESP;
             response->deviceHandle = event->deviceHandle;
-            stream = getStreamById(event->deviceHandle.xLinkFD,
+            streamDesc_t* stream = getStreamById(event->deviceHandle.xLinkFD,
                                    event->header.streamId);
             ASSERT_XLINK(stream);
             stream->remoteFillLevel -= event->header.size;
@@ -312,11 +321,12 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             }
             break;
         case XLINK_READ_REL_REQ:
+        {
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_READ_REL_RESP;
             response->deviceHandle = event->deviceHandle;
-            stream = getStreamById(event->deviceHandle.xLinkFD,
-                                   event->header.streamId);
+            streamDesc_t *stream = getStreamById(event->deviceHandle.xLinkFD,
+                                                 event->header.streamId);
             ASSERT_XLINK(stream);
             stream->remoteFillLevel -= event->header.size;
             stream->remoteFillPacketLevel--;
@@ -338,6 +348,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                 (void) xxx;
             }
             break;
+        }
         case XLINK_CREATE_STREAM_REQ:
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_CREATE_STREAM_RESP;
@@ -490,6 +501,15 @@ void dispatcherCloseLink(void* fd, int fullClose)
         return;
     }
 
+    // TODO investigate race condition that is (probably) later caught
+    // due to changing the global `xLinkDesc_t availableXLinks[MAX_LINKS]`
+    // without any thread protection. The dispatcher thread can be calling this function
+    // while an app thread calls `XLinkReadData()` which calls `getLinkByStreamId()` which calls
+    // both `getLinkById()` and `getXLinkState()`. The latter two read the global `availableXLinks`
+    // and depending on the two threads execution timing could result in the xlink being invalidated
+    // after the app's thread did the "is xlink valid" test. This leads to the app's thread
+    // creating an `xLinkEvent_t` with outdated xlink info. When that event gets to the
+    // event processing loop, the validity of the xlink state will be checked again and be handled
     if (!fullClose) {
         link->peerState = XLINK_DOWN;
         return;
@@ -502,14 +522,16 @@ void dispatcherCloseLink(void* fd, int fullClose)
 
     for (int index = 0; index < XLINK_MAX_STREAMS; index++) {
         streamDesc_t* stream = &link->availableStreams[index];
-        if (!stream) {
-            continue;
-        }
+
+        // TODO integrate pending changes
+        // * use move semantic, this prevents the memset(0) from causing leak/crash
+        // * make new xlink-specific semaphore and wait on it during xlink lookup, create, etc.
 
         while (getPacketFromStream(stream) || stream->blockedPackets) {
             releasePacketFromStream(stream, NULL);
         }
 
+        // XLink reset stream
         XLinkStreamReset(stream);
     }
 
@@ -551,6 +573,37 @@ streamPacketDesc_t* getPacketFromStream(streamDesc_t* stream)
     if (stream->availablePackets)
     {
         ret = &stream->packets[stream->firstPacketUnused];
+        stream->availablePackets--;
+        CIRCULAR_INCREMENT(stream->firstPacketUnused,
+                           XLINK_MAX_PACKETS_PER_STREAM);
+        stream->blockedPackets++;
+    }
+    return ret;
+}
+
+// TODO add multithread access to the same stream; not currently supported
+// due to issues like the order of get/move and release of packets
+streamPacketDesc_t* movePacketFromStream(streamDesc_t* stream)
+{
+    streamPacketDesc_t *ret = NULL;
+    if (stream->availablePackets)
+    {
+        ret = malloc(sizeof(streamPacketDesc_t));
+        if (!ret)
+        {
+            mvLog(MVLOG_FATAL, "out of memory to move packet from stream\n");
+            return NULL;
+        }
+        ret->data = NULL;
+        ret->length = 0;
+
+        // copy fields of first unused packet
+        *ret = stream->packets[stream->firstPacketUnused];
+
+        // mark packet to no longer own data; keep length for later ack's
+        stream->packets[stream->firstPacketUnused].data = NULL;
+
+        // update circular buffer indices
         stream->availablePackets--;
         CIRCULAR_INCREMENT(stream->firstPacketUnused,
                            XLINK_MAX_PACKETS_PER_STREAM);

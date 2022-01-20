@@ -36,6 +36,7 @@ XLinkGlobalHandler_t* glHandler; //TODO need to either protect this with semapho
                                  //or make profiling data per device
 
 xLinkDesc_t availableXLinks[MAX_LINKS];
+pthread_mutex_t availableXLinksMutex = PTHREAD_MUTEX_INITIALIZER;
 sem_t  pingSem; //to b used by myriad
 DispatcherControlFunctions controlFunctionTbl;
 linkId_t nextUniqueLinkId = 0; //incremental number, doesn't get decremented.
@@ -52,6 +53,7 @@ linkId_t nextUniqueLinkId = 0; //incremental number, doesn't get decremented.
 
 static linkId_t getNextAvailableLinkUniqueId();
 static xLinkDesc_t* getNextAvailableLink();
+static void freeGivenLink(xLinkDesc_t* link);
 
 #ifdef __PC__
 
@@ -126,8 +128,6 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     link = getNextAvailableLink();
     if (link == NULL)
         return X_LINK_COMMUNICATION_NOT_OPEN;
-
-    link->id = getNextAvailableLinkUniqueId();
     link->peerState = XLINK_UP;
     link->deviceHandle.xLinkFD = NULL;
     link->deviceHandle.protocol = globalHandler->protocol;
@@ -200,6 +200,11 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
          * Connection may be unsuccessful at some amount of first tries.
          * In this case, asserting the status provides enormous amount of logs in tests.
          */
+
+        // Free used link
+        freeGivenLink(link);
+
+        // Return an informative error
         return X_LINK_COMMUNICATION_NOT_OPEN;
     }
 
@@ -217,7 +222,6 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
         return X_LINK_TIMEOUT;
     }
 
-    link->id = getNextAvailableLinkUniqueId();
     link->peerState = XLINK_UP;
     #if (!defined(_WIN32) && !defined(_WIN64) )
         link->usbConnSpeed = get_usb_speed();
@@ -324,15 +328,15 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     event.deviceHandle = link->deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
 
-    struct timespec start, end;
+    struct timespec start;
     clock_gettime(CLOCK_REALTIME, &start);
 
     struct timespec absTimeout = start;
     int64_t sec = timeoutMs / 1000;
     absTimeout.tv_sec += sec;
-    absTimeout.tv_nsec += (timeoutMs - (sec*1000)) * 1000000;
+    absTimeout.tv_nsec += (long)((timeoutMs - (sec * 1000)) * 1000000);
     int64_t secOver = absTimeout.tv_nsec / 1000000000;
-    absTimeout.tv_nsec -= secOver * 1000000000;
+    absTimeout.tv_nsec -= (long)(secOver * 1000000000);
     absTimeout.tv_sec += secOver;
 
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);
@@ -345,9 +349,9 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     XLinkError_t ret = DispatcherWaitEventCompleteTimeout(&link->deviceHandle, absTimeout);
 
     if(ret != X_LINK_SUCCESS){
-        // Close remote causes to close any links which unblocks the previous events
-        // It cleans the rest of dispatcher properly
-        DispatcherReset(&link->deviceHandle);
+        // Closing device link unblocks any blocked events
+        // Afterwards the dispatcher can properly cleanup in its own thread
+        DispatcherDeviceFdDown(&link->deviceHandle);
     }
 
     // Wait for dispatcher to be closed
@@ -458,6 +462,7 @@ const char* XLinkGetMxSerial(linkId_t id){
 // Helpers implementation. Begin.
 // ------------------------------------
 
+// Used only by getNextAvailableLink
 static linkId_t getNextAvailableLinkUniqueId()
 {
     linkId_t start = nextUniqueLinkId;
@@ -485,6 +490,15 @@ static linkId_t getNextAvailableLinkUniqueId()
 }
 
 static xLinkDesc_t* getNextAvailableLink() {
+
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, NULL);
+
+    linkId_t id = getNextAvailableLinkUniqueId();
+    if(id == INVALID_LINK_ID){
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
+        return NULL;
+    }
+
     int i;
     for (i = 0; i < MAX_LINKS; i++) {
         if (availableXLinks[i].id == INVALID_LINK_ID) {
@@ -494,6 +508,7 @@ static xLinkDesc_t* getNextAvailableLink() {
 
     if(i >= MAX_LINKS) {
         mvLog(MVLOG_ERROR,"%s():- no next available link!\n", __func__);
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
         return NULL;
     }
 
@@ -501,10 +516,30 @@ static xLinkDesc_t* getNextAvailableLink() {
 
     if (XLink_sem_init(&link->dispatcherClosedSem, 0 ,0)) {
         mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
         return NULL;
     }
 
+    link->id = id;
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
+
     return link;
+}
+
+static void freeGivenLink(xLinkDesc_t* link) {
+
+    if(pthread_mutex_lock(&availableXLinksMutex) != 0){
+        mvLog(MVLOG_ERROR, "Cannot lock mutex\n");
+        return;
+    }
+
+    link->id = INVALID_LINK_ID;
+    if (XLink_sem_destroy(&link->dispatcherClosedSem)) {
+        mvLog(MVLOG_ERROR, "Cannot destroy semaphore\n");
+    }
+
+    pthread_mutex_unlock(&availableXLinksMutex);
+
 }
 
 #ifdef __PC__
