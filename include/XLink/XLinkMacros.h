@@ -7,7 +7,7 @@
 
 #define CIRCULAR_INCREMENT(x, maxVal) \
     {                                 \
-        x = (++x) % maxVal;           \
+        x = (x + 1) % maxVal;         \
     }
 
 #define CIRCULAR_INCREMENT_BASE(x, maxVal, base) \
