@@ -1,2 +1,9 @@
 .vscode/
 build/
+
+#git
+*.orig
+*_REMOTE_*
+*_LOCAL_*
+*_BACKUP_*
+*_BASE_*

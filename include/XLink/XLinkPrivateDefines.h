@@ -26,7 +26,11 @@ extern "C"
 {
 #endif
 
+#ifdef XLINK_MAX_STREAM_RES
+#define MAXIMUM_SEMAPHORES XLINK_MAX_STREAM_RES
+#else
 #define MAXIMUM_SEMAPHORES 32
+#endif
 #define __CACHE_LINE_SIZE 64
 
 typedef int32_t eventId_t;
@@ -103,6 +107,8 @@ typedef enum
     IPC_READ_RESP,
     IPC_CREATE_STREAM_RESP,
     IPC_CLOSE_STREAM_RESP,
+    XLINK_READ_REL_SPEC_REQ,
+    XLINK_READ_REL_SPEC_RESP,
 } xLinkEventType_t;
 
 typedef enum

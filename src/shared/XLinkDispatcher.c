@@ -11,6 +11,7 @@
 #define _GNU_SOURCE // fix for warning: implicit declaration of function 'pthread_setname_np'
 #endif
 
+#include <errno.h>
 #include "stdio.h"
 #include "stdint.h"
 #include "stdlib.h"
@@ -18,6 +19,17 @@
 #include "errno.h"
 #include <assert.h>
 #include <stdlib.h>
+
+#if (defined(_WIN32) || defined(_WIN64))
+# include "win_pthread.h"
+# include "win_semaphore.h"
+#else
+# include <pthread.h>
+# include <unistd.h>
+# ifndef __APPLE__
+#  include <semaphore.h>
+# endif
+#endif
 
 #include "XLinkDispatcher.h"
 #include "XLinkMacros.h"
@@ -207,11 +219,6 @@ XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc) {
     // Initialize IDs and mutexes
     for (int i = 0; i < MAX_SCHEDULERS; i++){
         schedulerState[i].schedulerId = -1;
-        // Init per-scheduler mutex upfront
-        if (pthread_mutex_init(&schedulerState[i].mutex, NULL)) {
-            perror("Can't initialize mutex\n");
-            return X_LINK_ERROR;
-        }
     }
 
     return X_LINK_SUCCESS;
@@ -294,6 +301,10 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
         perror("Can't create semaphore\n");
         goto error;
     }
+    if (pthread_mutex_init(&(schedulerState[idx].mutex), NULL) != 0) {
+        perror("pthread_mutex_init error");
+        return -1;
+    }
     if (XLink_sem_init(&schedulerState[idx].notifyDispatcherSem, 0, 0)) {
         perror("Can't create semaphore\n");
         goto error;
@@ -317,6 +328,18 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
         mvLog(MVLOG_ERROR,"pthread_attr_setschedpolicy error");
         pthread_attr_destroy(&attr);
     }
+#ifdef XLINK_THREADS_PRIORITY
+    struct sched_param param;
+    if (pthread_attr_getschedparam(&attr, &param) != 0) {
+        mvLog(MVLOG_ERROR,"pthread_attr_getschedparam error");
+        pthread_attr_destroy(&attr);
+    }
+    param.sched_priority = XLINK_THREADS_PRIORITY;
+    if (pthread_attr_setschedparam(&attr, &param) != 0) {
+        mvLog(MVLOG_ERROR,"pthread_attr_setschedparam error");
+        pthread_attr_destroy(&attr);
+    }
+#endif
 #endif
 
     mvLog(MVLOG_DEBUG,"%s() starting a new thread - schedulerId %d \n", __func__, idx);
@@ -350,7 +373,6 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
     // Unlock per scheduler mutex
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&schedulerState[idx].mutex), X_LINK_ERROR);
 
-    // sem_post(&addSchedulerSem);
     return X_LINK_SUCCESS;
 
 error:
@@ -392,19 +414,23 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
     if(getResetXLink(curr)) {
         return NULL;
     }
-    mvLog(MVLOG_DEBUG, "Receiving event %s %d %08X\n", TypeToStr(event->header.type), origin, event->deviceHandle.xLinkFD);
-    if (XLink_sem_wait(&curr->addEventSem)) {
+    mvLog(MVLOG_DEBUG, "Receiving event %s %d\n", TypeToStr(event->header.type), origin);
+    int rc;
+    while(((rc = XLink_sem_wait(&curr->addEventSem)) == -1) && errno == EINTR)
+        continue;
+    if (rc) {
         mvLog(MVLOG_ERROR,"can't wait semaphore\n");
         return NULL;
     }
 
-    // Get scheduler mutex
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex), NULL);
 
     XLink_sem_t *sem = NULL;
     xLinkEvent_t* ev;
     if (origin == EVENT_LOCAL) {
+        XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex), NULL);
         event->header.id = curr->uniqueEventId++;
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex), NULL);
+
         sem = getSem(pthread_self(), curr);
         if (!sem) {
             sem = createSem(curr);
@@ -439,7 +465,7 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
     return ev;
 }
 
-int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle)
+int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int timeoutMs)
 {
     xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
     ASSERT_XLINK(curr != NULL);
@@ -449,21 +475,43 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle)
         return -1;
     }
 
-    int rc = XLink_sem_wait(id);
+    int rc = 0;
+    if (timeoutMs != XLINK_NO_RW_TIMEOUT) {
+        // This is a workaround for sem_timedwait being influenced by the system clock change.
+        // This is a temporary solution. TODO: replace this with something more efficient.
+        while (timeoutMs--) {
+            rc = XLink_sem_trywait(id);
+            if (!rc) {
+                break;
+            } else {
+#if (defined(_WIN32) || defined(_WIN64) )
+                Sleep(1);
+#else
+                usleep(1000);
+#endif
+            }
+        }
+    } else {
+        while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
+            continue;
+    }
 #ifdef __PC__
     if (rc) {
-        xLinkEvent_t event = {0};
-        event.header.type = XLINK_RESET_REQ;
-        event.deviceHandle = *deviceHandle;
-        mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
-        DispatcherAddEvent(EVENT_LOCAL, &event);
-        id = getSem(pthread_self(), curr);
-        if (id == NULL || XLink_sem_wait(id)) {
+            xLinkEvent_t event = {0};
+            event.header.type = XLINK_RESET_REQ;
+            event.deviceHandle = *deviceHandle;
+            mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
+            DispatcherAddEvent(EVENT_LOCAL, &event);
+            id = getSem(pthread_self(), curr);
+            int rc;
+            while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
+                continue;
+            if (id == NULL || rc) {
             // Calling non-thread safe dispatcherReset from external thread
             // TODO - investigate further and resolve
-            dispatcherReset(curr);
+                dispatcherReset(curr);
+            }
         }
-    }
 #endif
 
     return rc;
@@ -526,6 +574,8 @@ char* TypeToStr(int type)
         case XLINK_PING_RESP:  return "XLINK_PING_RESP";
         case XLINK_RESET_RESP: return "XLINK_RESET_RESP";
         case XLINK_RESP_LAST:  return "XLINK_RESP_LAST";
+        case XLINK_READ_REL_SPEC_REQ:  return "XLINK_READ_REL_SPEC_REQ";
+        case XLINK_READ_REL_SPEC_RESP:  return "XLINK_READ_REL_SPEC_RESP";
         default:
             break;
     }
@@ -537,10 +587,10 @@ int DispatcherUnblockEvent(eventId_t id, xLinkEventType_t type, streamId_t strea
     xLinkSchedulerState_t* curr = findCorrespondingScheduler(xlinkFD);
     ASSERT_XLINK(curr != NULL);
 
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex), 1);
-
     mvLog(MVLOG_DEBUG,"unblock\n");
     xLinkEventPriv_t* blockedEvent;
+
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex) != 0, 1);
     for (blockedEvent = curr->lQueue.q;
          blockedEvent < curr->lQueue.q + MAX_EVENTS;
          blockedEvent++)
@@ -557,7 +607,7 @@ int DispatcherUnblockEvent(eventId_t id, xLinkEventType_t type, streamId_t strea
             if (XLink_sem_post(&curr->notifyDispatcherSem)){
                 mvLog(MVLOG_ERROR, "can't post semaphore\n");
             }
-            XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex), 1);
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, 1);
             return 1;
         } else {
             mvLog(MVLOG_DEBUG,"%d %s\n",
@@ -565,9 +615,34 @@ int DispatcherUnblockEvent(eventId_t id, xLinkEventType_t type, streamId_t strea
                   TypeToStr((int)blockedEvent->packet.header.type));
         }
     }
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, 1);
+    return 0;
+}
 
-    XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex), 1);
+int DispatcherServeEvent(eventId_t id, xLinkEventType_t type, streamId_t stream, void *xlinkFD)
+{
+    xLinkSchedulerState_t* curr = findCorrespondingScheduler(xlinkFD);
+    ASSERT_XLINK(curr != NULL);
 
+    xLinkEventPriv_t* event;
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex) != 0, 1);
+    for (event = curr->lQueue.q;
+         event < curr->lQueue.q + MAX_EVENTS;
+         event++)
+    {
+        if (((event->packet.header.id == id || id == -1)
+             && event->packet.header.type == type
+             && event->packet.header.streamId == stream))
+        {
+            mvLog(MVLOG_DEBUG,"served**************** %d %s\n",
+                  (int)event->packet.header.id,
+                  TypeToStr((int)event->packet.header.type));
+            event->isServed = EVENT_SERVED;
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, 1);
+            return 1;
+        }
+    }
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, 1);
     return 0;
 }
 
@@ -685,8 +760,10 @@ static void* eventReader(void* ctx)
 
         if (sc) {
             mvLog(MVLOG_DEBUG,"Failed to receive event (err %d)", sc);
+            XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex) != 0, NULL);
             dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
             dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, NULL);
             continue;
         }
 
@@ -720,6 +797,7 @@ static void* eventSchedulerRun(void* ctx)
         mvLog(MVLOG_ERROR,"pthread_attr_init error");
         return NULL;
     }
+
 #ifndef __PC__
     if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0) {
         pthread_attr_destroy(&attr);
@@ -731,6 +809,18 @@ static void* eventSchedulerRun(void* ctx)
         mvLog(MVLOG_ERROR,"pthread_attr_setschedpolicy error");
         return NULL;
     }
+#ifdef XLINK_THREADS_PRIORITY
+    struct sched_param param;
+    if (pthread_attr_getschedparam(&attr, &param) != 0) {
+        mvLog(MVLOG_ERROR,"pthread_attr_getschedparam error");
+        pthread_attr_destroy(&attr);
+    }
+    param.sched_priority = XLINK_THREADS_PRIORITY;
+    if (pthread_attr_setschedparam(&attr, &param) != 0) {
+        mvLog(MVLOG_ERROR,"pthread_attr_setschedparam error");
+        pthread_attr_destroy(&attr);
+    }
+#endif
 #endif
     sc = pthread_create(&readerThreadId, &attr, eventReader, curr);
     if (sc) {
@@ -855,7 +945,7 @@ static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_
               (header->flags.bitField.ack == 0
                && header->flags.bitField.nack == 1)){ //this event is served locally, or it is failed
         postAndMarkEventServed(event);
-    }else if (header->flags.bitField.ack == 1
+    } else if (header->flags.bitField.ack == 1
               && header->flags.bitField.nack == 0){
         event->isServed = EVENT_PENDING;
         mvLog(MVLOG_DEBUG,"------------------------UNserved %s\n",
@@ -952,15 +1042,16 @@ static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
                                             eventQueueHandler_t *q, xLinkEvent_t* event,
                                             XLink_sem_t* sem, xLinkEventOrigin_t o){
     xLinkEvent_t* ev;
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex) != 0, NULL);
     xLinkEventPriv_t* eventP = getNextElementWithState(q->base, q->end, q->cur, EVENT_SERVED);
     if (eventP == NULL) {
         mvLog(MVLOG_ERROR, "getNextElementWithState returned NULL");
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, NULL);
         return NULL;
     }
     mvLog(MVLOG_DEBUG, "Received event %s %d", TypeToStr(event->header.type), o);
     ev = &eventP->packet;
 
-    (void)curr;
     eventP->sem = sem;
     eventP->packet = *event;
     eventP->origin = o;
@@ -973,6 +1064,7 @@ static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
     q->cur = eventP;
     eventP->isServed = EVENT_ALLOCATED;
     CIRCULAR_INCREMENT_BASE(q->cur, q->end, q->base);
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, NULL);
     return ev;
 }
 
@@ -985,19 +1077,19 @@ static xLinkEventPriv_t* dispatcherGetNextEventEx(xLinkSchedulerState_t* curr, i
 {
     XLINK_RET_ERR_IF(curr == NULL, NULL);
 
-    if (XLink_sem_wait(&curr->notifyDispatcherSem)) {
+    int rc;
+    while(((rc = XLink_sem_wait(&curr->notifyDispatcherSem)) == -1) && errno == EINTR)
+        continue;
+    if (rc) {
         mvLog(MVLOG_ERROR,"can't post semaphore\n");
     }
 
-    // Get scheduler mutex
-    if(lock) XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex), NULL);
-
     xLinkEventPriv_t* event = NULL;
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex) != 0, NULL);
     event = searchForReadyEvent(curr);
     if (event) {
-        
-        // Release scheduler mutex
-        if(lock) XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex), NULL);
+        // Release mutex
+        if(lock) XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, NULL);
         return event;
     }
 
@@ -1007,15 +1099,12 @@ static xLinkEventPriv_t* dispatcherGetNextEventEx(xLinkSchedulerState_t* curr, i
 
     event = getNextQueueElemToProc(hPriorityQueue);
     if (event) {
-        // Release scheduler mutex
-        if(lock) XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex), NULL);
+        if(lock) XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, NULL);
         return event;
     }
     event = getNextQueueElemToProc(lPriorityQueue);
 
-    // Release scheduler mutex
-    if(lock) XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex), NULL);
-
+    if(lock) XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, NULL);
     return event;
 }
 
@@ -1093,7 +1182,6 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
 
     mvLog(MVLOG_INFO, "Cleaned Dispatcher Successfully...");
 
-
     // Reset dispatcher
     xLinkDesc_t* link = getLink(curr->deviceHandle.xLinkFD);
     if(link == NULL || XLink_sem_post(&link->dispatcherClosedSem)) {
@@ -1145,11 +1233,13 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
             event->packet.header.flags.bitField.nack = 1;
             event->packet.header.flags.bitField.ack = 0;
 
+            XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex) != 0, X_LINK_ERROR);
             if (event->origin == EVENT_LOCAL){
                 dispatcherRequestServe(event, curr);
             } else {
                 dispatcherResponseServe(event, curr);
             }
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, X_LINK_ERROR);
 
             continue;
         }
@@ -1165,8 +1255,9 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
         }
 
         res = getResp(&event->packet, &response.packet);
-        if (isEventTypeRequest(event)){
-            if (event->origin == EVENT_LOCAL){ //we need to do this for locals only
+        if (isEventTypeRequest(event)) {
+            XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex) != 0, X_LINK_ERROR);
+            if (event->origin == EVENT_LOCAL) { //we need to do this for locals only
                 if(dispatcherRequestServe(event, curr)) {
                     mvLog(MVLOG_ERROR, "Failed to serve local event. "
                                        "Event: id=%d, type=%s, streamId=%u, streamName=%s",
@@ -1192,16 +1283,23 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
                     }
                 }
 #endif // __PC__
+                XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, X_LINK_ERROR);
                 if (glControlFunc->eventSend(toSend) != 0) {
+                    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex) != 0, X_LINK_ERROR);
                     dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
                     dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
+                    XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, X_LINK_ERROR);
                     mvLog(MVLOG_ERROR, "Event sending failed");
                 }
+            } else {
+                XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, X_LINK_ERROR);
             }
         } else {
+            XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->mutex) != 0, X_LINK_ERROR);
             if (event->origin == EVENT_REMOTE){ // match remote response with the local request
                 dispatcherResponseServe(event, curr);
             }
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->mutex) != 0, X_LINK_ERROR);
         }
 
         if (event->origin == EVENT_REMOTE){
