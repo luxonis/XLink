@@ -75,6 +75,14 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
 XLinkError_t XLinkConnect(XLinkHandler_t* handler);
 
 /**
+ * @brief Connects to specific device with a timeout, starts dispatcher and pings remote
+ * @param[in,out] handler - XLink communication parameters (file path name for underlying layer)
+ * @param[in] msTimeout – time in milliseconds after which operation times out
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int msTimeout);
+
+/**
  * @brief Puts device into bootloader mode
  * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
