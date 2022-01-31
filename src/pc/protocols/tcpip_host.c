@@ -362,7 +362,10 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
         bool duplicate = false;
         for(int j = i - 1; j >= 0; j--){
             // Check if duplicate
-            if(strcmp(devices[i].name, devices[j].name) == 0 && strcmp(devices[i].mxid, devices[j].mxid) == 0){
+
+            // TMP TMP - merge with device search improvements
+            // to have mxid available as well
+            if(strcmp(devices[i].name, devices[j].name) == 0){
                 duplicate = true;
                 break;
             }
