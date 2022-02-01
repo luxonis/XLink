@@ -1110,7 +1110,12 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
     }
 
     xLinkDesc_t* link = getLink(curr->deviceHandle.xLinkFD);
-    if(link == NULL || XLink_sem_post(&link->dispatcherClosedSem)) {
+    if(link != NULL && pthread_mutex_lock(&link->dispatcherClosedMtx) == 0) {
+        // Notify that dispatcher is closed
+        link->dispatcherClosed = 1;
+        pthread_cond_broadcast(&link->dispatcherClosedCv);
+        pthread_mutex_unlock(&link->dispatcherClosedMtx);
+    } else {
         mvLog(MVLOG_DEBUG,"can't post dispatcherClosedSem\n");
     }
 

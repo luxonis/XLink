@@ -535,8 +535,15 @@ void dispatcherCloseLink(void* fd, int fullClose)
         XLinkStreamReset(stream);
     }
 
-    if(XLink_sem_destroy(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_DEBUG, "Cannot destroy dispatcherClosedSem\n");
+    if (pthread_mutex_destroy(&link->dispatcherClosedMtx)) {
+        mvLog(MVLOG_ERROR, "Cannot destroy mutex\n");
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
+        return NULL;
+    }
+    if(pthread_cond_destroy(&link->dispatcherClosedCv)){
+        mvLog(MVLOG_ERROR, "Cannot destroy condition variable\n");
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
+        return NULL;
     }
 }
 

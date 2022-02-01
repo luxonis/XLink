@@ -54,6 +54,7 @@ linkId_t nextUniqueLinkId = 0; //incremental number, doesn't get decremented.
 static linkId_t getNextAvailableLinkUniqueId();
 static xLinkDesc_t* getNextAvailableLink();
 static void freeGivenLink(xLinkDesc_t* link);
+static XLinkError_t waitLinkDispatcherIsClosed(xLinkDesc_t* link);
 
 #ifdef __PC__
 
@@ -224,7 +225,10 @@ XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
     if (DispatcherWaitEventComplete(&link->deviceHandle, msTimeout)) {
-        DispatcherClean(&link->deviceHandle);
+
+        // TMP TMP  - recheck
+        DispatcherDeviceFdDown(&link->deviceHandle);
+        // DispatcherClean(&link->deviceHandle);
         return X_LINK_TIMEOUT;
     }
 
@@ -306,15 +310,7 @@ XLinkError_t XLinkResetRemote(linkId_t id)
     XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
         X_LINK_TIMEOUT);
 
-    int rc;
-    while(((rc = XLink_sem_wait(&link->dispatcherClosedSem)) == -1) && errno == EINTR)
-        continue;
-    if(rc) {
-        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
-        return X_LINK_ERROR;
-    }
-
-    return X_LINK_SUCCESS;
+    return waitLinkDispatcherIsClosed(link);
 }
 
 XLinkError_t XLinkResetRemoteTimeout(linkId_t id, const int msTimeout)
@@ -349,9 +345,8 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, const int msTimeout)
         DispatcherDeviceFdDown(&link->deviceHandle);
     }
 
-    // Wait for dispatcher to be closed
-    if(XLink_sem_wait(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
+    if(waitLinkDispatcherIsClosed(link) != X_LINK_SUCCESS){
+        mvLog(MVLOG_ERROR,"can't wait dispatcherClosed\n");
         return X_LINK_ERROR;
     }
 
@@ -509,7 +504,12 @@ static xLinkDesc_t* getNextAvailableLink() {
 
     xLinkDesc_t* link = &availableXLinks[i];
 
-    if (XLink_sem_init(&link->dispatcherClosedSem, 0 ,0)) {
+    if (pthread_mutex_init(&link->dispatcherClosedMtx, 0)) {
+        mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
+        return NULL;
+    }
+    if(pthread_cond_init(&link->dispatcherClosedCv, NULL)){
         mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
         XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
         return NULL;
@@ -529,12 +529,30 @@ static void freeGivenLink(xLinkDesc_t* link) {
     }
 
     link->id = INVALID_LINK_ID;
-    if (XLink_sem_destroy(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_ERROR, "Cannot destroy semaphore\n");
+    if (pthread_mutex_destroy(&link->dispatcherClosedMtx)) {
+        mvLog(MVLOG_ERROR, "Cannot destroy mutex\n");
     }
-
+    if(pthread_cond_destroy(&link->dispatcherClosedCv)){
+        mvLog(MVLOG_ERROR, "Cannot destroy condition variable\n");
+    }
     pthread_mutex_unlock(&availableXLinksMutex);
 
+}
+
+static XLinkError_t waitLinkDispatcherIsClosed(xLinkDesc_t* link)
+{
+    ASSERT_XLINK(link != NULL);
+    // Wait for dispatcher to be closed
+    if(pthread_mutex_lock(&link->dispatcherClosedMtx) == 0){
+        while(!link->dispatcherClosed){
+            pthread_cond_wait(&link->dispatcherClosedCv, &link->dispatcherClosedMtx);
+        }
+        pthread_mutex_unlock(&link->dispatcherClosedMtx);
+    } else {
+        mvLog(MVLOG_ERROR,"can't lock dispatcherClosedMtx\n");
+        return X_LINK_ERROR;
+    }
+    return X_LINK_SUCCESS;
 }
 
 #ifdef __PC__
