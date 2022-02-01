@@ -178,7 +178,7 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
     return parsePlatformError(rc);
 }
 
-
+//Called only from app - per device
 XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 {
     return XLinkConnectWithTimeout(handler, XLINK_NO_RW_TIMEOUT);
@@ -224,15 +224,7 @@ XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
     if (DispatcherWaitEventComplete(&link->deviceHandle, msTimeout)) {
-        // Dispatcher thread will cleanup on its own
-        // DispatcherReset(&link->deviceHandle);
-
-        // Wait for dispatcher to be closed
-        if(XLink_sem_wait(&link->dispatcherClosedSem)) {
-            mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
-            return X_LINK_ERROR;
-        }
-
+        DispatcherClean(&link->deviceHandle);
         return X_LINK_TIMEOUT;
     }
 

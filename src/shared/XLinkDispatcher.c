@@ -336,6 +336,14 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
     return 0;
 }
 
+int DispatcherClean(xLinkDeviceHandle_t *deviceHandle) {
+    XLINK_RET_IF(deviceHandle == NULL);
+
+    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+    XLINK_RET_IF(curr == NULL);
+
+    return dispatcherClean(curr);
+}
 
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle){
     XLINK_RET_IF(deviceHandle == NULL);
@@ -425,15 +433,14 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
         while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
             continue;
     }
-#if defined(__PC__) && 1
+#ifdef __PC__
     if (rc) {
             xLinkEvent_t event = {0};
             event.header.type = XLINK_RESET_REQ;
             event.deviceHandle = *deviceHandle;
             mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
-            id = getSem(pthread_self(), curr);
             DispatcherAddEvent(EVENT_LOCAL, &event);
-            DispatcherDeviceFdDown(deviceHandle);
+            id = getSem(pthread_self(), curr);
             int rc;
             while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
                 continue;
