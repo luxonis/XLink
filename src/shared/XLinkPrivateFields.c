@@ -39,24 +39,26 @@ XLinkError_t getLinkUpDeviceHandleById(linkId_t id, xLinkDeviceHandle_t* const o
     ASSERT_XLINK(out_handle);
     XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, X_LINK_ERROR);
 
-    int i;
-    for (i = 0; i < MAX_LINKS; i++) {
+    // Error if no valid id found
+    XLinkError_t ret = X_LINK_ERROR;
+    for (int i = 0; i < MAX_LINKS; i++) {
         if (availableXLinks[i].id == id) {
             // Copy handle out before unlocking the mutex
             *out_handle = availableXLinks[i].deviceHandle;
             // Check if state is up
-            if(availableXLinks[i].peerState != XLINK_UP){
-                XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, X_LINK_ERROR);
-                return X_LINK_COMMUNICATION_NOT_OPEN;
+            if(availableXLinks[i].peerState == XLINK_UP){
+                ret = X_LINK_SUCCESS;
+            } else {
+                ret = X_LINK_COMMUNICATION_NOT_OPEN;
             }
-            XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, X_LINK_ERROR);
-            return X_LINK_SUCCESS;
+            // Exit the loop
+            break;
         }
     }
 
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, X_LINK_ERROR);
-    // No valid id found
-    return X_LINK_ERROR;
+    // Return success/error status
+    return ret;
 }
 
 xLinkDesc_t* getLink(void* fd)
