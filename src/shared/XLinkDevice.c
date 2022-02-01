@@ -225,8 +225,7 @@ XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
     if (DispatcherWaitEventComplete(&link->deviceHandle, msTimeout)) {
-
-        // TMP TMP  - recheck
+        // TMP TMP - recheck
         DispatcherDeviceFdDown(&link->deviceHandle);
         // DispatcherClean(&link->deviceHandle);
         return X_LINK_TIMEOUT;

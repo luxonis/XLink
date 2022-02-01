@@ -40,8 +40,9 @@ extern sem_t  pingSem; //to b used by myriad
 
 xLinkDesc_t* getLinkById(linkId_t id);
 xLinkDesc_t* getLink(void* fd);
+xLinkDesc_t* getLinkUnsafe(void* fd);
 xLinkState_t getXLinkState(xLinkDesc_t* link);
-
+XLinkError_t getLinkUpDeviceHandleById(linkId_t id, xLinkDeviceHandle_t* const out_handle);
 
 streamId_t getStreamIdByName(xLinkDesc_t* link, const char* name);
 

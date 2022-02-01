@@ -355,9 +355,6 @@ XLinkError_t XLinkAsyncWriteData();
 XLinkError_t XLinkSetDeviceOpenTimeOutMsec(unsigned int msec);
 XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);
 
-// unsafe
-XLinkError_t XLinkGetFillLevel(streamId_t const streamId, int isRemote, int* fillLevel);
-
 #endif // __PC__
 
 // ------------------------------------

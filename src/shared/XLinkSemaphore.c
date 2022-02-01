@@ -81,11 +81,15 @@ int XLink_sem_destroy(XLink_sem_t* sem)
 int XLink_sem_post(XLink_sem_t* sem)
 {
     XLINK_RET_ERR_IF(sem == NULL, -1);
+    XLINK_RET_IF_FAIL(pthread_mutex_lock(&ref_mutex));
     if (sem->refs < 0) {
+        XLINK_RET_IF_FAIL(pthread_mutex_unlock(&ref_mutex));
         return -1;
     }
+    int ret = sem_post(&sem->psem);
+    XLINK_RET_IF_FAIL(pthread_mutex_unlock(&ref_mutex));
 
-    return sem_post(&sem->psem);
+    return ret;
 }
 
 int XLink_sem_wait(XLink_sem_t* sem)
@@ -143,6 +147,9 @@ int XLink_sem_get_refs(XLink_sem_t* sem, int *sval)
 {
     XLINK_RET_ERR_IF(sem == NULL, -1);
 
+    XLINK_RET_IF_FAIL(pthread_mutex_lock(&ref_mutex));
     *sval = sem->refs;
+    XLINK_RET_IF_FAIL(pthread_mutex_unlock(&ref_mutex));
+
     return 0;
 }
