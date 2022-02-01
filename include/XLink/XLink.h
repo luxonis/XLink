@@ -131,7 +131,7 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 
-XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs);
+XLinkError_t XLinkResetRemoteTimeout(linkId_t id, const int msTimeout);
 
 /**
  * @brief Closes all and release all memory

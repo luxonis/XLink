@@ -224,7 +224,15 @@ XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
     if (DispatcherWaitEventComplete(&link->deviceHandle, msTimeout)) {
-        DispatcherClean(&link->deviceHandle);
+        // Dispatcher thread will cleanup on its own
+        // DispatcherReset(&link->deviceHandle);
+
+        // Wait for dispatcher to be closed
+        if(XLink_sem_wait(&link->dispatcherClosedSem)) {
+            mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
+            return X_LINK_ERROR;
+        }
+
         return X_LINK_TIMEOUT;
     }
 
@@ -317,7 +325,7 @@ XLinkError_t XLinkResetRemote(linkId_t id)
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
+XLinkError_t XLinkResetRemoteTimeout(linkId_t id, const int msTimeout)
 {
     xLinkDesc_t* link = getLinkById(id);
     XLINK_RET_IF(link == NULL);
@@ -334,17 +342,6 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     event.deviceHandle = link->deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
 
-    struct timespec start;
-    clock_gettime(CLOCK_REALTIME, &start);
-
-    struct timespec absTimeout = start;
-    int64_t sec = timeoutMs / 1000;
-    absTimeout.tv_sec += sec;
-    absTimeout.tv_nsec += (long)((timeoutMs - (sec * 1000)) * 1000000);
-    int64_t secOver = absTimeout.tv_nsec / 1000000000;
-    absTimeout.tv_nsec -= (long)(secOver * 1000000000);
-    absTimeout.tv_sec += secOver;
-
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
@@ -352,7 +349,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
         return X_LINK_ERROR;
     }
 
-    XLinkError_t ret = DispatcherWaitEventCompleteTimeout(&link->deviceHandle, absTimeout);
+    XLinkError_t ret = DispatcherWaitEventComplete(&link->deviceHandle, msTimeout);
 
     if(ret != X_LINK_SUCCESS){
         // Closing device link unblocks any blocked events

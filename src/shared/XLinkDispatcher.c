@@ -118,6 +118,7 @@ int numSchedulers;
 xLinkSchedulerState_t schedulerState[MAX_SCHEDULERS];
 sem_t addSchedulerSem;
 
+static pthread_mutex_t unique_id_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t clean_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t reset_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t num_schedulers_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -335,14 +336,6 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
     return 0;
 }
 
-int DispatcherClean(xLinkDeviceHandle_t *deviceHandle) {
-    XLINK_RET_IF(deviceHandle == NULL);
-
-    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
-    XLINK_RET_IF(curr == NULL);
-
-    return dispatcherClean(curr);
-}
 
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle){
     XLINK_RET_IF(deviceHandle == NULL);
@@ -432,14 +425,15 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
         while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
             continue;
     }
-#ifdef __PC__
+#if defined(__PC__) && 1
     if (rc) {
             xLinkEvent_t event = {0};
             event.header.type = XLINK_RESET_REQ;
             event.deviceHandle = *deviceHandle;
             mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
-            DispatcherAddEvent(EVENT_LOCAL, &event);
             id = getSem(pthread_self(), curr);
+            DispatcherAddEvent(EVENT_LOCAL, &event);
+            DispatcherDeviceFdDown(deviceHandle);
             int rc;
             while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
                 continue;
@@ -453,43 +447,6 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
 
     return rc;
 }
-
-int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct timespec abstime)
-{
-    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
-    ASSERT_XLINK(curr != NULL);
-
-    XLink_sem_t* id = getSem(pthread_self(), curr);
-    if (id == NULL) {
-        return -1;
-    }
-
-    int rc = XLink_sem_timedwait(id, &abstime);
-    int err = errno;
-
-#ifdef __PC__
-    if (rc) {
-        if(err == ETIMEDOUT){
-            return X_LINK_TIMEOUT;
-        } else {
-            xLinkEvent_t event = {0};
-            event.header.type = XLINK_RESET_REQ;
-            event.deviceHandle = *deviceHandle;
-            mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
-            DispatcherAddEvent(EVENT_LOCAL, &event);
-            id = getSem(pthread_self(), curr);
-            if (id == NULL || XLink_sem_wait(id)) {
-                // Calling non-thread safe dispatcherReset from external thread
-                // TODO - investigate further and resolve
-                dispatcherReset(curr);
-            }
-        }
-    }
-#endif
-
-    return rc;
-}
-
 
 char* TypeToStr(int type)
 {
@@ -829,8 +786,17 @@ static void postAndMarkEventServed(xLinkEventPriv_t *event)
 
 static int createUniqueID()
 {
-    static int id = 0xa;
-    return id++;
+    static eventId_t id = 0xa;
+    eventId_t idCopy = 0;
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&unique_id_mutex) != 0, -1);
+    id++;
+    if(id >= INT32_MAX){
+        id = 0xa;
+    }
+    idCopy = id;
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&unique_id_mutex) != 0, -1);
+
+    return idCopy;
 }
 
 int findAvailableScheduler()
