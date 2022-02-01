@@ -218,6 +218,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
     if (DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT)) {
+        // TMP TMP - investigate, FdDown might be better
         DispatcherReset(&link->deviceHandle);
         return X_LINK_TIMEOUT;
     }
