@@ -123,22 +123,17 @@ XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmw
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 
-XLinkError_t XLinkResetRemote(linkId_t id);
+XLinkError_t XLinkResetRemote(const linkId_t id);
 
 /**
  * @brief Resets the remote device and close all open local handles for this device
  * @warning This function should be used in a host application
  * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
+ * @param[in] msTimeout – time in milliseconds after which operation times out
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 
-XLinkError_t XLinkResetRemoteTimeout(linkId_t id, const int msTimeout);
-
-/**
- * @brief Closes all and release all memory
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
- */
-XLinkError_t XLinkResetAll();
+XLinkError_t XLinkResetRemoteTimeout(const linkId_t id, const unsigned int msTimeout);
 
 /**
  * @brief Retrieves USB speed of certain connected device
@@ -312,10 +307,10 @@ XLinkError_t XLinkReleaseData(streamId_t const streamId);
  *      data. Should be fixed for the next release.
  * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet – structure containing output data buffer and received size
- * @param[in]   timeoutMs – timeout for a read operation in milliseconds
+ * @param[in]   msTimeout – timeout for a read operation in milliseconds
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** packet, unsigned int timeoutMs);
+XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** packet, unsigned int msTimeout);
 
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream with timeout in ms
@@ -324,10 +319,10 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
  * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
  * @param[in] buffer – data buffer to be transmitted
  * @param[in] size – size of the data to be transmitted
- * @param[in] timeoutMs – timeout for a write operation in milliseconds
+ * @param[in] msTimeout – timeout for a write operation in milliseconds
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int timeoutMs);
+XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int msTimeout);
 
 // ------------------------------------
 // Device streams management. End.
@@ -354,6 +349,13 @@ XLinkError_t XLinkAsyncWriteData();
 
 XLinkError_t XLinkSetDeviceOpenTimeOutMsec(unsigned int msec);
 XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);
+
+/**
+ * Deprecated - issues
+ * @brief Closes all and release all memory
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkResetAll();
 
 #endif // __PC__
 

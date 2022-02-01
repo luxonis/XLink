@@ -34,7 +34,15 @@ xLinkDesc_t* getLinkById(linkId_t id)
     return NULL;
 }
 
-XLinkError_t getLinkUpDeviceHandleById(linkId_t id, xLinkDeviceHandle_t* const out_handle)
+
+XLinkError_t getLinkUpDeviceHandleByStreamId(streamId_t const streamId, xLinkDeviceHandle_t* const out_handle) {
+    ASSERT_XLINK(out_handle != NULL);
+
+    linkId_t id = EXTRACT_LINK_ID(streamId);
+    return getLinkUpDeviceHandleByLinkId(id, out_handle);
+}
+
+XLinkError_t getLinkUpDeviceHandleByLinkId(linkId_t id, xLinkDeviceHandle_t* const out_handle)
 {
     ASSERT_XLINK(out_handle);
     XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, X_LINK_ERROR);

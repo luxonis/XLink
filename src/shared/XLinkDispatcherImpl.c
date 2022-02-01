@@ -82,7 +82,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     //       TypeToStr(prevEvent.header.type),
     //       (int)prevEvent.header.id,
     //       prevEvent.deviceHandle.xLinkFD);
-    
+
     if(rc < 0) {
         mvLog(MVLOG_DEBUG,"%s() Read failed %d\n", __func__, (int)rc);
         return rc;
@@ -544,13 +544,9 @@ void dispatcherCloseLink(void* fd, int fullClose)
 
     if (pthread_mutex_destroy(&link->dispatcherClosedMtx)) {
         mvLog(MVLOG_ERROR, "Cannot destroy mutex\n");
-        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
-        return NULL;
     }
     if(pthread_cond_destroy(&link->dispatcherClosedCv)){
         mvLog(MVLOG_ERROR, "Cannot destroy condition variable\n");
-        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
-        return NULL;
     }
 
     pthread_mutex_unlock(&availableXLinksMutex);
