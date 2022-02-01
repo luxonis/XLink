@@ -281,88 +281,33 @@ XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmw
     return X_LINK_COMMUNICATION_FAIL;
 }
 
-XLinkError_t XLinkResetRemote(linkId_t id)
+XLinkError_t XLinkResetRemote(const linkId_t id)
 {
-    xLinkDesc_t* link = getLinkById(id);
-    XLINK_RET_IF(link == NULL);
-
-    if (getXLinkState(link) != XLINK_UP) {
-        mvLog(MVLOG_WARN, "Link is down, close connection to device without reset");
-        XLinkPlatformCloseRemote(&link->deviceHandle);
-        return X_LINK_COMMUNICATION_NOT_OPEN;
-    }
+    return XLinkResetRemoteTimeout(id, XLINK_NO_RW_TIMEOUT);
+}
+XLinkError_t XLinkResetRemoteTimeout(const linkId_t id, const unsigned int msTimeout)
+{
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByLinkId(id, &deviceHandle));
 
     // Add event to reset device. After sending it, dispatcher will close fd link
     xLinkEvent_t event = {0};
     event.header.type = XLINK_RESET_REQ;
-    event.deviceHandle = link->deviceHandle;
+    event.deviceHandle = deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
     DispatcherAddEvent(EVENT_LOCAL, &event);
-    XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
-        X_LINK_TIMEOUT);
+    XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&deviceHandle, msTimeout), X_LINK_TIMEOUT);
 
-    int rc;
-    while(((rc = XLink_sem_wait(&link->dispatcherClosedSem)) == -1) && errno == EINTR)
-        continue;
-    if(rc) {
-        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
-        return X_LINK_ERROR;
-    }
+    // TMP TMP - investigate if not waiting for the dispatcher to shutdown is ok
+    // int rc;
+    // while(((rc = XLink_sem_wait(&link->dispatcherClosedSem)) == -1) && errno == EINTR)
+    //     continue;
+    // if(rc) {
+    //     mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
+    //     return X_LINK_ERROR;
+    // }
 
     return X_LINK_SUCCESS;
-}
-
-XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
-{
-    xLinkDesc_t* link = getLinkById(id);
-    XLINK_RET_IF(link == NULL);
-
-    if (getXLinkState(link) != XLINK_UP) {
-        mvLog(MVLOG_WARN, "Link is down, close connection to device without reset");
-        XLinkPlatformCloseRemote(&link->deviceHandle);
-        return X_LINK_COMMUNICATION_NOT_OPEN;
-    }
-
-    // Add event to reset device. After sending it, dispatcher will close fd link
-    xLinkEvent_t event = {0};
-    event.header.type = XLINK_RESET_REQ;
-    event.deviceHandle = link->deviceHandle;
-    mvLog(MVLOG_DEBUG, "sending reset remote event\n");
-
-    struct timespec start;
-    clock_gettime(CLOCK_REALTIME, &start);
-
-    struct timespec absTimeout = start;
-    int64_t sec = timeoutMs / 1000;
-    absTimeout.tv_sec += sec;
-    absTimeout.tv_nsec += (long)((timeoutMs - (sec * 1000)) * 1000000);
-    int64_t secOver = absTimeout.tv_nsec / 1000000000;
-    absTimeout.tv_nsec -= (long)(secOver * 1000000000);
-    absTimeout.tv_sec += secOver;
-
-    xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);
-    if(ev == NULL) {
-        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
-            TypeToStr(event.header.type), event.header.id, event.header.streamName);
-        return X_LINK_ERROR;
-    }
-
-    XLinkError_t ret = DispatcherWaitEventCompleteTimeout(&link->deviceHandle, absTimeout);
-
-    if(ret != X_LINK_SUCCESS){
-        // Closing device link unblocks any blocked events
-        // Afterwards the dispatcher can properly cleanup in its own thread
-        DispatcherDeviceFdDown(&link->deviceHandle);
-    }
-
-    // Wait for dispatcher to be closed
-    if(XLink_sem_wait(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
-        return X_LINK_ERROR;
-    }
-
-    return ret;
-
 }
 
 XLinkError_t XLinkResetAll()

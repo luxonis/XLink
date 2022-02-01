@@ -38,8 +38,6 @@ static XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs);
 static XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs);
 static XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigned int msTimeout);
 static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_link);
-static XLinkError_t getLinkUpDeviceHandleByStreamId(streamId_t const streamId, xLinkDeviceHandle_t* const out_handle);
-
 // ------------------------------------
 // Helpers declaration. End.
 // ------------------------------------
@@ -151,7 +149,7 @@ XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packe
     xLinkDeviceHandle_t deviceHandle;
     XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
     streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
-    
+
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_READ_REQ,
         0, NULL, deviceHandle);
@@ -505,13 +503,6 @@ static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_lin
                     X_LINK_COMMUNICATION_NOT_OPEN);
 
     return X_LINK_SUCCESS;
-}
-
-static XLinkError_t getLinkUpDeviceHandleByStreamId(streamId_t const streamId, xLinkDeviceHandle_t* const out_handle) {
-    ASSERT_XLINK(out_handle != NULL);
-
-    linkId_t id = EXTRACT_LINK_ID(streamId);
-    return getLinkUpDeviceHandleById(id, out_handle);
 }
 
 // ------------------------------------
