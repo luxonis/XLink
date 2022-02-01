@@ -292,12 +292,24 @@ int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
 // Helpers implementation. Begin.
 // ------------------------------------
 #ifdef USE_USB_VSC
+
+static pthread_mutex_t seconds_mutex = PTHREAD_MUTEX_INITIALIZER;
 double seconds()
 {
     struct timespec ts;
+    double tStart;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    double s = ts.tv_sec + ts.tv_nsec * 1e-9;
-    return ts.tv_sec + ts.tv_nsec * 1e-9 - s;
+
+    pthread_mutex_lock(&seconds_mutex);
+    static double tSecondsStartTime = 0;
+    if(!tSecondsStartTime) {
+        tSecondsStartTime = ts.tv_sec + ts.tv_nsec * 1e-9;
+    }
+    tStart = tSecondsStartTime;
+    pthread_mutex_unlock(&seconds_mutex);
+
+    // Return time till first seconds call
+    return ts.tv_sec + ts.tv_nsec * 1e-9 - tStart;
 }
 #endif
 
