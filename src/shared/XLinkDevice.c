@@ -296,7 +296,14 @@ XLinkError_t XLinkResetRemoteTimeout(const linkId_t id, const unsigned int msTim
     event.deviceHandle = deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
     DispatcherAddEvent(EVENT_LOCAL, &event);
-    XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&deviceHandle, msTimeout), X_LINK_TIMEOUT);
+    XLinkError_t ret = DispatcherWaitEventComplete(&deviceHandle, msTimeout);
+
+    if(ret != X_LINK_SUCCESS){
+        // Closing device link unblocks any blocked events
+        // Afterwards the dispatcher can properly clean in its own thread
+        DispatcherDeviceFdDown(&deviceHandle);
+    }
+
 
     // TMP TMP - investigate if not waiting for the dispatcher to shutdown is ok
     // int rc;
