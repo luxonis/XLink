@@ -237,6 +237,8 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
 
     schedulerState[idx].resetXLink = 0;
     schedulerState[idx].dispatcherLinkDown = 0;
+    schedulerState[idx].dispatcherDeviceFdDown = 0;
+
     schedulerState[idx].deviceHandle = *deviceHandle;
     schedulerState[idx].schedulerId = idx;
 
