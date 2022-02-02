@@ -46,7 +46,7 @@ int usbFdRead = -1;
 static UsbSpeed_t usb_speed_enum = X_LINK_USB_SPEED_UNKNOWN;
 static char mx_serial[XLINK_MAX_MX_ID_SIZE] = { 0 };
 #ifdef USE_USB_VSC
-static int statuswaittimeout = 5;
+static const int statuswaittimeout = 5;
 #endif
 
 typedef struct {
