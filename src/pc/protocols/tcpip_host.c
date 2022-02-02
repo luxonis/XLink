@@ -354,8 +354,29 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
 
     tcpip_close_socket(sock);
 
+    // Filter out duplicates - routing table will decide through which interface the packets will traverse
+    // TODO(themarpe) - properly separate interfaces.
+    // Either bind to interface addr, or SO_BINDTODEVICE Linux, IP_BOUND_IF macOS, and prefix interface name
+    int write_index = 0;
+    for(int i = 0; i < (int) num_devices_match; i++){
+        bool duplicate = false;
+        for(int j = i - 1; j >= 0; j--){
+            // Check if duplicate
+
+            // TMP TMP - merge with device search improvements
+            // to have mxid available as well
+            if(strcmp(devices[i].name, devices[j].name) == 0){
+                duplicate = true;
+                break;
+            }
+        }
+        if(!duplicate){
+            devices[write_index] = devices[i];
+            write_index++;
+        }
+    }
     // return total device found
-    *device_count = num_devices_match;
+    *device_count = write_index;
 
     // if at least one device matched, return OK otherwise return not found
     if(num_devices_match <= 0)
