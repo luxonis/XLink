@@ -706,7 +706,10 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
         return -1;
     }
 
-    *((TCPIP_SOCKET*)fd) = sock;
+    // TMP TMP - leaky "key" for FD
+    *fd = malloc(sizeof(TCPIP_SOCKET));
+    *((TCPIP_SOCKET*)*fd) = sock;
+
 #endif
     return 0;
 }
@@ -790,7 +793,9 @@ int tcpipPlatformClose(void *fd)
     return status;
 #else
 
-    intptr_t sockfd = (intptr_t)fd;
+    // intptr_t sockfd = (intptr_t)fd;
+    // TMP TMP - leaky malloc test
+    TCPIP_SOCKET sockfd = *((TCPIP_SOCKET*)fd);
     if(sockfd != -1)
     {
         status = shutdown(sockfd, SHUT_RDWR);
