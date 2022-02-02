@@ -432,7 +432,7 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
             sem = createSem(curr);
         }
         if (!sem) {
-            mvLog(MVLOG_WARN,"No more semaphores. Increase XLink or OS resources\n");
+            mvLog(MVLOG_FATAL,"No more semaphores. Increase XLink or OS resources\n");
             if (XLink_sem_post(&curr->addEventSem)) {
                 mvLog(MVLOG_ERROR,"can't post semaphore\n");
             }
@@ -503,8 +503,9 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
             while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
                 continue;
             if (id == NULL || rc) {
-            // Calling non-thread safe dispatcherReset from external thread
-            // TODO - investigate further and resolve
+                // TMP TMP - locks up the cleanup. To address
+                // Calling non-thread safe dispatcherReset from external thread
+                // TODO - investigate further and resolve
                 dispatcherReset(curr);
             }
         }

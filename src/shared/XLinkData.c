@@ -457,7 +457,6 @@ static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_lin
 
     return X_LINK_SUCCESS;
 }
-
 // ------------------------------------
 // Helpers declaration. End.
 // ------------------------------------
