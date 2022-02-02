@@ -506,7 +506,8 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
                 // TMP TMP - locks up the cleanup. To address
                 // Calling non-thread safe dispatcherReset from external thread
                 // TODO - investigate further and resolve
-                dispatcherReset(curr);
+                // dispatcherReset(curr);
+                dispatcherDeviceFdDown(curr);
             }
         }
 #endif
