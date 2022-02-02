@@ -374,8 +374,11 @@ static int tcpipPlatformRead(void *fd, void *data, int size)
 
     while(nread < size)
     {
-        TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
-        rc = recv((TCPIP_SOCKET)fd, &((char*)data)[nread], size - nread, 0);
+        // TMP TMP - leaky test
+        TCPIP_SOCKET sock = *((TCPIP_SOCKET*)fd);
+        // TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
+
+        rc = recv((TCPIP_SOCKET)sock, &((char*)data)[nread], size - nread, 0);
         if(rc <= 0)
         {
             return -1;
@@ -407,7 +410,10 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
             flags = MSG_NOSIGNAL;
         #endif
 
-        TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
+        // TMP TMP - leaky test
+        TCPIP_SOCKET sock = *((TCPIP_SOCKET*)fd);
+        // TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
+
         rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
         if(rc <= 0)
         {
