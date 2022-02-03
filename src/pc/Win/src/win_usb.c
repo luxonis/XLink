@@ -678,42 +678,50 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
             do {
 
                 const int send_ep = 0x01;
-                const int size = usb_mx_id_get_payload_size();
-                uint32_t transferred = 0;
-                if ((libusb_rc = usb_bulk_write(handle, send_ep, usb_mx_id_get_payload(), size, &transferred, MX_ID_TIMEOUT)) < 0) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer send: %s", libusb_strerror(libusb_rc));
+                int transferred = 0;
 
+                // ///////////////////////
+                // Start
+                // WD Protection & MXID Retrieval Command 
+                transferred = 0;
+                libusb_rc = usb_bulk_write(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT);
+                if (libusb_rc < 0 || usb_mx_id_get_payload_size() != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_size());
+                    // Mark as error and retry
+                    libusb_rc = -1;
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
                 }
-                // Transfer as mxid_read_cmd size is less than 512B it should transfer all
-                if (size != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer written %d, expected %d", transferred, size);
 
-                    // retry
-                    usleep(SLEEP_BETWEEN_RETRIES_USEC);
-                    continue;
-                }
-
+                // MXID Read
                 const int recv_ep = 0x81;
-                const int expected = 9;
+                const int expectedMxIdReadSize = 9;
                 uint8_t rbuf[128];
                 transferred = 0;
-                if ((libusb_rc = usb_bulk_read(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT)) < 0) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer recv: %s", libusb_strerror(libusb_rc));
-
+                libusb_rc = usb_bulk_read(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT);
+                if (libusb_rc < 0 || expectedMxIdReadSize != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", libusb_strerror(libusb_rc), transferred, expectedMxIdReadSize);
+                    // Mark as error and retry
+                    libusb_rc = -1;
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
                 }
-                if (expected != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer read %d, expected %d", transferred, expected);
 
+                // WD Protection end
+                transferred = 0;
+                libusb_rc = usb_bulk_write(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload_end()), usb_mx_id_get_payload_end_size(), &transferred, MX_ID_TIMEOUT);
+                if (libusb_rc < 0 || usb_mx_id_get_payload_end_size() != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_end_size());
+                    // Mark as error and retry
+                    libusb_rc = -1;
                     // retry
                     usleep(SLEEP_BETWEEN_RETRIES_USEC);
                     continue;
                 }
+                // End
+                ///////////////////////
 
 
                 // Parse mx_id into HEX presentation
@@ -721,7 +729,7 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
                 rbuf[8] &= 0xF0;
 
                 // Convert to HEX presentation and store into mx_id
-                for (uint32_t i = 0; i < transferred; i++)
+                for (uint32_t i = 0; i < expectedMxIdReadSize; i++)
                 {
                     sprintf(mx_id + (2 * (uintptr_t)i), "%02X", rbuf[i]);
                 }
