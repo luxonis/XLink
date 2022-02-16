@@ -697,7 +697,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     // Store the socket and create a "unique" key instead
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
-    *fd = createPlatformDeviceFdKey((void*) sock);
+    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) sock);
 
 #endif
     return 0;
@@ -780,7 +780,7 @@ int tcpipPlatformClose(void *fdKey)
         mvLog(MVLOG_FATAL, "Cannot find file descriptor by key");
         return -1;
     }
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) tmpsockfd;
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
 
 #ifdef _WIN32
     status = shutdown(sock, SD_BOTH);
