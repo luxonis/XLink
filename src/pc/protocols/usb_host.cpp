@@ -328,53 +328,61 @@ std::string getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath
 
 
                 const int send_ep = 0x01;
-                const int size = usb_mx_id_get_payload_size();
                 int transferred = 0;
-                if ((libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), size, &transferred, MX_ID_TIMEOUT_MS)) < 0) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer send: %s", xlink_libusb_strerror(libusb_rc));
 
+                // ///////////////////////
+                // Start
+                // WD Protection & MXID Retrieval Command
+                transferred = 0;
+                libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT_MS);
+                if (libusb_rc < 0 || usb_mx_id_get_payload_size() != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_size());
+                    // Mark as error and retry
+                    libusb_rc = -1;
                     // retry
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                     continue;
                 }
-                // Transfer as mxid_read_cmd size is less than 512B it should transfer all
-                if (size != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer written %d, expected %d", transferred, size);
 
-                    // retry
-                    std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
-                    continue;
-                }
-
+                // MXID Read
                 const int recv_ep = 0x81;
-                const int expected = 9;
+                const int expectedMxIdReadSize = 9;
                 uint8_t rbuf[128];
                 transferred = 0;
-                if ((libusb_rc = libusb_bulk_transfer(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT_MS)) < 0) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer recv: %s", xlink_libusb_strerror(libusb_rc));
-
+                libusb_rc = libusb_bulk_transfer(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT_MS);
+                if (libusb_rc < 0 || expectedMxIdReadSize != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, expectedMxIdReadSize);
+                    // Mark as error and retry
+                    libusb_rc = -1;
                     // retry
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                     continue;
                 }
-                if (expected != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer read %d, expected %d", transferred, expected);
 
+                // WD Protection end
+                transferred = 0;
+                libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload_end()), usb_mx_id_get_payload_end_size(), &transferred, MX_ID_TIMEOUT_MS);
+                if (libusb_rc < 0 || usb_mx_id_get_payload_end_size() != transferred) {
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_end_size());
+                    // Mark as error and retry
+                    libusb_rc = -1;
                     // retry
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                     continue;
                 }
+                // End
+                ///////////////////////
 
                 // Release claimed interface
                 // ignore error as it doesn't matter
                 libusb_release_interface(handle, 0);
 
-                // Parse mx_id into HEX presentation
+                // Parse mxId into HEX presentation
                 // There's a bug, it should be 0x0F, but setting as in MDK
                 rbuf[8] &= 0xF0;
 
                 // Convert to HEX presentation and store into mx_id
-                for (int i = 0; i < transferred; i++) {
+                for (int i = 0; i < expectedMxIdReadSize; i++) {
                     sprintf(mxId + 2*i, "%02X", rbuf[i]);
                 }
 

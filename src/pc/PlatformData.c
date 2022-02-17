@@ -14,6 +14,8 @@
 #include "usb_host.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
+#include "PlatformDeviceFd.h"
+#include "inttypes.h"
 
 #define MVLOG_UNIT_NAME PlatformData
 #include "XLinkLog.h"
@@ -252,16 +254,21 @@ int pciePlatformRead(void *f, void *data, int size)
 #endif
 }
 
-static int tcpipPlatformRead(void *fd, void *data, int size)
+static int tcpipPlatformRead(void *fdKey, void *data, int size)
 {
 #if defined(USE_TCP_IP)
     int nread = 0;
-    int rc = -1;
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) (size_t) fd;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
 
     while(nread < size)
     {
-        rc = recv(sock, &((char*)data)[nread], size - nread, 0);
+        int rc = recv(sock, &((char*)data)[nread], size - nread, 0);
         if(rc <= 0)
         {
             return -1;
@@ -269,19 +276,23 @@ static int tcpipPlatformRead(void *fd, void *data, int size)
         else
         {
             nread += rc;
-            rc = -1;
         }
     }
 #endif
     return 0;
 }
 
-static int tcpipPlatformWrite(void *fd, void *data, int size)
+static int tcpipPlatformWrite(void *fdKey, void *data, int size)
 {
 #if defined(USE_TCP_IP)
     int byteCount = 0;
-    int rc = -1;
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) (size_t) fd;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
 
     while(byteCount < size)
     {
@@ -294,7 +305,7 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
             flags = MSG_NOSIGNAL;
         #endif
 
-        rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
+        int rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
         if(rc <= 0)
         {
             return -1;
@@ -302,7 +313,6 @@ static int tcpipPlatformWrite(void *fd, void *data, int size)
         else
         {
             byteCount += rc;
-            rc = -1;
         }
     }
 #endif

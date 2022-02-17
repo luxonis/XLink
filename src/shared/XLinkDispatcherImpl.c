@@ -24,8 +24,11 @@
 
 static int isStreamSpaceEnoughFor(streamDesc_t* stream, uint32_t size);
 
+// moves packet and its data out of XLink; caller is responsible for freeing data resource
+static streamPacketDesc_t* movePacketFromStream(streamDesc_t *stream);
 static streamPacketDesc_t* getPacketFromStream(streamDesc_t* stream);
 static int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize);
+static int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize, uint8_t* data);
 static int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size);
 
 static int handleIncomingEvent(xLinkEvent_t* event);
@@ -95,7 +98,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     return handleIncomingEvent(event);
 }
 
-//this function should be called only for remote requests
+//this function should be called only for local requests
 int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 {
     streamDesc_t* stream;
@@ -104,7 +107,6 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
     switch (event->header.type){
         case XLINK_WRITE_REQ:
         {
-
             //in case local tries to write after it issues close (writeSize is zero)
             stream = getStreamById(event->deviceHandle.xLinkFD, event->header.streamId);
 
@@ -148,7 +150,15 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
                 XLINK_SET_EVENT_FAILED_AND_SERVE(event);
                 break;
             }
-            streamPacketDesc_t* packet = getPacketFromStream(stream);
+
+            streamPacketDesc_t* packet;
+            if (event->header.flags.bitField.moveSemantic) {
+                packet = movePacketFromStream(stream);
+            }
+            else {
+                packet = getPacketFromStream(stream);
+            }
+
             if (packet){
                 //the read can be served with this packet
                 event->data = packet;
@@ -174,17 +184,32 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
             releaseStream(stream);
             break;
         }
+        case XLINK_READ_REL_SPEC_REQ:
+        {
+            uint8_t* data = (uint8_t*)event->data;
+            stream = getStreamById(event->deviceHandle.xLinkFD, event->header.streamId);
+            ASSERT_XLINK(stream);
+            XLINK_EVENT_ACKNOWLEDGE(event);
+            uint32_t releasedSize = 0;
+            releaseSpecificPacketFromStream(stream, &releasedSize, data);
+            event->header.size = releasedSize;
+            releaseStream(stream);
+            break;
+        }
         case XLINK_CREATE_STREAM_REQ:
         {
-
-            // If Host side - this event happens when host tries to send an OpenStream request to device.
-            // Generate a streamId (and not rely on device to do it) and send that to the device.
-            #ifdef __PC__
-                event->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD, event->header.streamName, event->header.size, 0, INVALID_STREAM_ID);
-            #endif
-
             XLINK_EVENT_ACKNOWLEDGE(event);
-            mvLog(MVLOG_DEBUG,"XLINK_CREATE_STREAM_REQ - do nothing\n");
+#ifdef __PC__
+            event->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD,
+                                                            event->header.streamName,
+                                                            event->header.size, 0,
+                                                            INVALID_STREAM_ID);
+            mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - stream has been just opened with id %ld\n",
+                  event->header.streamId);
+#else
+            mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - do nothing. Stream will be "
+                  "opened with forced id accordingly to response from the host\n");
+#endif
             break;
         }
         case XLINK_CLOSE_STREAM_REQ:
@@ -219,6 +244,7 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
         case XLINK_WRITE_RESP:
         case XLINK_READ_RESP:
         case XLINK_READ_REL_RESP:
+        case XLINK_READ_REL_SPEC_RESP:
         case XLINK_CREATE_STREAM_RESP:
         case XLINK_CLOSE_STREAM_RESP:
         case XLINK_PING_RESP:
@@ -241,7 +267,6 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 //this function should be called only for remote requests
 int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 {
-    streamDesc_t* stream;
     response->header.id = event->header.id;
     response->header.flags.raw = 0;
     mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
@@ -257,25 +282,51 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                 response->deviceHandle = event->deviceHandle;
                 XLINK_EVENT_ACKNOWLEDGE(response);
 
-
                 // we got some data. We should unblock a blocked read
                 int xxx = DispatcherUnblockEvent(-1,
-                                                 XLINK_READ_REQ,
-                                                 response->header.streamId,
-                                                 event->deviceHandle.xLinkFD);
+                                                XLINK_READ_REQ,
+                                                response->header.streamId,
+                                                event->deviceHandle.xLinkFD);
                 (void) xxx;
                 mvLog(MVLOG_DEBUG,"unblocked from stream %d %d\n",
-                      (int)response->header.streamId, (int)xxx);
+                    (int)response->header.streamId, (int)xxx);
             }
             break;
         case XLINK_READ_REQ:
             break;
+        case XLINK_READ_REL_SPEC_REQ:
+            XLINK_EVENT_ACKNOWLEDGE(response);
+            response->header.type = XLINK_READ_REL_SPEC_RESP;
+            response->deviceHandle = event->deviceHandle;
+            streamDesc_t* stream = getStreamById(event->deviceHandle.xLinkFD,
+                                   event->header.streamId);
+            ASSERT_XLINK(stream);
+            stream->remoteFillLevel -= event->header.size;
+            stream->remoteFillPacketLevel--;
+
+            mvLog(MVLOG_DEBUG,"S%d: Got remote release of %ld, remote fill level %ld out of %ld %ld\n",
+                  event->header.streamId, event->header.size, stream->remoteFillLevel, stream->writeSize, stream->readSize);
+            releaseStream(stream);
+
+            DispatcherUnblockEvent(-1, XLINK_WRITE_REQ, event->header.streamId,
+                                   event->deviceHandle.xLinkFD);
+            //with every released packet check if the stream is already marked for close
+            if (stream->closeStreamInitiated && stream->localFillLevel == 0)
+            {
+                mvLog(MVLOG_DEBUG,"%s() Unblock close STREAM\n", __func__);
+                DispatcherUnblockEvent(-1,
+                                       XLINK_CLOSE_STREAM_REQ,
+                                       event->header.streamId,
+                                       event->deviceHandle.xLinkFD);
+            }
+            break;
         case XLINK_READ_REL_REQ:
+        {
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_READ_REL_RESP;
             response->deviceHandle = event->deviceHandle;
-            stream = getStreamById(event->deviceHandle.xLinkFD,
-                                   event->header.streamId);
+            streamDesc_t *stream = getStreamById(event->deviceHandle.xLinkFD,
+                                                 event->header.streamId);
             ASSERT_XLINK(stream);
             stream->remoteFillLevel -= event->header.size;
             stream->remoteFillPacketLevel--;
@@ -297,24 +348,22 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                 (void) xxx;
             }
             break;
+        }
         case XLINK_CREATE_STREAM_REQ:
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_CREATE_STREAM_RESP;
-
-            // If Host side, create its own stream id
-            #ifdef __PC__
-            streamId_t streamId = INVALID_STREAM_ID;
-            #else
-            // If Device side, accept the stream id selected by host
-            streamId_t streamId = event->header.streamId;
-            #endif
-
             //write size from remote means read size for this peer
+#ifndef __PC__
             response->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD,
                                                                event->header.streamName,
                                                                0, event->header.size,
-                                                               streamId);
-
+                                                               event->header.streamId);
+#else
+            response->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD,
+                                                               event->header.streamName,
+                                                               0, event->header.size,
+                                                               INVALID_STREAM_ID);
+#endif
             if (response->header.streamId == INVALID_STREAM_ID) {
                 response->header.flags.bitField.ack = 0;
                 response->header.flags.bitField.sizeTooBig = 1;
@@ -390,15 +439,22 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             break;
         case XLINK_READ_REL_RESP:
             break;
+        case XLINK_READ_REL_SPEC_RESP:
+            break;
         case XLINK_CREATE_STREAM_RESP:
         {
             // write_size from the response the size of the buffer from the remote
+#ifndef __PC__
             response->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD,
                                                                event->header.streamName,
                                                                event->header.size, 0,
                                                                event->header.streamId);
             XLINK_RET_IF(response->header.streamId
                 == INVALID_STREAM_ID);
+            mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - stream has been just opened "
+                  "with forced id=%ld accordingly to response from the host\n",
+                  response->header.streamId);
+#endif
             response->deviceHandle = event->deviceHandle;
             break;
         }
@@ -445,6 +501,15 @@ void dispatcherCloseLink(void* fd, int fullClose)
         return;
     }
 
+    // TODO investigate race condition that is (probably) later caught
+    // due to changing the global `xLinkDesc_t availableXLinks[MAX_LINKS]`
+    // without any thread protection. The dispatcher thread can be calling this function
+    // while an app thread calls `XLinkReadData()` which calls `getLinkByStreamId()` which calls
+    // both `getLinkById()` and `getXLinkState()`. The latter two read the global `availableXLinks`
+    // and depending on the two threads execution timing could result in the xlink being invalidated
+    // after the app's thread did the "is xlink valid" test. This leads to the app's thread
+    // creating an `xLinkEvent_t` with outdated xlink info. When that event gets to the
+    // event processing loop, the validity of the xlink state will be checked again and be handled
     if (!fullClose) {
         link->peerState = XLINK_DOWN;
         return;
@@ -457,14 +522,16 @@ void dispatcherCloseLink(void* fd, int fullClose)
 
     for (int index = 0; index < XLINK_MAX_STREAMS; index++) {
         streamDesc_t* stream = &link->availableStreams[index];
-        if (!stream) {
-            continue;
-        }
+
+        // TODO integrate pending changes
+        // * use move semantic, this prevents the memset(0) from causing leak/crash
+        // * make new xlink-specific semaphore and wait on it during xlink lookup, create, etc.
 
         while (getPacketFromStream(stream) || stream->blockedPackets) {
             releasePacketFromStream(stream, NULL);
         }
 
+        // XLink reset stream
         XLinkStreamReset(stream);
     }
 
@@ -514,6 +581,37 @@ streamPacketDesc_t* getPacketFromStream(streamDesc_t* stream)
     return ret;
 }
 
+// TODO add multithread access to the same stream; not currently supported
+// due to issues like the order of get/move and release of packets
+streamPacketDesc_t* movePacketFromStream(streamDesc_t* stream)
+{
+    streamPacketDesc_t *ret = NULL;
+    if (stream->availablePackets)
+    {
+        ret = malloc(sizeof(streamPacketDesc_t));
+        if (!ret)
+        {
+            mvLog(MVLOG_FATAL, "out of memory to move packet from stream\n");
+            return NULL;
+        }
+        ret->data = NULL;
+        ret->length = 0;
+
+        // copy fields of first unused packet
+        *ret = stream->packets[stream->firstPacketUnused];
+
+        // mark packet to no longer own data; keep length for later ack's
+        stream->packets[stream->firstPacketUnused].data = NULL;
+
+        // update circular buffer indices
+        stream->availablePackets--;
+        CIRCULAR_INCREMENT(stream->firstPacketUnused,
+                           XLINK_MAX_PACKETS_PER_STREAM);
+        stream->blockedPackets++;
+    }
+    return ret;
+}
+
 int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize)
 {
     streamPacketDesc_t* currPack = &stream->packets[stream->firstPacket];
@@ -534,6 +632,58 @@ int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize)
     if (releasedSize) {
         *releasedSize = currPack->length;
     }
+    return 0;
+}
+
+int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize, uint8_t* data) {
+    if (stream->blockedPackets == 0) {
+        mvLog(MVLOG_ERROR,"There is no packet to release\n");
+        return 0; // ignore this, although this is a big problem on application side
+    }
+
+    uint32_t packetId = stream->firstPacket;
+    uint32_t found = 0;
+    do {
+        if (stream->packets[packetId].data == data) {
+            found = 1;
+            break;
+        }
+        CIRCULAR_INCREMENT(packetId, XLINK_MAX_PACKETS_PER_STREAM);
+    } while (packetId != stream->firstPacketUnused);
+    ASSERT_XLINK(found);
+
+    streamPacketDesc_t* currPack = &stream->packets[packetId];
+    if (currPack->length == 0) {
+        mvLog(MVLOG_ERROR, "Packet with ID %d is empty\n", packetId);
+    }
+
+    stream->localFillLevel -= currPack->length;
+
+  mvLog(MVLOG_DEBUG, "S%d: Got release of %ld , current local fill level is %ld out of %ld %ld\n",
+          stream->id, currPack->length, stream->localFillLevel, stream->readSize, stream->writeSize);
+    XLinkPlatformDeallocateData(currPack->data,
+                                ALIGN_UP_INT32((int32_t) currPack->length, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
+    stream->blockedPackets--;
+    if (releasedSize) {
+        *releasedSize = currPack->length;
+    }
+
+    if (packetId != stream->firstPacket) {
+        uint32_t currIndex = packetId;
+        uint32_t nextIndex = currIndex;
+        CIRCULAR_INCREMENT(nextIndex, XLINK_MAX_PACKETS_PER_STREAM);
+        while (currIndex != stream->firstPacketFree) {
+            stream->packets[currIndex] = stream->packets[nextIndex];
+            currIndex = nextIndex;
+            CIRCULAR_INCREMENT(nextIndex, XLINK_MAX_PACKETS_PER_STREAM);
+        }
+        CIRCULAR_DECREMENT(stream->firstPacketUnused, (XLINK_MAX_PACKETS_PER_STREAM - 1));
+        CIRCULAR_DECREMENT(stream->firstPacketFree, (XLINK_MAX_PACKETS_PER_STREAM - 1));
+
+    } else {
+        CIRCULAR_INCREMENT(stream->firstPacket, XLINK_MAX_PACKETS_PER_STREAM);
+    }
+
     return 0;
 }
 

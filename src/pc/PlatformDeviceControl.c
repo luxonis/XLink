@@ -11,6 +11,7 @@
 #include "pcie_host.h"
 #include "tcpip_host.h"
 #include "XLinkStringUtils.h"
+#include "PlatformDeviceFd.h"
 
 #define MVLOG_UNIT_NAME PlatformDeviceControl
 #include "XLinkLog.h"
@@ -266,9 +267,12 @@ int pciePlatformConnect(UNUSED const char *devPathRead,
     return pcie_init(devPathWrite, fd);
 }
 
+// TODO add IPv6 to tcpipPlatformConnect()
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if defined(USE_TCP_IP)
+    if (!devPathWrite || !fd)
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0)
     {
@@ -285,8 +289,13 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     struct sockaddr_in serv_addr = { 0 };
 
     size_t len = strlen(devPathWrite);
-    char* devPathWriteBuff = (char*) malloc(len);
+    if (!len)
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    char *const devPathWriteBuff = (char *)malloc(len + 1);
+    if (!devPathWriteBuff)
+        return X_LINK_PLATFORM_ERROR;
     strncpy(devPathWriteBuff, devPathWrite, len);
+    devPathWriteBuff[len] = 0;
 
     char* serv_ip = strtok(devPathWriteBuff, ":");
     char* serv_port = strtok(NULL, ":");
@@ -300,7 +309,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
 
-    int ret = inet_pton(AF_INET, devPathWrite, &serv_addr.sin_addr);
+    int ret = inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr);
     free(devPathWriteBuff);
 
     if(ret <= 0)
@@ -315,7 +324,10 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
         return -1;
     }
 
-    *((TCPIP_SOCKET*)fd) = sock;
+    // Store the socket and create a "unique" key instead
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
+    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) sock);
+
 #endif
     return 0;
 }
@@ -373,28 +385,36 @@ int pciePlatformClose(void *f)
     return rc;
 }
 
-int tcpipPlatformClose(void *fd)
+int tcpipPlatformClose(void *fdKey)
 {
 #if defined(USE_TCP_IP)
 
     int status = 0;
 
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key");
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
+
 #ifdef _WIN32
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) fd;
     status = shutdown(sock, SD_BOTH);
     if (status == 0) { status = closesocket(sock); }
-    return status;
 #else
-
-    intptr_t sockfd = (intptr_t)fd;
-    if(sockfd != -1)
+    if(sock != -1)
     {
-        status = shutdown(sockfd, SHUT_RDWR);
-        if (status == 0) { status = close(sockfd); }
+        status = shutdown(sock, SHUT_RDWR);
+        if (status == 0) { status = close(sock); }
     }
-    return status;
-
 #endif
+
+    if(destroyPlatformDeviceFdKey(fdKey)){
+        mvLog(MVLOG_FATAL, "Cannot destory file descriptor key");
+        return -1;
+    }
+
+    return status;
 
 #endif
     return -1;
