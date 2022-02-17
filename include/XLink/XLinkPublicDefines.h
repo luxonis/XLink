@@ -46,6 +46,7 @@ typedef enum{
     X_LINK_TIMEOUT,
     X_LINK_ERROR,
     X_LINK_OUT_OF_MEMORY,
+    X_LINK_INSUFFICIENT_PERMISSIONS,
     X_LINK_NOT_IMPLEMENTED
 } XLinkError_t;
 
@@ -93,6 +94,7 @@ typedef struct {
     char name[XLINK_MAX_NAME_SIZE];
     XLinkDeviceState_t state;
     char mxid[XLINK_MAX_MX_ID_SIZE];
+    XLinkError_t status;
 } deviceDesc_t;
 
 typedef struct streamPacketDesc_t

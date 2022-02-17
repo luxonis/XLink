@@ -24,7 +24,6 @@
 
 constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
-static const char* errorMxId = "<error>";
 static const int MX_ID_TIMEOUT_MS = 100;
 
 static constexpr auto DEFAULT_OPEN_TIMEOUT = std::chrono::seconds(5);
@@ -88,7 +87,7 @@ static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceS
 };
 
 static std::string getLibusbDevicePath(libusb_device *dev);
-static std::string getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev);
+static libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev, std::string& outMxId);
 static const char* xlink_libusb_strerror(int x);
 
 
@@ -132,6 +131,9 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
         if(vidPidToDeviceState.count(vidpid) > 0){
             // Device found
 
+            // Device status
+            XLinkError_t status = X_LINK_SUCCESS;
+
             // Get device state
             XLinkDeviceState_t state = vidPidToDeviceState.at(vidpid);
             // Check if compare with state
@@ -150,7 +152,21 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             }
 
             // Get device mxid
-            std::string mxId = getLibusbDeviceMxId(state, devicePath, &desc, devs[i]);
+            std::string mxId;
+            libusb_error rc = getLibusbDeviceMxId(state, devicePath, &desc, devs[i], mxId);
+            switch (rc)
+            {
+            case LIBUSB_SUCCESS:
+                status = X_LINK_SUCCESS;
+                break;
+            case LIBUSB_ERROR_ACCESS:
+                status = X_LINK_INSUFFICIENT_PERMISSIONS;
+                break;
+            default:
+                status = X_LINK_ERROR;
+                break;
+            }
+
             // compare with MxId
             std::string requiredMxId(in_deviceRequirements.mxid);
             if(requiredMxId.length() > 0 && requiredMxId != mxId){
@@ -161,6 +177,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             // TODO(themarpe) - check platform
 
             // Everything passed, fillout details of found device
+            out_foundDevices[numDevicesFound].status = status;
             out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
             out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
             out_foundDevices[numDevicesFound].state = state;
@@ -254,10 +271,12 @@ std::string getLibusbDevicePath(libusb_device *dev) {
     return devicePath;
 }
 
-std::string getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev)
+libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev, std::string& outMxId)
 {
-
     char mxId[XLINK_MAX_MX_ID_SIZE] = {0};
+
+    // Default MXID - emptpy
+    outMxId = "";
 
     // first check if entry already exists in the list (and is still valid)
     // if found, it stores it into mx_id variable
@@ -265,7 +284,8 @@ std::string getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath
 
     if(found){
         mvLog(MVLOG_DEBUG, "Found cached MX ID: %s", mxId);
-        return std::string(mxId);
+        outMxId = std::string(mxId);
+        return LIBUSB_SUCCESS;
     } else {
         // If not found, retrieve mxId
 
@@ -279,7 +299,7 @@ std::string getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath
             // Some kind of error, either NO_MEM, ACCESS, NO_DEVICE or other
             // In all these cases, return
             // no cleanup needed
-            return errorMxId;
+            return (libusb_error) libusb_rc;
         }
 
 
@@ -411,7 +431,7 @@ std::string getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath
 
         // if mx_id couldn't be retrieved, exit by returning error
         if(libusb_rc != 0){
-            return errorMxId;
+            return (libusb_error) libusb_rc;
         }
 
         // Cache the retrieved mx_id
@@ -428,7 +448,8 @@ std::string getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath
 
     }
 
-    return std::string(mxId);
+    outMxId = std::string(mxId);
+    return libusb_error::LIBUSB_SUCCESS;
 
 }
 

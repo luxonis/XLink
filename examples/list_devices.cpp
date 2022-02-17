@@ -33,7 +33,8 @@ int main(){
     // Print device details
     for(int i = 0; i < numdev; i++){
         const auto& dev = deviceDescAll[i];
-        std::cout << "name: " << dev.name;
+        std::cout << "status: " << XLinkErrorToStr(dev.status);
+        std::cout << ", name: " << dev.name;
         std::cout << ", mxid: " << dev.mxid;
         std::cout << ", state: " << XLinkDeviceStateToStr(dev.state);
         std::cout << ", protocol: " << XLinkProtocolToStr(dev.protocol);
