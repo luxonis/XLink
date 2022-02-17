@@ -258,8 +258,6 @@ static int tcpipPlatformRead(void *fdKey, void *data, int size)
 {
 #if defined(USE_TCP_IP)
     int nread = 0;
-    int rc = -1;
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) (size_t) fd;
 
     void* tmpsockfd = NULL;
     if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
@@ -270,7 +268,7 @@ static int tcpipPlatformRead(void *fdKey, void *data, int size)
 
     while(nread < size)
     {
-        rc = recv(sock, &((char*)data)[nread], size - nread, 0);
+        int rc = recv(sock, &((char*)data)[nread], size - nread, 0);
         if(rc <= 0)
         {
             return -1;
@@ -278,7 +276,6 @@ static int tcpipPlatformRead(void *fdKey, void *data, int size)
         else
         {
             nread += rc;
-            rc = -1;
         }
     }
 #endif
@@ -289,8 +286,6 @@ static int tcpipPlatformWrite(void *fdKey, void *data, int size)
 {
 #if defined(USE_TCP_IP)
     int byteCount = 0;
-    int rc = -1;
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) (size_t) fd;
 
     void* tmpsockfd = NULL;
     if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
@@ -310,7 +305,7 @@ static int tcpipPlatformWrite(void *fdKey, void *data, int size)
             flags = MSG_NOSIGNAL;
         #endif
 
-        rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
+        int rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
         if(rc <= 0)
         {
             return -1;
@@ -318,7 +313,6 @@ static int tcpipPlatformWrite(void *fdKey, void *data, int size)
         else
         {
             byteCount += rc;
-            rc = -1;
         }
     }
 #endif
