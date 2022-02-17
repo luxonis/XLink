@@ -5,7 +5,7 @@ set(XLINK_INCLUDE ${XLINK_ROOT_DIR}/include)
 set(XLINK_PRIVATE_INCLUDE ${XLINK_ROOT_DIR}/src/pc/protocols)
 
 file(GLOB PC_SRC             "${XLINK_ROOT_DIR}/src/pc/*.c")
-file(GLOB PC_SRC_CPP         "${XLINK_ROOT_DIR}/pc/*.cpp")
+file(GLOB PC_SRC_CPP         "${XLINK_ROOT_DIR}/src/pc/*.cpp")
 file(GLOB PC_PROTO_SRC       "${XLINK_ROOT_DIR}/src/pc/protocols/*.c")
 file(GLOB PC_PROTO_SRC_CPP   "${XLINK_ROOT_DIR}/src/pc/protocols/*.cpp")
 file(GLOB_RECURSE SHARED_SRC "${XLINK_ROOT_DIR}/src/shared/*.c")

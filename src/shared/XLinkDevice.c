@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include <errno.h>
 #include "stdio.h"
 #include "stdint.h"
 #include "string.h"
@@ -143,7 +144,9 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     temp.protocol = globalHandler->protocol;
     XLINK_RET_IF_FAIL(DispatcherStart(&temp)); //myriad has one
 
-    sem_wait(&pingSem);
+    while(((sem_wait(&pingSem) == -1) && errno == EINTR)
+        continue;
+
 #endif
 
     int status = pthread_mutex_unlock(&init_mutex);
@@ -226,7 +229,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     event.deviceHandle = link->deviceHandle;
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
-    if (DispatcherWaitEventComplete(&link->deviceHandle)) {
+    if (DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT)) {
         DispatcherClean(&link->deviceHandle);
         return X_LINK_TIMEOUT;
     }
@@ -306,10 +309,13 @@ XLinkError_t XLinkResetRemote(linkId_t id)
     event.deviceHandle = link->deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
     DispatcherAddEvent(EVENT_LOCAL, &event);
-    XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&link->deviceHandle),
+    XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
         X_LINK_TIMEOUT);
 
-    if(XLink_sem_wait(&link->dispatcherClosedSem)) {
+    int rc;
+    while(((rc = XLink_sem_wait(&link->dispatcherClosedSem)) == -1) && errno == EINTR)
+        continue;
+    if(rc) {
         mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
         return X_LINK_ERROR;
     }
@@ -334,15 +340,15 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     event.deviceHandle = link->deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
 
-    struct timespec start, end;
+    struct timespec start;
     clock_gettime(CLOCK_REALTIME, &start);
 
     struct timespec absTimeout = start;
     int64_t sec = timeoutMs / 1000;
     absTimeout.tv_sec += sec;
-    absTimeout.tv_nsec += (timeoutMs - (sec*1000)) * 1000000;
+    absTimeout.tv_nsec += (long)((timeoutMs - (sec * 1000)) * 1000000);
     int64_t secOver = absTimeout.tv_nsec / 1000000000;
-    absTimeout.tv_nsec -= secOver * 1000000000;
+    absTimeout.tv_nsec -= (long)(secOver * 1000000000);
     absTimeout.tv_sec += secOver;
 
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);
