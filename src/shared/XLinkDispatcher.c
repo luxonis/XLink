@@ -212,7 +212,7 @@ XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc) {
 XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
 {
     ASSERT_XLINK(deviceHandle);
-#ifdef __PC__
+#ifndef __DEVICE__
     ASSERT_XLINK(deviceHandle->xLinkFD != NULL);
 #endif
 
@@ -278,7 +278,7 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
         return X_LINK_ERROR;
     }
 
-#ifndef __PC__
+#ifdef __DEVICE__
     if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0) {
         mvLog(MVLOG_ERROR,"pthread_attr_setinheritsched error");
         pthread_attr_destroy(&attr);
@@ -434,7 +434,7 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
         while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
             continue;
     }
-#ifdef __PC__
+#ifndef __DEVICE__
     if (rc) {
             xLinkEvent_t event = {0};
             event.header.type = XLINK_RESET_REQ;
@@ -469,7 +469,7 @@ int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct
     int rc = XLink_sem_timedwait(id, &abstime);
     int err = errno;
 
-#ifdef __PC__
+#ifndef __DEVICE__
     if (rc) {
         if(err == ETIMEDOUT){
             return X_LINK_TIMEOUT;
@@ -737,7 +737,7 @@ static void* eventSchedulerRun(void* ctx)
         return NULL;
     }
 
-#ifndef __PC__
+#ifdef __DEVICE__
     if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0) {
         pthread_attr_destroy(&attr);
         mvLog(MVLOG_ERROR,"pthread_attr_setinheritsched error");
@@ -1166,7 +1166,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
         event = dispatcherGetNextEvent(curr);
         if(event == NULL) {
             mvLog(MVLOG_ERROR,"Dispatcher received NULL event!");
-#ifdef __PC__
+#ifndef __DEVICE__
             break; //Mean that user reset XLink.
 #else
             continue;
@@ -1217,7 +1217,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
             }
 
             if (res == 0 && event->packet.header.flags.bitField.localServe == 0) {
-#ifdef __PC__
+#ifndef __DEVICE__
                 if (toSend->header.type == XLINK_RESET_REQ) {
                     curr->resetXLink = 1;
                     mvLog(MVLOG_DEBUG,"Send XLINK_RESET_REQ, stopping sendEvents thread.");
@@ -1232,7 +1232,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
 
                     }
                 }
-#endif // __PC__
+#endif // __DEVICE__
                 XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
                 if (glControlFunc->eventSend(toSend) != 0) {
                     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);

@@ -82,8 +82,6 @@ target_compile_definitions(${TARGET_NAME}
         _CRT_SECURE_NO_WARNINGS
         USE_USB_VSC
         USE_TCP_IP
-    PUBLIC
-        __PC__
 )
 
 if (ENABLE_MYRIAD_NO_BOOT)

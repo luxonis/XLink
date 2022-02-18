@@ -28,7 +28,7 @@ extern "C"
  */
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler);
 
-#ifdef __PC__
+#ifndef __DEVICE__
 
 /**
  * @brief Checks consistency of device description
@@ -170,7 +170,7 @@ const char* XLinkDeviceStateToStr(XLinkDeviceState_t val);
  */
 const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val);
 
-#endif // __PC__
+#endif // __DEVICE__
 
 /**
  * @brief Profiling funcs - keeping them global for now
@@ -328,7 +328,7 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffe
 // Deprecated API. Begin.
 // ------------------------------------
 
-#ifdef __PC__
+#ifndef __DEVICE__
 
 XLinkError_t XLinkGetDeviceName(int index, char* name, int nameSize);
 XLinkError_t XLinkGetDeviceNameExtended(int index, char* name, int nameSize, int pid);
@@ -346,7 +346,7 @@ XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);
 // unsafe
 XLinkError_t XLinkGetFillLevel(streamId_t const streamId, int isRemote, int* fillLevel);
 
-#endif // __PC__
+#endif // __DEVICE__
 
 // ------------------------------------
 // Deprecated API. End.

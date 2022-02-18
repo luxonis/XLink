@@ -57,11 +57,11 @@ static linkId_t getNextAvailableLinkUniqueId();
 static xLinkDesc_t* getNextAvailableLink();
 static void freeGivenLink(xLinkDesc_t* link);
 
-#ifdef __PC__
+#ifndef __DEVICE__
 
 static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc);
 
-#endif // __PC__
+#endif // __DEVICE__
 
 // ------------------------------------
 // Helpers declaration. End.
@@ -81,7 +81,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     }
     init_once = 1;
 
-#ifndef __PC__
+#ifdef __DEVICE__
     mvLogLevelSet(MVLOG_FATAL);
     mvLogDefaultLevelSet(MVLOG_FATAL);
 #endif
@@ -132,7 +132,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
             link->availableStreams[stream].id = INVALID_STREAM_ID;
     }
 
-#ifndef __PC__
+#ifdef __DEVICE__
     link = getNextAvailableLink();
     if (link == NULL)
         return X_LINK_COMMUNICATION_NOT_OPEN;
@@ -157,7 +157,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     return X_LINK_SUCCESS;
 }
 
-#ifdef __PC__
+#ifndef __DEVICE__
 
 int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state) {
     return XLinkPlatformIsDescriptionValid(in_deviceDesc, state);
@@ -406,7 +406,7 @@ XLinkError_t XLinkResetAll()
     return X_LINK_SUCCESS;
 }
 
-#endif // __PC__
+#endif // __DEVICE__
 
 XLinkError_t XLinkProfStart()
 {
@@ -554,7 +554,7 @@ static void freeGivenLink(xLinkDesc_t* link) {
 
 }
 
-#ifdef __PC__
+#ifndef __DEVICE__
 
 static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
     switch (rc) {
@@ -574,7 +574,7 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
     }
 }
 
-#endif // __PC__
+#endif // __DEVICE__
 
 /**
  * @brief Returns enum string value

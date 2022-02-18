@@ -29,7 +29,7 @@
 // Helpers declaration. Begin.
 // ------------------------------------
 
-#ifdef __PC__
+#ifndef __DEVICE__
 static XLinkError_t checkEventHeader(xLinkEventHeader_t header);
 #endif
 
@@ -69,7 +69,7 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
             DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
             INVALID_STREAM_ID);
 
-#ifdef __PC__
+#ifndef __DEVICE__
         XLinkError_t eventStatus = checkEventHeader(event.header);
         if (eventStatus != X_LINK_SUCCESS) {
             mvLog(MVLOG_ERROR, "Got wrong package from device, error code = %s", XLinkErrorToStr(eventStatus));
@@ -84,7 +84,7 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
     }
     streamId_t streamId = getStreamIdByName(link, name);
 
-#ifdef __PC__
+#ifndef __DEVICE__
     if (streamId > 0x0FFFFFFF) {
         mvLog(MVLOG_ERROR, "Cannot find stream id by the \"%s\" name", name);
         mvLog(MVLOG_ERROR,"Max streamId reached!");

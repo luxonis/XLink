@@ -199,7 +199,7 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
         case XLINK_CREATE_STREAM_REQ:
         {
             XLINK_EVENT_ACKNOWLEDGE(event);
-#ifdef __PC__
+#ifndef __DEVICE__
             event->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD,
                                                             event->header.streamName,
                                                             event->header.size, 0,
@@ -353,7 +353,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_CREATE_STREAM_RESP;
             //write size from remote means read size for this peer
-#ifndef __PC__
+#ifdef __DEVICE__
             response->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD,
                                                                event->header.streamName,
                                                                0, event->header.size,
@@ -404,7 +404,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                         stream->id = INVALID_STREAM_ID;
                         stream->name[0] = '\0';
                     }
-#ifndef __PC__
+#ifdef __DEVICE__
                     if(XLink_sem_destroy(&stream->sem))
                         perror("Can't destroy semaphore");
 #endif
@@ -444,7 +444,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
         case XLINK_CREATE_STREAM_RESP:
         {
             // write_size from the response the size of the buffer from the remote
-#ifndef __PC__
+#ifdef __DEVICE__
             response->header.streamId = XLinkAddOrUpdateStream(event->deviceHandle.xLinkFD,
                                                                event->header.streamName,
                                                                event->header.size, 0,
