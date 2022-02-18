@@ -293,7 +293,8 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 {
     // Name signifies ip in TCP_IP protocol case
     const char* target_ip = in_deviceRequirements.name;
-    XLinkDeviceState_t state = in_deviceRequirements.state;
+    XLinkDeviceState_t target_state = in_deviceRequirements.state;
+    const char* target_mxid = in_deviceRequirements.mxid;
 
     // Socket
     TCPIP_SOCKET sock;
@@ -301,6 +302,14 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     bool check_target_ip = false;
     if(target_ip != NULL && strlen(target_ip) > 0){
         check_target_ip = true;
+    }
+    bool check_target_mxid = false;
+    if(target_mxid != NULL && strlen(target_mxid) > 0){
+        check_target_mxid = true;
+    }
+
+    // If IP is specified, do UNICAST
+    if(check_target_ip) {
 
         // Create socket for UDP unicast
         if(tcpip_create_socket(&sock, false, 100) != TCPIP_HOST_SUCCESS){
@@ -366,7 +375,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
         {
             DEBUG("Received UDP response, length: %d\n", ret);
             XLinkDeviceState_t foundState = tcpip_convert_device_state(recv_buffer.state);
-            if(recv_buffer.command == TCPIP_HOST_CMD_DEVICE_DISCOVER && (state == X_LINK_ANY_STATE || state == foundState))
+            if(recv_buffer.command == TCPIP_HOST_CMD_DEVICE_DISCOVER && (target_state == X_LINK_ANY_STATE || target_state == foundState))
             {
                 // Correct device found, increase matched num and save details
 
@@ -381,8 +390,15 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
                     // IP doesn't match, skip this device
                     continue;
                 }
+                // Check MXID if needed
+                if(check_target_mxid && strcmp(target_mxid, recv_buffer.mxid)){
+                    // MXID doesn't match, skip this device
+                    continue;
+                }
 
                 // copy device information
+                // Status
+                devices[num_devices_match].status = X_LINK_SUCCESS;
                 // IP
                 memset(devices[num_devices_match].name, 0, sizeof(devices[num_devices_match].name));
                 strncpy(devices[num_devices_match].name, ip_addr, sizeof(devices[num_devices_match].name));
