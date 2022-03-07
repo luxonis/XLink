@@ -127,7 +127,10 @@ export(TARGETS ${TARGET_NAME} FILE "${PROJECT_NAME}Targets.cmake")
 configure_file("cmake/${PROJECT_NAME}Dependencies.cmake" ${PROJECT_NAME}Dependencies.cmake COPYONLY)
 
 # Configure config file (one for exporting build directory, one for installation)
-file(RELATIVE_PATH XLINK_DEPENDENCIES_INSTALLATION_PATH_REL "${CMAKE_CURRENT_BINARY_DIR}" "${HUNTER_INSTALL_PREFIX}")
+if(${HUNTER_INSTALL_PREFIX})
+    file(RELATIVE_PATH XLINK_DEPENDENCIES_INSTALLATION_PATH_REL "${CMAKE_CURRENT_BINARY_DIR}" "${HUNTER_INSTALL_PREFIX}")
+endif()
+
 configure_file(cmake/${PROJECT_NAME}Config.cmake.in ${PROJECT_NAME}Config.cmake @ONLY)
 
 # Config for installation

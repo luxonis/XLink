@@ -1,5 +1,13 @@
 // project
 #define MVLOG_UNIT_NAME xLinkUsb
+
+// libraries
+#ifdef XLINK_LIBUSB_LOCAL
+#include <libusb.h>
+#else
+#include <libusb-1.0/libusb.h>
+#endif
+
 #include "XLink/XLinkLog.h"
 #include "XLink/XLinkPlatform.h"
 #include "XLink/XLinkPublicDefines.h"
@@ -14,13 +22,6 @@
 #include <thread>
 #include <chrono>
 #include <cstring>
-
-// libraries
-#ifdef XLINK_LIBUSB_LOCAL
-#include <libusb.h>
-#else
-#include <libusb-1.0/libusb.h>
-#endif
 
 constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
