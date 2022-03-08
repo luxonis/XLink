@@ -169,7 +169,7 @@ void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment)
 // Wrappers implementation. Begin.
 // ------------------------------------
 
-int usbPlatformRead(void* fd, void* data, int size)
+int usbPlatformRead(void* fdKey, void* data, int size)
 {
     int rc = 0;
 #ifndef USE_USB_VSC
@@ -209,12 +209,20 @@ int usbPlatformRead(void* fd, void* data, int size)
     }
 #endif  /*USE_LINK_JTAG*/
 #else
-    rc = usb_read((libusb_device_handle *) fd, data, size);
+
+    void* tmpUsbHandle = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
+
+    rc = usb_read(usbHandle, data, size);
 #endif  /*USE_USB_VSC*/
     return rc;
 }
 
-int usbPlatformWrite(void *fd, void *data, int size)
+int usbPlatformWrite(void *fdKey, void *data, int size)
 {
     int rc = 0;
 #ifndef USE_USB_VSC
@@ -257,7 +265,15 @@ int usbPlatformWrite(void *fd, void *data, int size)
     }
 #endif  /*USE_LINK_JTAG*/
 #else
-    rc = usb_write((libusb_device_handle *) fd, data, size);
+
+    void* tmpUsbHandle = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
+
+    rc = usb_write(usbHandle, data, size);
 #endif  /*USE_USB_VSC*/
     return rc;
 }

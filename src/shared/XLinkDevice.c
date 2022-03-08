@@ -179,6 +179,7 @@ XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
 }
 
 //Called only from app - per device
+XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int msTimeout);
 XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 {
     return XLinkConnectWithTimeout(handler, XLINK_NO_RW_TIMEOUT);

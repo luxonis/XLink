@@ -617,17 +617,18 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 #endif  /*USE_LINK_JTAG*/
 #else
-    *fd = usbLinkOpen(devPathWrite);
-    if (*fd == 0)
+    void* usbHandle = usbLinkOpen(devPathWrite);
+
+    if (usbHandle == 0)
     {
         /* could fail due to port name change */
         return -1;
     }
 
-    if(*fd)
-        return 0;
-    else
-        return -1;
+    // Store the usb handle and create a "unique" key instead
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
+    *fd = createPlatformDeviceFdKey(usbHandle);
+
 #endif  /*USE_USB_VSC*/
 }
 
@@ -724,7 +725,7 @@ int tcpipPlatformBootBootloader(const char *name)
     return tcpip_boot_bootloader(name);
 }
 
-int usbPlatformClose(void *fd)
+int usbPlatformClose(void *fdKey)
 {
 
 #ifndef USE_USB_VSC
@@ -741,7 +742,13 @@ int usbPlatformClose(void *fd)
     }
 #endif  /*USE_LINK_JTAG*/
 #else
-    usbLinkClose((libusb_device_handle *) fd);
+
+    void* tmpUsbHandle = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+        mvLog(MVLOG_FATAL, "Cannot find USB Handle by key");
+        return -1;
+    }
+    usbLinkClose((libusb_device_handle *) tmpUsbHandle);
 #endif  /*USE_USB_VSC*/
     return -1;
 }
