@@ -749,6 +749,12 @@ int usbPlatformClose(void *fdKey)
         return -1;
     }
     usbLinkClose((libusb_device_handle *) tmpUsbHandle);
+
+    if(destroyPlatformDeviceFdKey(fdKey)){
+        mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key");
+        return -1;
+    }
+
 #endif  /*USE_USB_VSC*/
     return -1;
 }
@@ -801,7 +807,7 @@ int tcpipPlatformClose(void *fdKey)
 #endif
 
     if(destroyPlatformDeviceFdKey(fdKey)){
-        mvLog(MVLOG_FATAL, "Cannot destory file descriptor key");
+        mvLog(MVLOG_FATAL, "Cannot destroy file descriptor key");
         return -1;
     }
 
