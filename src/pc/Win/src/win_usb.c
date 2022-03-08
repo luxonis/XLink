@@ -19,6 +19,7 @@
 #include "usb_boot.h"
 #include "usb_mx_id.h"
 #include "stdbool.h"
+#include "win_pthread.h"
 
 #define MVLOG_UNIT_NAME xLinkWinUsb
 #include "XLinkLog.h"
@@ -76,6 +77,7 @@ static size_t errmsg_buff_len = 0;
 
 static int MX_ID_TIMEOUT = 100; // 100ms
 
+static pthread_mutex_t globalMutex = PTHREAD_MUTEX_INITIALIZER;
 
 static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData, int pid, char** refDevicePath);
 
@@ -464,7 +466,7 @@ int usb_bulk_write(usb_hwnd han, uint8_t ep, const void *buffer, size_t sz, uint
     if(han == NULL)
         return USB_ERR_INVALID;
 
-    if(timeout_ms != han->eps[USB_DIR_OUT].last_timeout) {
+    if(timeout_ms != (long) han->eps[USB_DIR_OUT].last_timeout) {
         han->eps[USB_DIR_OUT].last_timeout = timeout_ms;
         if(!WinUsb_SetPipePolicy(han->winUsbHan, ep, PIPE_TRANSFER_TIMEOUT,
                                  sizeof(ULONG), &han->eps[USB_DIR_OUT].last_timeout)) {
@@ -494,7 +496,7 @@ int usb_bulk_read(usb_hwnd han, uint8_t ep, void *buffer, size_t sz, uint32_t *r
     if(han == NULL)
         return USB_ERR_INVALID;
 
-    if(timeout_ms != han->eps[USB_DIR_IN].last_timeout) {
+    if(timeout_ms != (long) han->eps[USB_DIR_IN].last_timeout) {
         han->eps[USB_DIR_IN].last_timeout = timeout_ms;
         if(!WinUsb_SetPipePolicy(han->winUsbHan, ep, PIPE_TRANSFER_TIMEOUT,
                                  sizeof(ULONG), &han->eps[USB_DIR_IN].last_timeout)) {
@@ -894,7 +896,11 @@ int win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, void** devi
     if (strlen(addr) > 1)
         specificDevice = 1;
 
-    // TODO There is no global mutex as in linux version
+    if (pthread_mutex_lock(&globalMutex)) {
+        mvLog(MVLOG_ERROR, "globalMutex lock failed");
+        return USB_BOOT_ERROR;
+    }
+
     int res;
 
     static usb_dev_list* devs = NULL;
@@ -909,6 +915,10 @@ int win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, void** devi
         }
         if ((res = usb_get_device_list(&devs)) < 0) {
             mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", libusb_strerror(res));
+            
+            if (pthread_mutex_unlock(&globalMutex)) {
+                mvLog(MVLOG_ERROR, "globalMutex unlock failed");
+            }
             return USB_BOOT_ERROR;
         }
         devs_cnt = res;
@@ -954,6 +964,10 @@ int win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, void** devi
                     // Create a copy of device path string. It should be freed by usb_free_device()
                     *device = _strdup(devicePath);
                     devs_cnt = 0;
+         
+                    if (pthread_mutex_unlock(&globalMutex)) {
+                        mvLog(MVLOG_ERROR, "globalMutex unlock failed");
+                    }
                     return USB_BOOT_SUCCESS;
                 }
             }
@@ -962,25 +976,37 @@ int win_usb_find_device(unsigned idx, char* addr, unsigned addrsize, void** devi
                 // gen addr
                 const char* caddr = gen_addr_mx_id(devs->devInfo, devs->infos + i, idProduct, NULL);
 
-                if (strncmp(addr, caddr, XLINK_MAX_NAME_SIZE) == 0)
+                if (addr && caddr && strncmp(addr, caddr, XLINK_MAX_NAME_SIZE) == 0)
                 {
                     mvLog(MVLOG_DEBUG, "Found Address: %s - VID/PID %04x:%04x", caddr, idVendor, idProduct, NULL);
+
+                    if (pthread_mutex_unlock(&globalMutex)) {
+                        mvLog(MVLOG_ERROR, "globalMutex unlock failed");
+                    }
                     return USB_BOOT_SUCCESS;
                 }
             }
-            else if (idx == count)
+            else if ((int) idx == count)
             {
                 // gen addr
                 const char* caddr = gen_addr_mx_id(devs->devInfo, devs->infos + i, idProduct, NULL);
 
                 mvLog(MVLOG_DEBUG, "Device %d Address: %s - VID/PID %04x:%04x", idx, caddr, idVendor, idProduct);
                 mv_strncpy(addr, addrsize, caddr, addrsize - 1);
+
+                if (pthread_mutex_unlock(&globalMutex)) {
+                    mvLog(MVLOG_ERROR, "globalMutex unlock failed");
+                }
                 return USB_BOOT_SUCCESS;
             }
             count++;
         }
     }
     devs_cnt = 0;
+    
+    if (pthread_mutex_unlock(&globalMutex)) {
+        mvLog(MVLOG_ERROR, "globalMutex unlock failed");
+    }
     return USB_BOOT_DEVICE_NOT_FOUND;
 }
 #endif

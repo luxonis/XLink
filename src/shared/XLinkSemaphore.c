@@ -117,6 +117,7 @@ int XLink_sem_timedwait(XLink_sem_t* sem, const struct timespec* abstime)
 
 int XLink_sem_trywait(XLink_sem_t* sem)
 {
+    errno = EINVAL;
     XLINK_RET_ERR_IF(sem == NULL, -1);
 
     XLINK_RET_IF_FAIL(XLink_sem_inc(sem));

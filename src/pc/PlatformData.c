@@ -293,7 +293,7 @@ int pciePlatformWrite(void *f, void *data, int size)
     {
         write_pending = 1;
 
-        size_t chunk = size < CHUNK_SIZE_BYTES ? size : CHUNK_SIZE_BYTES;
+        size_t chunk = (size_t)size < CHUNK_SIZE_BYTES ? (size_t)size : CHUNK_SIZE_BYTES;
         int num_written = pcie_write(f, data, chunk);
 
         write_pending = 0;
