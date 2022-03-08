@@ -121,8 +121,10 @@ int XLink_sem_trywait(XLink_sem_t* sem)
 
     XLINK_RET_IF_FAIL(XLink_sem_inc(sem));
     int ret = sem_trywait(&sem->psem);
+    int tmpErrno = errno;
     XLINK_RET_IF_FAIL(XLink_sem_dec(sem));
 
+    errno = tmpErrno;
     return ret;
 }
 

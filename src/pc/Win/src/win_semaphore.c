@@ -94,10 +94,15 @@ int sem_trywait(sem_t *sem){
         return ls_set_errno(EINVAL);
     }
     sem_t s = *sem;
-    if (WaitForSingleObject(s->handle, 0) != WAIT_OBJECT_0) {
+
+    DWORD ret = WaitForSingleObject(s->handle, 0);
+    if (ret == WAIT_OBJECT_0) {
+        return 0;
+    } else if(ret == WAIT_TIMEOUT) {
+        return ls_set_errno(ETIMEDOUT);
+    } else {
         return ls_set_errno(EINVAL);
     }
-    return 0;
 }
 
 
