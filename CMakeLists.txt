@@ -16,6 +16,7 @@ option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
 
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
+add_default_flags(${TARGET_NAME})
 add_flag_source(src/shared/XLinkDevice.c "-Werror=switch-enum")
 
 if(WIN32)

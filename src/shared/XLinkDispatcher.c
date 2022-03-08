@@ -421,7 +421,6 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
         // This is a temporary solution. TODO: replace this with something more efficient.
         while (timeoutMs--) {
             rc = XLink_sem_trywait(id);
-            printf("rc = %d\n", rc);
             if (rc == ETIMEDOUT) {
 #if (defined(_WIN32) || defined(_WIN64) )
                 Sleep(1);

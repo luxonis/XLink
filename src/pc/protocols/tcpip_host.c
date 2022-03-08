@@ -309,7 +309,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
     }
 
     // loop to receive message response from devices
-    int num_devices_match = 0;
+    size_t num_devices_match = 0;
     // Loop through all sockets and received messages that arrived
     double t1 = seconds();
     do {
@@ -357,10 +357,10 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
     // Filter out duplicates - routing table will decide through which interface the packets will traverse
     // TODO(themarpe) - properly separate interfaces.
     // Either bind to interface addr, or SO_BINDTODEVICE Linux, IP_BOUND_IF macOS, and prefix interface name
-    int write_index = 0;
-    for(int i = 0; i < (int) num_devices_match; i++){
+    ssize_t write_index = 0;
+    for(ssize_t i = 0; i < (ssize_t) num_devices_match; i++){
         bool duplicate = false;
-        for(int j = i - 1; j >= 0; j--){
+        for(ssize_t j = i - 1; j >= 0; j--){
             // Check if duplicate
 
             // TODO(themarpe) - merge with device search improvements

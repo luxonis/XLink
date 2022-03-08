@@ -630,6 +630,8 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     *fd = createPlatformDeviceFdKey(usbHandle);
 
 #endif  /*USE_USB_VSC*/
+
+    return 0;
 }
 
 int pciePlatformConnect(UNUSED const char *devPathRead,
