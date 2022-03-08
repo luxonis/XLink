@@ -357,10 +357,10 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
     // Filter out duplicates - routing table will decide through which interface the packets will traverse
     // TODO(themarpe) - properly separate interfaces.
     // Either bind to interface addr, or SO_BINDTODEVICE Linux, IP_BOUND_IF macOS, and prefix interface name
-    ssize_t write_index = 0;
-    for(ssize_t i = 0; i < (ssize_t) num_devices_match; i++){
+    int write_index = 0;
+    for(int i = 0; i < (int) num_devices_match; i++){
         bool duplicate = false;
-        for(ssize_t j = i - 1; j >= 0; j--){
+        for(int j = i - 1; j >= 0; j--){
             // Check if duplicate
 
             // TODO(themarpe) - merge with device search improvements
