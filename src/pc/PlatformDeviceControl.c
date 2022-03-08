@@ -645,14 +645,23 @@ int pciePlatformConnect(UNUSED const char *devPathRead,
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if defined(USE_TCP_IP)
-    if (!devPathWrite || !fd)
+    if (!devPathWrite || !fd) {
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+    
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+
+#if (defined(_WIN32) || defined(_WIN64) )
+    if(sock == INVALID_SOCKET)
+    {
+        return TCPIP_HOST_ERROR;
+    }
+#else
     if(sock < 0)
     {
-        tcpip_close_socket(sock);
-        return -1;
+        return TCPIP_HOST_ERROR;
     }
+#endif
 
     // Disable sigpipe reception on send
     #if defined(SO_NOSIGPIPE)

@@ -731,7 +731,7 @@ static const char* gen_addr_mx_id(HDEVINFO devInfo, SP_DEVINFO_DATA* devInfoData
                 rbuf[8] &= 0xF0;
 
                 // Convert to HEX presentation and store into mx_id
-                for (uint32_t i = 0; i < expectedMxIdReadSize; i++)
+                for (int i = 0; i < expectedMxIdReadSize; i++)
                 {
                     sprintf(mx_id + (2 * (uintptr_t)i), "%02X", rbuf[i]);
                 }
