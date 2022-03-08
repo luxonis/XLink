@@ -47,7 +47,7 @@ int usbFdRead = -1;
 static UsbSpeed_t usb_speed_enum = X_LINK_USB_SPEED_UNKNOWN;
 static char mx_serial[XLINK_MAX_MX_ID_SIZE] = { 0 };
 #ifdef USE_USB_VSC
-static int statuswaittimeout = 5;
+static const int statuswaittimeout = 5;
 #endif
 
 typedef struct {
@@ -617,18 +617,21 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 #endif  /*USE_LINK_JTAG*/
 #else
-    *fd = usbLinkOpen(devPathWrite);
-    if (*fd == 0)
+    void* usbHandle = usbLinkOpen(devPathWrite);
+
+    if (usbHandle == 0)
     {
         /* could fail due to port name change */
         return -1;
     }
 
-    if(*fd)
-        return 0;
-    else
-        return -1;
+    // Store the usb handle and create a "unique" key instead
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
+    *fd = createPlatformDeviceFdKey(usbHandle);
+
 #endif  /*USE_USB_VSC*/
+
+    return 0;
 }
 
 int pciePlatformConnect(UNUSED const char *devPathRead,
@@ -642,14 +645,23 @@ int pciePlatformConnect(UNUSED const char *devPathRead,
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if defined(USE_TCP_IP)
-    if (!devPathWrite || !fd)
+    if (!devPathWrite || !fd) {
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+    
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+
+#if (defined(_WIN32) || defined(_WIN64) )
+    if(sock == INVALID_SOCKET)
+    {
+        return TCPIP_HOST_ERROR;
+    }
+#else
     if(sock < 0)
     {
-        tcpip_close_socket(sock);
-        return -1;
+        return TCPIP_HOST_ERROR;
     }
+#endif
 
     // Disable sigpipe reception on send
     #if defined(SO_NOSIGPIPE)
@@ -724,7 +736,7 @@ int tcpipPlatformBootBootloader(const char *name)
     return tcpip_boot_bootloader(name);
 }
 
-int usbPlatformClose(void *fd)
+int usbPlatformClose(void *fdKey)
 {
 
 #ifndef USE_USB_VSC
@@ -741,7 +753,19 @@ int usbPlatformClose(void *fd)
     }
 #endif  /*USE_LINK_JTAG*/
 #else
-    usbLinkClose((libusb_device_handle *) fd);
+
+    void* tmpUsbHandle = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+        mvLog(MVLOG_FATAL, "Cannot find USB Handle by key");
+        return -1;
+    }
+    usbLinkClose((libusb_device_handle *) tmpUsbHandle);
+
+    if(destroyPlatformDeviceFdKey(fdKey)){
+        mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key");
+        return -1;
+    }
+
 #endif  /*USE_USB_VSC*/
     return -1;
 }
@@ -794,7 +818,7 @@ int tcpipPlatformClose(void *fdKey)
 #endif
 
     if(destroyPlatformDeviceFdKey(fdKey)){
-        mvLog(MVLOG_FATAL, "Cannot destory file descriptor key");
+        mvLog(MVLOG_FATAL, "Cannot destroy file descriptor key");
         return -1;
     }
 
