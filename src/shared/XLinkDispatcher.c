@@ -447,8 +447,12 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
             while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
                 continue;
             if (id == NULL || rc) {
-                // graceful link shutdown instead
-                dispatcherDeviceFdDown(curr);
+                // // graceful link shutdown instead
+                // dispatcherDeviceFdDown(curr);
+
+                // Calling non-thread safe dispatcherReset from external thread
+                // TODO - investigate further and resolve
+                dispatcherReset(curr);
             }
         }
 #endif

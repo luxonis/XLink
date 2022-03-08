@@ -88,7 +88,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
         return rc;
     }
 
-    // TODO - reimplement duplicate ID detection
+    // TODO(themarpe) - reimplement duplicate ID detection
     // if (prevEvent.header.id == event->header.id &&
     //     prevEvent.header.type == event->header.type &&
     //     prevEvent.deviceHandle.xLinkFD == event->deviceHandle.xLinkFD) {
