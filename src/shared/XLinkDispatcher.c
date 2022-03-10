@@ -118,6 +118,7 @@ int numSchedulers;
 xLinkSchedulerState_t schedulerState[MAX_SCHEDULERS];
 sem_t addSchedulerSem;
 
+static pthread_mutex_t unique_id_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t clean_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t reset_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t num_schedulers_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -831,8 +832,17 @@ static void postAndMarkEventServed(xLinkEventPriv_t *event)
 
 static int createUniqueID()
 {
-    static int id = 0xa;
-    return id++;
+    static eventId_t id = 0xa;
+    eventId_t idCopy = 0;
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&unique_id_mutex) != 0, -1);
+    id++;
+    if(id >= INT32_MAX){
+        id = 0xa;
+    }
+    idCopy = id;
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&unique_id_mutex) != 0, -1);
+
+    return idCopy;
 }
 
 int findAvailableScheduler()

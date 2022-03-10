@@ -70,31 +70,32 @@ int dispatcherEventSend(xLinkEvent_t *event)
 }
 
 int dispatcherEventReceive(xLinkEvent_t* event){
-    static xLinkEvent_t prevEvent = {0};
+    // static xLinkEvent_t prevEvent = {0};
     int rc = XLinkPlatformRead(&event->deviceHandle,
         &event->header, sizeof(event->header));
 
-    mvLog(MVLOG_DEBUG,"Incoming event %p: %s %d %p prevEvent: %s %d %p\n",
-          event,
-          TypeToStr(event->header.type),
-          (int)event->header.id,
-          event->deviceHandle.xLinkFD,
-          TypeToStr(prevEvent.header.type),
-          (int)prevEvent.header.id,
-          prevEvent.deviceHandle.xLinkFD);
+    // mvLog(MVLOG_DEBUG,"Incoming event %p: %s %d %p prevEvent: %s %d %p\n",
+    //       event,
+    //       TypeToStr(event->header.type),
+    //       (int)event->header.id,
+    //       event->deviceHandle.xLinkFD,
+    //       TypeToStr(prevEvent.header.type),
+    //       (int)prevEvent.header.id,
+    //       prevEvent.deviceHandle.xLinkFD);
 
     if(rc < 0) {
         mvLog(MVLOG_DEBUG,"%s() Read failed %d\n", __func__, (int)rc);
         return rc;
     }
 
-    if (prevEvent.header.id == event->header.id &&
-        prevEvent.header.type == event->header.type &&
-        prevEvent.deviceHandle.xLinkFD == event->deviceHandle.xLinkFD) {
-        mvLog(MVLOG_FATAL,"Duplicate id detected. \n");
-    }
+    // TODO(themarpe) - reimplement duplicate ID detection
+    // if (prevEvent.header.id == event->header.id &&
+    //     prevEvent.header.type == event->header.type &&
+    //     prevEvent.deviceHandle.xLinkFD == event->deviceHandle.xLinkFD) {
+    //     mvLog(MVLOG_FATAL,"Duplicate id detected. \n");
+    // }
+    // prevEvent = *event;
 
-    prevEvent = *event;
     return handleIncomingEvent(event);
 }
 
