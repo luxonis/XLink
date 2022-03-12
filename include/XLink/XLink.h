@@ -126,12 +126,6 @@ XLinkError_t XLinkResetRemote(linkId_t id);
 XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs);
 
 /**
- * @brief Closes all and release all memory
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
- */
-XLinkError_t XLinkResetAll();
-
-/**
  * @brief Retrieves USB speed of certain connected device
  * @return UsbSpeed_t enum describing the usb connection speed
  */
@@ -346,8 +340,12 @@ XLinkError_t XLinkAsyncWriteData();
 XLinkError_t XLinkSetDeviceOpenTimeOutMsec(unsigned int msec);
 XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);
 
-// unsafe
-XLinkError_t XLinkGetFillLevel(streamId_t const streamId, int isRemote, int* fillLevel);
+/**
+ * Deprecated - issues
+ * @brief Closes all and release all memory
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkResetAll();
 
 #endif // __PC__
 
