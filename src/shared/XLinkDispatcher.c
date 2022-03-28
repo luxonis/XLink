@@ -1245,6 +1245,8 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
 #endif // __PC__
                 XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
                 if (glControlFunc->eventSend(toSend) != 0) {
+                    // Error out
+                    curr->resetXLink = 1;
                     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
                     dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
                     dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
