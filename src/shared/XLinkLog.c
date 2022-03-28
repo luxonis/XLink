@@ -110,7 +110,11 @@ mvLog_t MVLOGLEVEL(default) = MVLOG_ERROR;
 void XLinkLogGetThreadName(char *buf, size_t len);
 
 void XLinkLogGetThreadName(char *buf, size_t len){
+#ifdef HAVE_PTHREAD_GETNAME_NP
     pthread_getname_np(pthread_self(), buf, len);
+#else
+    snprintf(buf, sizeof(len), "ThreadName_N/A");
+#endif
 }
 
 #ifdef __shave__
