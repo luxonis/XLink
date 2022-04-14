@@ -76,14 +76,14 @@ typedef struct
 /*      Public Function Declarations                                        */
 /* **************************************************************************/
 
-/**
- * @brief       Close socket
- *
- * @param[in]   socket Socket
- * @retval      TCPIP_HOST_ERROR Failed to close socket
- * @retval      TCPIP_HOST_SUCCESS Success to close socket
-*/
-tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET socket);
+int tcpipPlatformInitialize();
+
+int tcpipPlatformClose(void *fdKey);
+int tcpipPlatformRead(void *fdKey, void *data, int size);
+int tcpipPlatformWrite(void *fdKey, void *data, int size);
+int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
+int tcpipPlatformBootBootloader(const char *name);
+int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 
 /**
  * @brief       Broadcast message and get all devices responses with their IPs

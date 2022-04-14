@@ -6,13 +6,16 @@
 /* **************************************************************************/
 /*      Include Files                                                       */
 /* **************************************************************************/
+#include "tcpip_host.h"
+
 #include <string.h>
 #include <time.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-#include "tcpip_host.h"
-
+#include "../PlatformDeviceFd.h"
+#include "XLinkLog.h"
 
 #if (defined(_WIN32) || defined(_WIN64))
 #ifndef _WIN32_WINNT
@@ -478,4 +481,194 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     tcpip_close_socket(sock);
 
     return X_LINK_PLATFORM_SUCCESS;
+}
+
+
+int tcpipPlatformClose(void *fdKey)
+{
+#if defined(USE_TCP_IP)
+
+    int status = 0;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key");
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
+
+#ifdef _WIN32
+    status = shutdown(sock, SD_BOTH);
+    if (status == 0) { status = closesocket(sock); }
+#else
+    if(sock != -1)
+    {
+        status = shutdown(sock, SHUT_RDWR);
+        if (status == 0) { status = close(sock); }
+    }
+#endif
+
+    if(destroyPlatformDeviceFdKey(fdKey)){
+        mvLog(MVLOG_FATAL, "Cannot destory file descriptor key");
+        return -1;
+    }
+
+    return status;
+
+#endif
+    return -1;
+}
+
+int tcpipPlatformRead(void *fdKey, void *data, int size)
+{
+#if defined(USE_TCP_IP)
+    int nread = 0;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
+
+    while(nread < size)
+    {
+        int rc = recv(sock, &((char*)data)[nread], size - nread, 0);
+        if(rc <= 0)
+        {
+            return -1;
+        }
+        else
+        {
+            nread += rc;
+        }
+    }
+#endif
+    return 0;
+}
+
+int tcpipPlatformWrite(void *fdKey, void *data, int size)
+{
+#if defined(USE_TCP_IP)
+    int byteCount = 0;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
+
+    while(byteCount < size)
+    {
+        // Use send instead of write and ignore SIGPIPE
+        //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
+
+        int flags = 0;
+        #if defined(MSG_NOSIGNAL)
+            // Use flag NOSIGNAL on send call
+            flags = MSG_NOSIGNAL;
+        #endif
+
+        int rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
+        if(rc <= 0)
+        {
+            return -1;
+        }
+        else
+        {
+            byteCount += rc;
+        }
+    }
+#endif
+    return 0;
+}
+
+
+
+// TODO add IPv6 to tcpipPlatformConnect()
+int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
+{
+#if defined(USE_TCP_IP)
+    if (!devPathWrite || !fd)
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0)
+    {
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    // Disable sigpipe reception on send
+    #if defined(SO_NOSIGPIPE)
+        const int set = 1;
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+    #endif
+
+    struct sockaddr_in serv_addr = { 0 };
+
+    size_t len = strlen(devPathWrite);
+    if (!len)
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    char *const devPathWriteBuff = (char *)malloc(len + 1);
+    if (!devPathWriteBuff)
+        return X_LINK_PLATFORM_ERROR;
+    strncpy(devPathWriteBuff, devPathWrite, len);
+    devPathWriteBuff[len] = 0;
+
+    char* serv_ip = strtok(devPathWriteBuff, ":");
+    char* serv_port = strtok(NULL, ":");
+
+    // Parse port, or use default
+    uint16_t port = TCPIP_LINK_SOCKET_PORT;
+    if(serv_port != NULL){
+        port = atoi(serv_port);
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+
+    int ret = inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr);
+    free(devPathWriteBuff);
+
+    if(ret <= 0)
+    {
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    if(connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+    {
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    // Store the socket and create a "unique" key instead
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
+    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) sock);
+
+#endif
+    return 0;
+}
+
+int tcpipPlatformBootBootloader(const char *name)
+{
+    return tcpip_boot_bootloader(name);
+}
+
+int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length){
+    // TCPIP doesn't support a boot mechanism
+    return -1;
+}
+
+
+int tcpipPlatformInitialize() {
+    int ret = 0;
+
+#if (defined(_WIN32) || defined(_WIN64)) && defined(USE_TCP_IP)
+    WSADATA wsa_data;
+    ret = WSAStartup(MAKEWORD(2,2), &wsa_data);
+#endif
+
+    return ret;
 }

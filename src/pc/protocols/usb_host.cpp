@@ -974,3 +974,14 @@ int usbPlatformWrite(void *fd, void *data, int size)
 #endif  /*USE_USB_VSC*/
     return rc;
 }
+
+
+int usbPlatformBootBootloader(const char *name)
+{
+    if(usbLinkBootBootloader(name)){
+        return 0;
+    } else {
+        return -1;
+    }
+}
+

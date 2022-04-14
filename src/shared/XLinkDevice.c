@@ -159,10 +159,6 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
 
 #ifndef __DEVICE__
 
-int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state) {
-    return XLinkPlatformIsDescriptionValid(in_deviceDesc, state);
-}
-
 XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequirements, deviceDesc_t *out_foundDevice)
 {
     XLINK_RET_IF(out_foundDevice == NULL);
@@ -235,13 +231,10 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     }
 
     link->peerState = XLINK_UP;
-    #if (!defined(_WIN32) && !defined(_WIN64) )
-        link->usbConnSpeed = get_usb_speed();
-        mv_strcpy(link->mxSerialId, XLINK_MAX_MX_ID_SIZE, get_mx_serial());
-    #else
-        link->usbConnSpeed = X_LINK_USB_SPEED_UNKNOWN;
-        mv_strcpy(link->mxSerialId, XLINK_MAX_MX_ID_SIZE, "UNKNOWN");
-    #endif
+
+    // TODO(themarpe) - address mx & usb connection speed
+    mv_strcpy(link->mxSerialId, XLINK_MAX_MX_ID_SIZE, "UNKNOWN");
+    link->usbConnSpeed = X_LINK_USB_SPEED_UNKNOWN;
 
     link->hostClosedFD = 0;
     handler->linkId = link->id;

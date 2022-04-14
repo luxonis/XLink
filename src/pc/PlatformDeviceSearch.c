@@ -121,15 +121,6 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
 
 }
 
-
-int XLinkPlatformIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state) {
-    if(!in_deviceDesc){
-        return 0;
-    }
-
-    return 1;
-}
-
 char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode) {
     switch (errorCode) {
         case X_LINK_PLATFORM_SUCCESS: return "X_LINK_PLATFORM_SUCCESS";

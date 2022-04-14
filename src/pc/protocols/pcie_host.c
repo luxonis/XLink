@@ -663,3 +663,177 @@ pcieHostError_t pcie_get_device_state(const char *port_name, pciePlatformState_t
 #endif
     return retCode;
 }
+
+
+
+
+#if (defined(_WIN32) || defined(_WIN64))
+static int write_pending = 0;
+static int read_pending = 0;
+#endif
+
+int pciePlatformWrite(void *f, void *data, int size)
+{
+#if (defined(_WIN32) || defined(_WIN64))
+    #define CHUNK_SIZE_BYTES (5ULL * 1024ULL * 1024ULL)
+
+    while (size)
+    {
+        write_pending = 1;
+
+        size_t chunk = (size_t)size < CHUNK_SIZE_BYTES ? (size_t)size : CHUNK_SIZE_BYTES;
+        int num_written = pcie_write(f, data, chunk);
+
+        write_pending = 0;
+
+        if (num_written == -EAGAIN)  {
+            // Let read commands be submitted
+            if (read_pending > 0) {
+                usleep(1000);
+            }
+            continue;
+        }
+
+        if (num_written < 0) {
+            return num_written;
+        }
+
+        data = ((char*) data) + num_written;
+        /**
+         * num_written is always not greater than size
+         */
+        size -= num_written;
+    }
+
+    return 0;
+#undef CHUNK_SIZE_BYTES
+#else       // Linux case
+    int left = size;
+
+    while (left > 0)
+    {
+        int bt = pcie_write(f, data, left);
+        if (bt < 0)
+            return bt;
+
+        data = ((char *)data) + bt;
+        left -= bt;
+    }
+
+    return 0;
+#endif
+}
+
+int pciePlatformRead(void *f, void *data, int size)
+{
+#if (defined(_WIN32) || defined(_WIN64))
+    while (size)
+    {
+        read_pending = 1;
+
+        int num_read = pcie_read(f, data, size);
+
+        read_pending = 0;
+
+        if (num_read == -EAGAIN)  {
+            // Let write commands be submitted
+            if (write_pending > 0) {
+                usleep(1000);
+            }
+            continue;
+        }
+
+        if(num_read < 0) {
+            return num_read;
+        }
+
+        data = ((char *)data) + num_read;
+        /**
+         * num_read is always not greater than size
+         */
+        size -= num_read;
+    }
+
+    return 0;
+#else       // Linux
+    int left = size;
+
+    while (left > 0)
+    {
+        int bt = pcie_read(f, data, left);
+        if (bt < 0)
+            return bt;
+
+        data = ((char *)data) + bt;
+        left -= bt;
+    }
+
+    return 0;
+#endif
+}
+
+
+int pciePlatformConnect(const char *devPathRead,
+                        const char *devPathWrite,
+                        void **fd)
+{
+    return pcie_init(devPathWrite, fd);
+}
+
+int pciePlatformBootBootloader(const char *name)
+{
+    // TODO(themarpe)
+    return -1;
+}
+
+
+
+
+static char* pciePlatformStateToStr(const pciePlatformState_t platformState) {
+    switch (platformState) {
+        case PCIE_PLATFORM_ANY_STATE: return "PCIE_PLATFORM_ANY_STATE";
+        case PCIE_PLATFORM_BOOTED: return "PCIE_PLATFORM_BOOTED";
+        case PCIE_PLATFORM_UNBOOTED: return "PCIE_PLATFORM_UNBOOTED";
+        default: return "";
+    }
+}
+
+int pciePlatformClose(void *f)
+{
+    int rc;
+
+    /**  For PCIe device reset is called on host side  */
+#if (defined(_WIN32) || defined(_WIN64))
+    rc = pcie_reset_device((HANDLE)f);
+#else
+    rc = pcie_reset_device(*(int*)f);
+#endif
+    if (rc) {
+        mvLog(MVLOG_ERROR, "Device resetting failed with error %d", rc);
+        pciePlatformState_t state = PCIE_PLATFORM_ANY_STATE;
+        pcie_get_device_state(f, &state);
+        mvLog(MVLOG_INFO, "Device state is %s", pciePlatformStateToStr(state));
+    }
+    rc = pcie_close(f);
+    if (rc) {
+        mvLog(MVLOG_ERROR, "Device closing failed with error %d", rc);
+    }
+    return rc;
+}
+
+
+int pciePlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length){
+    // Temporary open fd to boot device and then close it
+    int* pcieFd = NULL;
+    int rc = pcie_init(deviceDesc->name, (void**)&pcieFd);
+    if (rc) {
+        return rc;
+    }
+#if (!defined(_WIN32) && !defined(_WIN64))
+    rc = pcie_boot_device(*(int*)pcieFd, firmware, length);
+#else
+    rc = pcie_boot_device(pcieFd, firmware, length);
+#endif
+    pcie_close(pcieFd); // Will not check result for now
+    return rc;
+}

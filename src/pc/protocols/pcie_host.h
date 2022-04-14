@@ -71,4 +71,15 @@ pcieHostError_t pcie_find_device_port(
 pcieHostError_t pcie_get_device_state(
         const char *port_name, pciePlatformState_t *platformState);
 
+int pciePlatformWrite(void *f, void *data, int size);
+int pciePlatformRead(void *f, void *data, int size);
+
+int pciePlatformConnect(const char *devPathRead,
+                        const char *devPathWrite,
+                        void **fd);
+
+int pciePlatformBootBootloader(const char *name);
+int pciePlatformClose(void *f);
+int pciePlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
+
 #endif  // PCIE_HOST_H
