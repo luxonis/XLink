@@ -94,7 +94,6 @@ void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment);
 
 #ifndef __DEVICE__
 
-int XLinkPlatformIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state);
 char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode);
 
 // for deprecated API

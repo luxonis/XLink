@@ -31,14 +31,6 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler);
 #ifndef __DEVICE__
 
 /**
- * @brief Checks consistency of device description
- * @param[in]   in_deviceDesc - structure with device requirements (protocol, platform).
- * @param[in]   state - state of device enum (booted, not booted or any state)
- * @return Result of checking: (1) for a correct description, otherwise (0)
- */
-int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state);
-
-/**
  * @brief Returns Myriad device description which meets the requirements
  * @param[in]   in_deviceRequirements - structure with device requirements (protocol, platform).
  * @note        If in_deviceRequirements has device name specified,
