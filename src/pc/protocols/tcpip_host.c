@@ -356,7 +356,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 
 
     // loop to receive message response from devices
-    unsigned num_devices_match = 0;
+    int num_devices_match = 0;
     // Loop through all sockets and received messages that arrived
     double t1 = seconds();
     do {
@@ -427,7 +427,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     // TODO(themarpe) - properly separate interfaces.
     // Either bind to interface addr, or SO_BINDTODEVICE Linux, IP_BOUND_IF macOS, and prefix interface name
     int write_index = 0;
-    for(int i = 0; i < (int) num_devices_match; i++){
+    for(int i = 0; i < num_devices_match; i++){
         bool duplicate = false;
         for(int j = i - 1; j >= 0; j--){
             // Check if duplicate
