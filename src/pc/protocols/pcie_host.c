@@ -189,7 +189,6 @@ int pcie_write(void *fd, void * buf, size_t bufSize)
 {
     ASSERT_XLINK_PLATFORM_R(fd, PCIE_INVALID_PARAMETERS);
     ASSERT_XLINK_PLATFORM_R(buf, PCIE_INVALID_PARAMETERS);
-    ASSERT_XLINK_PLATFORM_R(bufSize >= 0, PCIE_INVALID_PARAMETERS);
 
     fd_set wrfds;
     int ret;
@@ -266,7 +265,6 @@ int pcie_read(void *fd, void *buf, size_t bufSize)
 {
     ASSERT_XLINK_PLATFORM_R(fd, PCIE_INVALID_PARAMETERS);
     ASSERT_XLINK_PLATFORM_R(buf, PCIE_INVALID_PARAMETERS);
-    ASSERT_XLINK_PLATFORM_R(bufSize >= 0, PCIE_INVALID_PARAMETERS);
 
     fd_set rdfds;
     int ret;
@@ -545,7 +543,6 @@ pcieHostError_t pcie_boot_device(HANDLE fd, const char  *buffer, size_t length)
 {
     ASSERT_XLINK_PLATFORM_R(fd, PCIE_INVALID_PARAMETERS);
     ASSERT_XLINK_PLATFORM_R(buffer, PCIE_INVALID_PARAMETERS);
-    ASSERT_XLINK_PLATFORM_R(length >= 0, PCIE_INVALID_PARAMETERS);
 
     // Get device context
     enum mx_fw_status fw_status = MX_FW_STATUS_UNKNOWN_STATE;
