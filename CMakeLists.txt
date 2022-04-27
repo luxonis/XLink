@@ -106,6 +106,33 @@ endif()
 # Add flags
 add_default_flags(${TARGET_NAME})
 
+# Check if pthread_getname_np exists
+if(NOT WIN32)
+    include(CheckSymbolExists)
+    set(_TMP_CMAKE_REQUIRED_DEFINITIONS "${CMAKE_REQUIRED_DEFINITIONS}")
+    set(_TMP_CMAKE_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
+    set(_TMP_CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+    list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+    list(APPEND CMAKE_REQUIRED_LIBRARIES "-lpthread")
+    # This flag breaks check_symbol_exists()
+    string(REPLACE " -Werror " " " CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+
+    # perfom check for pthread_getname_np symbol
+    check_symbol_exists(pthread_getname_np pthread.h HAVE_PTHREAD_GETNAME_NP)
+
+    set(CMAKE_REQUIRED_DEFINITIONS "${_TMP_CMAKE_REQUIRED_DEFINITIONS}")
+    set(CMAKE_REQUIRED_LIBRARIES "${_TMP_CMAKE_REQUIRED_LIBRARIES}")
+    set(CMAKE_C_FLAGS "${_TMP_CMAKE_C_FLAGS}")
+    unset(_TMP_CMAKE_REQUIRED_DEFINITIONS)
+    unset(_TMP_CMAKE_REQUIRED_LIBRARIES)
+    unset(_TMP_CMAKE_C_FLAGS)
+
+    # Set the define
+    if(HAVE_PTHREAD_GETNAME_NP)
+        target_compile_definitions(${TARGET_NAME} PRIVATE HAVE_PTHREAD_GETNAME_NP)
+    endif()
+endif()
+
 # Examples
 if(XLINK_BUILD_EXAMPLES)
     add_subdirectory(examples)

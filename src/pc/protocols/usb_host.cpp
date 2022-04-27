@@ -13,6 +13,7 @@
 #include "XLink/XLinkPublicDefines.h"
 #include "usb_mx_id.h"
 #include "usb_host.h"
+#include "../PlatformDeviceFd.h"
 
 // std
 #include <mutex>
@@ -730,7 +731,14 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
 
     if (connect(usbFdWrite, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        exit(1);
+        mvLog(MVLOG_ERROR, "connect(usbFdWrite,...) returned < 0\n");
+        if (usbFdRead >= 0)
+            close(usbFdRead);
+        if (usbFdWrite >= 0)
+            close(usbFdWrite);
+        usbFdRead = -1;
+        usbFdWrite = -1;
+        return X_LINK_PLATFORM_ERROR;
     }
     return 0;
 
@@ -796,22 +804,25 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 #endif  /*USE_LINK_JTAG*/
 #else
-    *fd = usbLinkOpen(devPathWrite);
-    if (*fd == 0)
+    void* usbHandle = usbLinkOpen(devPathWrite);
+
+    if (usbHandle == 0)
     {
         /* could fail due to port name change */
         return -1;
     }
 
-    if(*fd)
-        return 0;
-    else
-        return -1;
+    // Store the usb handle and create a "unique" key instead
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
+    *fd = createPlatformDeviceFdKey(usbHandle);
+
 #endif  /*USE_USB_VSC*/
+
+    return 0;
 }
 
 
-int usbPlatformClose(void *fd)
+int usbPlatformClose(void *fdKey)
 {
 
 #ifndef USE_USB_VSC
@@ -828,7 +839,19 @@ int usbPlatformClose(void *fd)
     }
 #endif  /*USE_LINK_JTAG*/
 #else
-    usbLinkClose((libusb_device_handle *) fd);
+
+    void* tmpUsbHandle = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+        mvLog(MVLOG_FATAL, "Cannot find USB Handle by key");
+        return -1;
+    }
+    usbLinkClose((libusb_device_handle *) tmpUsbHandle);
+
+    if(destroyPlatformDeviceFdKey(fdKey)){
+        mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key");
+        return -1;
+    }
+
 #endif  /*USE_USB_VSC*/
     return -1;
 }
@@ -882,7 +905,7 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size)
     return 0;
 }
 
-int usbPlatformRead(void* fd, void* data, int size)
+int usbPlatformRead(void* fdKey, void* data, int size)
 {
     int rc = 0;
 #ifndef USE_USB_VSC
@@ -922,12 +945,20 @@ int usbPlatformRead(void* fd, void* data, int size)
     }
 #endif  /*USE_LINK_JTAG*/
 #else
-    rc = usb_read((libusb_device_handle *) fd, data, size);
+
+    void* tmpUsbHandle = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
+
+    rc = usb_read(usbHandle, data, size);
 #endif  /*USE_USB_VSC*/
     return rc;
 }
 
-int usbPlatformWrite(void *fd, void *data, int size)
+int usbPlatformWrite(void *fdKey, void *data, int size)
 {
     int rc = 0;
 #ifndef USE_USB_VSC
@@ -970,7 +1001,15 @@ int usbPlatformWrite(void *fd, void *data, int size)
     }
 #endif  /*USE_LINK_JTAG*/
 #else
-    rc = usb_write((libusb_device_handle *) fd, data, size);
+
+    void* tmpUsbHandle = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
+
+    rc = usb_write(usbHandle, data, size);
 #endif  /*USE_USB_VSC*/
     return rc;
 }
