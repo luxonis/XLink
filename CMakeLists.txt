@@ -34,10 +34,13 @@ option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
 # Debug option
 set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instead of Hunter")
 
-# add_library(${TARGET_NAME} ${XLINK_SOURCES})
-# TMPTMP
+# Create library target
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
 add_flag_source(src/shared/XLinkDevice.c "-Werror=switch-enum")
+get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
+if(is_multi_config)
+    set_target_properties(${TARGET_NAME} PROPERTIES DEBUG_POSTFIX "d")
+endif()
 
 # Add dependencies
 include(cmake/XLinkDependencies.cmake)
