@@ -72,6 +72,9 @@ int usbInitialize(void* options){
         }
     #endif
 
+    // // Debug
+    // mvLogLevelSet(MVLOG_DEBUG);
+
     return libusb_init(&context);
 }
 
@@ -156,6 +159,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             // Get device mxid
             std::string mxId;
             libusb_error rc = getLibusbDeviceMxId(state, devicePath, &desc, devs[i], mxId);
+            mvLog(MVLOG_DEBUG, "getLibusbDeviceMxId returned: %s", xlink_libusb_strerror(rc));
             switch (rc)
             {
             case LIBUSB_SUCCESS:
@@ -277,7 +281,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 {
     char mxId[XLINK_MAX_MX_ID_SIZE] = {0};
 
-    // Default MXID - emptpy
+    // Default MXID - empty
     outMxId = "";
 
     // first check if entry already exists in the list (and is still valid)
@@ -292,25 +296,28 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
         // If not found, retrieve mxId
 
         // get serial from usb descriptor
-        libusb_device_handle *handle = NULL;
+        libusb_device_handle *handle = nullptr;
         int libusb_rc = LIBUSB_SUCCESS;
 
-        // Open device
-        libusb_rc = libusb_open(dev, &handle);
-        if (libusb_rc < 0){
-            // Some kind of error, either NO_MEM, ACCESS, NO_DEVICE or other
-            // In all these cases, return
-            // no cleanup needed
-            return (libusb_error) libusb_rc;
-        }
-
-
-        // Retry getting MX ID for 5ms
-        const std::chrono::milliseconds RETRY_TIMEOUT{5}; // 5ms
+        // Retry getting MX ID for 15ms
+        const std::chrono::milliseconds RETRY_TIMEOUT{15}; // 15ms
         const std::chrono::microseconds SLEEP_BETWEEN_RETRIES{100}; // 100us
 
         auto t1 = std::chrono::steady_clock::now();
         do {
+
+            // Open device - if not already
+            if(handle == nullptr){
+                libusb_rc = libusb_open(dev, &handle);
+                if (libusb_rc < 0){
+                    // Some kind of error, either NO_MEM, ACCESS, NO_DEVICE or other
+                    mvLog(MVLOG_DEBUG, "libusb_open: %s", xlink_libusb_strerror(libusb_rc));
+
+                    // retry
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    continue;
+                }
+            }
 
             // if UNBOOTED state, perform mx_id retrieval procedure using small program and a read command
             if(state == X_LINK_UNBOOTED){
@@ -342,6 +349,8 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 if ((libusb_rc = libusb_claim_interface(handle, 0)) < 0) {
                     if(libusb_rc != LIBUSB_ERROR_BUSY){
                         mvLog(MVLOG_ERROR, "libusb_claim_interface: %s", xlink_libusb_strerror(libusb_rc));
+                    } else {
+                        mvLog(MVLOG_DEBUG, "libusb_claim_interface: %s", xlink_libusb_strerror(libusb_rc));
                     }
                     // retry - most likely device busy by another app
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
@@ -429,7 +438,9 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
         } while (libusb_rc != 0 && std::chrono::steady_clock::now() - t1 < RETRY_TIMEOUT);
 
         // Close opened device
-        libusb_close(handle);
+        if(handle != nullptr){
+            libusb_close(handle);
+        }
 
         // if mx_id couldn't be retrieved, exit by returning error
         if(libusb_rc != 0){
