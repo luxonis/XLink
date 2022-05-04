@@ -78,6 +78,7 @@ static UsbSetupPacket bootBootloaderPacket = {
 #else
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netinet/tcp.h>
 #include <netdb.h>
 #include <unistd.h>
 #endif
@@ -688,6 +689,14 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     if(ret <= 0)
     {
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    int on = 1;
+    if(setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
+    {
+        perror("setsockopt TCP_NODELAY");
         tcpip_close_socket(sock);
         return -1;
     }
