@@ -671,29 +671,20 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     struct sockaddr_in serv_addr = { 0 };
 
-    size_t len = strlen(devPathWrite);
-    if (!len)
+    const size_t maxlen = 255;
+    size_t len = strnlen(devPathWrite, maxlen + 1);
+    if (len == 0 || len >= maxlen + 1)
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
-    char *const devPathWriteBuff = (char *)malloc(len + 1);
-    if (!devPathWriteBuff)
-        return X_LINK_PLATFORM_ERROR;
-    strncpy(devPathWriteBuff, devPathWrite, len);
-    devPathWriteBuff[len] = 0;
-
-    char* serv_ip = strtok(devPathWriteBuff, ":");
-    char* serv_port = strtok(NULL, ":");
-
-    // Parse port, or use default
-    uint16_t port = TCPIP_LINK_SOCKET_PORT;
-    if(serv_port != NULL){
-        port = atoi(serv_port);
-    }
+    char serv_ip[len + 1];
+    serv_ip[0] = 0;
+    // Parse port if specified, or use default
+    int port = TCPIP_LINK_SOCKET_PORT;
+    sscanf(devPathWrite, "%[^:]:%d", serv_ip, &port);
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
 
     int ret = inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr);
-    free(devPathWriteBuff);
 
     if(ret <= 0)
     {
