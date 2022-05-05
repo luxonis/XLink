@@ -675,7 +675,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     size_t len = strnlen(devPathWrite, maxlen + 1);
     if (len == 0 || len >= maxlen + 1)
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
-    char serv_ip[len + 1];
+    char serv_ip[maxlen];
     serv_ip[0] = 0;
     // Parse port if specified, or use default
     int port = TCPIP_LINK_SOCKET_PORT;
