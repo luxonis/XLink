@@ -671,7 +671,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     struct sockaddr_in serv_addr = { 0 };
 
-    const size_t maxlen = 255;
+    static const size_t maxlen = 255;
     size_t len = strnlen(devPathWrite, maxlen + 1);
     if (len == 0 || len >= maxlen + 1)
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
