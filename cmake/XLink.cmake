@@ -16,7 +16,8 @@ if(WIN32)
     set(XLINK_PLATFORM_INCLUDE ${XLINK_ROOT_DIR}/src/pc/Win/include)
 
     file(GLOB XLINK_PLATFORM_SRC "${XLINK_ROOT_DIR}/src/pc/Win/src/*.c")
-    list(APPEND XLINK_SOURCES ${XLINK_PLATFORM_SRC})
+    file(GLOB XLINK_PLATFORM_SRC_CPP "${XLINK_ROOT_DIR}/src/pc/Win/src/*.cpp")
+    list(APPEND XLINK_SOURCES ${XLINK_PLATFORM_SRC} ${XLINK_PLATFORM_SRC_CPP})
 endif()
 
 if(APPLE)

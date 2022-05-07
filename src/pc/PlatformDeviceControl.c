@@ -85,9 +85,11 @@ static int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char*
 // XLinkPlatform API implementation. Begin.
 // ------------------------------------
 
-void XLinkPlatformInit(void* options)
+xLinkPlatformErrorCode_t XLinkPlatformInit(void* options)
 {
-    usbInitialize(options);
+    // check for failed initialization; LIBUSB_SUCCESS = 0
+    if (usbInitialize(options) != 0)
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED;
 
     // TODO(themarpe) - move to tcpip_host
     //tcpipInitialize();
@@ -95,6 +97,7 @@ void XLinkPlatformInit(void* options)
     WSADATA wsa_data;
     WSAStartup(MAKEWORD(2,2), &wsa_data);
 #endif
+    return X_LINK_PLATFORM_SUCCESS;
 }
 
 

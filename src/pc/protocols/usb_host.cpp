@@ -75,6 +75,9 @@ int usbInitialize(void* options){
     // // Debug
     // mvLogLevelSet(MVLOG_DEBUG);
 
+    #if defined(_WIN32) && defined(_MSC_VER)
+        return usbInitialize_customdir((void**)&context);
+    #endif
     return libusb_init(&context);
 }
 

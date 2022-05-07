@@ -36,6 +36,7 @@ typedef enum usbBootError {
 } usbBootError_t;
 
 int usbInitialize(void* options);
+int usbInitialize_customdir(void** hContext);
 
 int usb_boot(const char *addr, const void *mvcmd, unsigned size);
 int get_pid_by_name(const char* name);
