@@ -457,7 +457,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 
 xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     if(name == NULL || name[0] == 0){
-        return X_LINK_PLATFORM_ERROR;
+        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
     // Create socket for UDP unicast

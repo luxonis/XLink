@@ -681,25 +681,30 @@ libusb_device_handle *usbLinkOpen(const char *path)
 }
 
 
-bool usbLinkBootBootloader(const char *path) {
+xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
 
     libusb_device *dev = nullptr;
-    refLibusbDeviceByName(path, &dev);
+    auto refErr = refLibusbDeviceByName(path, &dev);
+    if(refErr != X_LINK_PLATFORM_SUCCESS) {
+        return refErr;
+    }
     if(dev == NULL){
-        return 0;
+        return X_LINK_PLATFORM_ERROR;
     }
     libusb_device_handle *h = NULL;
 
 
     int libusb_rc = libusb_open(dev, &h);
-    if (libusb_rc < 0)
-    {
+    if (libusb_rc < 0) {
         libusb_unref_device(dev);
-        return 0;
+        if(libusb_rc == LIBUSB_ERROR_ACCESS) {
+            return X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
+        }
+        return X_LINK_PLATFORM_ERROR;
     }
 
     // Make control transfer
-    libusb_control_transfer(h,
+    libusb_rc = libusb_control_transfer(h,
         bootBootloaderPacket.requestType,   // bmRequestType: device-directed
         bootBootloaderPacket.request,   // bRequest: custom
         bootBootloaderPacket.value, // wValue: custom
@@ -713,8 +718,11 @@ bool usbLinkBootBootloader(const char *path) {
     libusb_unref_device(dev);
     libusb_close(h);
 
-    return true;
+    if(libusb_rc < 0) {
+        return X_LINK_PLATFORM_ERROR;
+    }
 
+    return X_LINK_PLATFORM_SUCCESS;
 }
 
 void usbLinkClose(libusb_device_handle *f)

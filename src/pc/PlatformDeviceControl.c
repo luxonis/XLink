@@ -64,9 +64,9 @@ static const int statuswaittimeout = 5;
 static int pciePlatformConnect(UNUSED const char *devPathRead, const char *devPathWrite, void **fd);
 static int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
 
-static int usbPlatformBootBootloader(const char *name);
+static xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name);
 static int pciePlatformBootBootloader(const char *name);
-static int tcpipPlatformBootBootloader(const char *name);
+static xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name);
 
 static int pciePlatformClose(void *f);
 static int tcpipPlatformClose(void *fd);
@@ -177,7 +177,7 @@ int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLin
     }
 }
 
-int XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol)
+xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol)
 {
     switch (protocol) {
         case X_LINK_USB_VSC:
@@ -342,13 +342,9 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 }
 
 
-int usbPlatformBootBootloader(const char *name)
+xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name)
 {
-    if(usbLinkBootBootloader(name)){
-        return 0;
-    } else {
-        return -1;
-    }
+    return usbLinkBootBootloader(name);
 }
 
 int pciePlatformBootBootloader(const char *name)
@@ -357,7 +353,7 @@ int pciePlatformBootBootloader(const char *name)
     return -1;
 }
 
-int tcpipPlatformBootBootloader(const char *name)
+xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name)
 {
     return tcpip_boot_bootloader(name);
 }

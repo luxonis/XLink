@@ -252,18 +252,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 //Called only from app - per device
 XLinkError_t XLinkBootBootloader(const deviceDesc_t* deviceDesc)
 {
-
-    int connectStatus = XLinkPlatformBootBootloader(deviceDesc->name, deviceDesc->protocol);
-
-    if (connectStatus < 0) {
-        /**
-         * Connection may be unsuccessful at some amount of first tries.
-         * In this case, asserting the status provides enormous amount of logs in tests.
-         */
-        return X_LINK_COMMUNICATION_NOT_OPEN;
-    }
-
-    return X_LINK_SUCCESS;
+    return parsePlatformError(XLinkPlatformBootBootloader(deviceDesc->name, deviceDesc->protocol));
 }
 
 XLinkError_t XLinkBootMemory(const deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size)
@@ -564,11 +553,11 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
             return X_LINK_DEVICE_NOT_FOUND;
         case X_LINK_PLATFORM_TIMEOUT:
             return X_LINK_TIMEOUT;
+        case X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS:
+            return X_LINK_INSUFFICIENT_PERMISSIONS;
         case X_LINK_PLATFORM_ERROR:
         case X_LINK_PLATFORM_DRIVER_NOT_LOADED:
         case X_LINK_PLATFORM_INVALID_PARAMETERS:
-        case X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS:
-            return X_LINK_INSUFFICIENT_PERMISSIONS;
         default:
             return X_LINK_ERROR;
     }
