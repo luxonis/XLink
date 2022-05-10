@@ -89,6 +89,7 @@ static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceS
     {{0x03E7, 0x2485}, X_LINK_UNBOOTED},
     {{0x03E7, 0xf63b}, X_LINK_BOOTED},
     {{0x03E7, 0xf63c}, X_LINK_BOOTLOADER},
+    {{0x03E7, 0xf63d}, X_LINK_FLASH_BOOTED},
 };
 
 static std::string getLibusbDevicePath(libusb_device *dev);
