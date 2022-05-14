@@ -13,6 +13,7 @@ HunterGate(
 
 ### Constants
 set(TARGET_NAME "XLink")
+set(TARGET_PUBLIC_NAME "XLinkPublic")
 
 # Create project
 project(${TARGET_NAME} LANGUAGES C CXX)
@@ -65,15 +66,22 @@ if(MINGW)
     )
 endif()
 
+# Create public "interface" library (no linking)
+add_library(${TARGET_PUBLIC_NAME} INTERFACE)
+target_include_directories(${TARGET_PUBLIC_NAME} INTERFACE
+    "$<INSTALL_INTERFACE:include>"
+    "$<BUILD_INTERFACE:${XLINK_INCLUDE}>"
+)
+
+# Link to headers (public, as itself also needs the headers)
+target_link_libraries(${TARGET_NAME} PUBLIC ${TARGET_PUBLIC_NAME})
+
 target_include_directories(${TARGET_NAME}
-    PUBLIC
-        "$<INSTALL_INTERFACE:include>"
-        "$<BUILD_INTERFACE:${XLINK_INCLUDE}>"
     PRIVATE
         ${XLINK_PLATFORM_INCLUDE}
         ${XLINK_PRIVATE_INCLUDE}
         ${XLINK_INCLUDE}/XLink
-    )
+)
 
 if(XLINK_LIBUSB_LOCAL)
     target_compile_definitions(${TARGET_NAME} PRIVATE XLINK_LIBUSB_LOCAL)
@@ -99,11 +107,11 @@ set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 99)
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 11)
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_EXTENSIONS OFF)
-# Add interface transitive property (C++11)
+# Add interface transitive property (C++11) to public library
 if(${CMAKE_VERSION} VERSION_LESS "3.8.0")
-    target_compile_features(${TARGET_NAME} INTERFACE cxx_range_for)
+    target_compile_features(${TARGET_PUBLIC_NAME} INTERFACE cxx_range_for)
 else()
-    target_compile_features(${TARGET_NAME} INTERFACE cxx_std_11)
+    target_compile_features(${TARGET_PUBLIC_NAME} INTERFACE cxx_std_11)
 endif()
 
 # Add flags
@@ -151,7 +159,7 @@ endif()
 include(GNUInstallDirs)
 
 # Export targets (capability to import current build directory)
-export(TARGETS ${TARGET_NAME} FILE "${PROJECT_NAME}Targets.cmake")
+export(TARGETS ${TARGET_NAME} ${TARGET_PUBLIC_NAME} FILE "${PROJECT_NAME}Targets.cmake")
 
 # Dependencies file
 configure_file("cmake/${PROJECT_NAME}Dependencies.cmake" ${PROJECT_NAME}Dependencies.cmake COPYONLY)
@@ -169,7 +177,7 @@ configure_file(cmake/${PROJECT_NAME}Config.cmake.in _install/${PROJECT_NAME}Conf
 
 # Install targets
 install(
-    TARGETS ${TARGET_NAME}
+    TARGETS ${TARGET_NAME} ${TARGET_PUBLIC_NAME}
     EXPORT ${PROJECT_EXPORT_GROUP}
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
