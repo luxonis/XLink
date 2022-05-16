@@ -30,7 +30,8 @@ typedef enum {
     X_LINK_PLATFORM_TIMEOUT = -3,
     X_LINK_PLATFORM_DRIVER_NOT_LOADED = -4,
     X_LINK_PLATFORM_INVALID_PARAMETERS = -5,
-    X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS = -6
+    X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS = -6,
+    X_LINK_PLATFORM_DEVICE_BUSY = -7,
 } xLinkPlatformErrorCode_t;
 
 // ------------------------------------
@@ -54,9 +55,9 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
     const unsigned int devicesArraySize,
     unsigned int *out_amountOfFoundDevices);
 
-int XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath);
-int XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
-int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
+xLinkPlatformErrorCode_t XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath);
+xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
+xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
                          XLinkProtocol_t protocol, void** fd);
 xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol);
 
@@ -64,7 +65,7 @@ UsbSpeed_t get_usb_speed();
 const char* get_mx_serial();
 #endif // __DEVICE__
 
-int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle);
+xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle);
 
 // ------------------------------------
 // Device management. End.

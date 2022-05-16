@@ -98,7 +98,7 @@ void XLinkPlatformInit(void* options)
 }
 
 
-int XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath)
+xLinkPlatformErrorCode_t XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath)
 {
     FILE *file;
     long file_size;
@@ -140,7 +140,7 @@ int XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPa
     return 0;
 }
 
-int XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
+xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
 
     switch (deviceDesc->protocol) {
         case X_LINK_USB_VSC:
@@ -160,7 +160,7 @@ int XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmwa
 }
 
 
-int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
+xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
 {
     switch (protocol) {
         case X_LINK_USB_VSC:
@@ -196,7 +196,7 @@ xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProt
     }
 }
 
-int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
+xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
 {
     if(deviceHandle->protocol == X_LINK_ANY_PROTOCOL ||
        deviceHandle->protocol == X_LINK_NMB_OF_PROTOCOLS) {

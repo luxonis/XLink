@@ -169,6 +169,9 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             case LIBUSB_ERROR_ACCESS:
                 status = X_LINK_INSUFFICIENT_PERMISSIONS;
                 break;
+            case LIBUSB_ERROR_BUSY:
+                status = X_LINK_DEVICE_BUSY;
+                break;
             default:
                 status = X_LINK_ERROR;
                 break;
@@ -472,25 +475,25 @@ const char* xlink_libusb_strerror(int x) {
 }
 
 
-static libusb_device_handle *usb_open_device(libusb_device *dev, uint8_t* endpoint)
+static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libusb_device_handle*& handle)
 {
     struct libusb_config_descriptor *cdesc;
     const struct libusb_interface_descriptor *ifdesc;
     libusb_device_handle *h = NULL;
-    int res, i;
+    int res;
 
     if((res = libusb_open(dev, &h)) < 0)
     {
-        //snprintf(err_string_buff, err_max_len, "cannot open device: %s\n", xlink_libusb_strerror(res));
-        return 0;
+        mvLog(MVLOG_DEBUG, "cannot open device: %s\n", xlink_libusb_strerror(res));
+        return (libusb_error) res;
     }
 
     // Get configuration first
     int active_configuration = -1;
     if((res = libusb_get_configuration(h, &active_configuration)) < 0){
-        //snprintf(err_string_buff, err_max_len, "setting config 1 failed: %s\n", xlink_libusb_strerror(res));
+        mvLog(MVLOG_DEBUG, "setting config 1 failed: %s\n", xlink_libusb_strerror(res));
         libusb_close(h);
-        return 0;
+        return (libusb_error) res;
     }
 
     // Check if set configuration call is needed
@@ -498,26 +501,25 @@ static libusb_device_handle *usb_open_device(libusb_device *dev, uint8_t* endpoi
         mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1\n", active_configuration);
         if ((res = libusb_set_configuration(h, 1)) < 0) {
             mvLog(MVLOG_ERROR, "libusb_set_configuration: %s\n", xlink_libusb_strerror(res));
-            //snprintf(err_string_buff, err_max_len, "setting config 1 failed: %s\n", xlink_libusb_strerror(res));
             libusb_close(h);
-            return 0;
+            return (libusb_error) res;
         }
     }
 
     if((res = libusb_claim_interface(h, 0)) < 0)
     {
-        //snprintf(err_string_buff, err_max_len, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
+        mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
         libusb_close(h);
-        return 0;
+        return (libusb_error) res;
     }
     if((res = libusb_get_config_descriptor(dev, 0, &cdesc)) < 0)
     {
-        //snprintf(err_string_buff, err_max_len, "Unable to get USB config descriptor: %s\n", xlink_libusb_strerror(res));
+        mvLog(MVLOG_DEBUG, "Unable to get USB config descriptor: %s\n", xlink_libusb_strerror(res));
         libusb_close(h);
-        return 0;
+        return (libusb_error) res;
     }
     ifdesc = cdesc->interface->altsetting;
-    for(i=0; i<ifdesc->bNumEndpoints; i++)
+    for(int i=0; i<ifdesc->bNumEndpoints; i++)
     {
         mvLog(MVLOG_DEBUG, "Found EP 0x%02x : max packet size is %u bytes",
               ifdesc->endpoint[i].bEndpointAddress, ifdesc->endpoint[i].wMaxPacketSize);
@@ -528,12 +530,13 @@ static libusb_device_handle *usb_open_device(libusb_device *dev, uint8_t* endpoi
             *endpoint = ifdesc->endpoint[i].bEndpointAddress;
             bulk_chunklen = ifdesc->endpoint[i].wMaxPacketSize;
             libusb_free_config_descriptor(cdesc);
-            return h;
+            handle = h;
+            return LIBUSB_SUCCESS;
         }
     }
     libusb_free_config_descriptor(cdesc);
     libusb_close(h);
-    return 0;
+    return LIBUSB_ERROR_ACCESS;
 }
 
 static int send_file(libusb_device_handle* h, uint8_t endpoint, const void* tx_buf, unsigned filesize,uint16_t bcdusb)
@@ -597,6 +600,7 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
     libusb_device *dev = nullptr;
     libusb_device_handle *h;
     uint16_t bcdusb=-1;
+    libusb_error res = LIBUSB_ERROR_ACCESS;
 
 
     auto t1 = steady_clock::now();
@@ -613,18 +617,24 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
 
     auto t2 = steady_clock::now();
     do {
-        if((h = usb_open_device(dev, &endpoint)) != nullptr){
+        if((res = usb_open_device(dev, &endpoint, h)) == LIBUSB_SUCCESS){
             break;
         }
         std::this_thread::sleep_for(milliseconds(100));
     } while(steady_clock::now() - t2 < DEFAULT_CONNECT_TIMEOUT);
 
-    if (h) {
+    if(res == LIBUSB_SUCCESS) {
         rc = send_file(h, endpoint, mvcmd, size, bcdusb);
         libusb_release_interface(h, 0);
         libusb_close(h);
     } else {
-        rc = X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
+        if(res == LIBUSB_ERROR_ACCESS) {
+            rc = X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
+        } else if(res == LIBUSB_ERROR_BUSY) {
+            rc = X_LINK_PLATFORM_DEVICE_BUSY;
+        } else {
+            rc = X_LINK_PLATFORM_ERROR;
+        }
     }
 
     if (dev) {
@@ -636,15 +646,15 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
 
 
 
-libusb_device_handle *usbLinkOpen(const char *path)
+xLinkPlatformErrorCode_t usbLinkOpen(const char *path, libusb_device_handle*& h)
 {
     using namespace std::chrono;
     if (path == NULL) {
-        return 0;
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
 
     usbBootError_t rc = USB_BOOT_DEVICE_NOT_FOUND;
-    libusb_device_handle *h = nullptr;
+    h = nullptr;
     libusb_device *dev = nullptr;
     bool found = false;
 
@@ -657,28 +667,20 @@ libusb_device_handle *usbLinkOpen(const char *path)
     } while(steady_clock::now() - t1 < DEFAULT_OPEN_TIMEOUT);
 
     if(!found) {
-        return nullptr;
+        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
-    //usb_speed_enum = libusb_get_device_speed(dev);
-
-    int libusb_rc = libusb_open(dev, &h);
-    if (libusb_rc < 0)
-    {
-        libusb_unref_device(dev);
-        return 0;
+    uint8_t ep = 0;
+    libusb_error libusb_rc = usb_open_device(dev, &ep, h);
+    if(libusb_rc == LIBUSB_SUCCESS) {
+        return X_LINK_PLATFORM_SUCCESS;
+    } else if(libusb_rc == LIBUSB_ERROR_ACCESS) {
+        return X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
+    } else if(libusb_rc == LIBUSB_ERROR_BUSY) {
+        return X_LINK_PLATFORM_DEVICE_BUSY;
+    } else {
+        return X_LINK_PLATFORM_ERROR;
     }
-
-    libusb_unref_device(dev);
-    libusb_detach_kernel_driver(h, 0);
-    libusb_rc = libusb_claim_interface(h, 0);
-    if(libusb_rc < 0)
-    {
-        libusb_close(h);
-        return 0;
-    }
-
-    return h;
 }
 
 
@@ -824,12 +826,14 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 #endif  /*USE_LINK_JTAG*/
 #else
-    void* usbHandle = usbLinkOpen(devPathWrite);
 
-    if (usbHandle == 0)
+    libusb_device_handle* usbHandle = nullptr;
+    xLinkPlatformErrorCode_t ret = usbLinkOpen(devPathWrite, usbHandle);
+
+    if (ret != X_LINK_PLATFORM_SUCCESS)
     {
         /* could fail due to port name change */
-        return -1;
+        return ret;
     }
 
     // Store the usb handle and create a "unique" key instead

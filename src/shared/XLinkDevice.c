@@ -217,7 +217,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
         freeGivenLink(link);
 
         // Return an informative error
-        return X_LINK_COMMUNICATION_NOT_OPEN;
+        return parsePlatformError(connectStatus);
     }
 
     XLINK_RET_ERR_IF(
@@ -555,6 +555,8 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
             return X_LINK_TIMEOUT;
         case X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS:
             return X_LINK_INSUFFICIENT_PERMISSIONS;
+        case X_LINK_PLATFORM_DEVICE_BUSY:
+            return X_LINK_DEVICE_BUSY;
         case X_LINK_PLATFORM_ERROR:
         case X_LINK_PLATFORM_DRIVER_NOT_LOADED:
         case X_LINK_PLATFORM_INVALID_PARAMETERS:
@@ -581,6 +583,7 @@ const char* XLinkErrorToStr(XLinkError_t val) {
         case X_LINK_ERROR: return "X_LINK_ERROR";
         case X_LINK_OUT_OF_MEMORY: return "X_LINK_OUT_OF_MEMORY";
         case X_LINK_INSUFFICIENT_PERMISSIONS: return "X_LINK_INSUFFICIENT_PERMISSIONS";
+        case X_LINK_DEVICE_BUSY: return "X_LINK_DEVICE_BUSY";
         case X_LINK_NOT_IMPLEMENTED: return "X_LINK_NOT_IMPLEMENTED";
         default:
             return "INVALID_ENUM_VALUE";
