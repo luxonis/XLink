@@ -170,7 +170,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                 status = X_LINK_INSUFFICIENT_PERMISSIONS;
                 break;
             case LIBUSB_ERROR_BUSY:
-                status = X_LINK_DEVICE_BUSY;
+                status = X_LINK_DEVICE_ALREADY_IN_USE;
                 break;
             default:
                 status = X_LINK_ERROR;

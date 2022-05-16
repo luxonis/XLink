@@ -556,7 +556,7 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
         case X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS:
             return X_LINK_INSUFFICIENT_PERMISSIONS;
         case X_LINK_PLATFORM_DEVICE_BUSY:
-            return X_LINK_DEVICE_BUSY;
+            return X_LINK_DEVICE_ALREADY_IN_USE;
         case X_LINK_PLATFORM_ERROR:
         case X_LINK_PLATFORM_DRIVER_NOT_LOADED:
         case X_LINK_PLATFORM_INVALID_PARAMETERS:
@@ -583,7 +583,7 @@ const char* XLinkErrorToStr(XLinkError_t val) {
         case X_LINK_ERROR: return "X_LINK_ERROR";
         case X_LINK_OUT_OF_MEMORY: return "X_LINK_OUT_OF_MEMORY";
         case X_LINK_INSUFFICIENT_PERMISSIONS: return "X_LINK_INSUFFICIENT_PERMISSIONS";
-        case X_LINK_DEVICE_BUSY: return "X_LINK_DEVICE_BUSY";
+        case X_LINK_DEVICE_ALREADY_IN_USE: return "X_LINK_DEVICE_ALREADY_IN_USE";
         case X_LINK_NOT_IMPLEMENTED: return "X_LINK_NOT_IMPLEMENTED";
         default:
             return "INVALID_ENUM_VALUE";
