@@ -34,6 +34,18 @@ option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
 # Debug option
 set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instead of Hunter")
+# Debug option
+option(XLINK_LIBUSB_SYSTEM "Use system libusb library instead of Hunter" OFF)
+
+if(XLINK_LIBUSB_LOCAL AND XLINK_LIBUSB_SYSTEM)
+    message(FATAL_ERROR "XLINK_LIBUSB_LOCAL and XLINK_LIBUSB_SYSTEM options are mutually exclusive!")
+endif()
+
+message(STATUS "Configuring XLink with the following options:")
+message(STATUS "  XLINK_BUILD_EXAMPLES: ${XLINK_BUILD_EXAMPLES}")
+message(STATUS "  XLINK_BUILD_TESTS: ${XLINK_BUILD_TESTS}")
+message(STATUS "  XLINK_LIBUSB_LOCAL: ${XLINK_LIBUSB_LOCAL}")
+message(STATUS "  XLINK_LIBUSB_SYSTEM: ${XLINK_LIBUSB_SYSTEM}")
 
 # Create library target
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
@@ -46,12 +58,27 @@ endif()
 # Add dependencies
 include(cmake/XLinkDependencies.cmake)
 
-# Link to libusb
-target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
-if(WIN32 AND NOT MINGW)
-    target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib Pathcch.lib)
-    # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
-    target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
+if(XLINK_LIBUSB_SYSTEM)
+    # Find system libusb
+    find_path(LIBUSB_INCLUDE_DIR NAMES libusb.h PATH_SUFFIXES "include" "libusb" "libusb-1.0")
+    find_library(LIBUSB_LIBRARY NAMES usb-1.0 PATH_SUFFIXES "lib")
+    if(NOT LIBUSB_INCLUDE_DIR OR NOT LIBUSB_LIBRARY)
+        message(FATAL_ERROR "libusb is required")
+    endif()
+    target_include_directories(${TARGET_NAME}
+        PRIVATE "${LIBUSB_INCLUDE_DIR}"
+    )
+    target_link_libraries(${TARGET_NAME}
+        PUBLIC ${LIBUSB_LIBRARY}
+    )
+else()
+    # Link to CMake libusb
+    target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
+    if(WIN32 AND NOT MINGW)
+        target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib Pathcch.lib)
+        # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
+        target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
+    endif()
 endif()
 
 if(WIN32)
@@ -191,7 +218,9 @@ install(
 #Install include folder
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 # Install Hunter dependencies
-install(DIRECTORY "${HUNTER_INSTALL_PREFIX}/" DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/dependencies")
+if(NOT XLINK_LIBUSB_LOCAL AND NOT XLINK_LIBUSB_SYSTEM)
+    install(DIRECTORY "${HUNTER_INSTALL_PREFIX}/" DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/dependencies")
+endif()
 # Install export group (information about targets)
 install(EXPORT ${PROJECT_EXPORT_GROUP}
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"

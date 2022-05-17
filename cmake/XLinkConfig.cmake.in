@@ -1,6 +1,10 @@
 # Get whether library was build as shared or not
 set(XLINK_SHARED_LIBS @BUILD_SHARED_LIBS@)
 
+# Get library options
+set(XLINK_LIBUSB_LOCAL @XLINK_LIBUSB_LOCAL@)
+set(XLINK_LIBUSB_SYSTEM @XLINK_LIBUSB_SYSTEM@)
+
 # Specify that this is config mode (Called by find_package)
 set(CONFIG_MODE TRUE)
 

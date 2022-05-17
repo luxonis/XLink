@@ -374,7 +374,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 transferred = 0;
                 libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT_MS);
                 if (libusb_rc < 0 || usb_mx_id_get_payload_size() != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_size());
+                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_size());
                     // Mark as error and retry
                     libusb_rc = -1;
                     // retry
