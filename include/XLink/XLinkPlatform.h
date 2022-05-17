@@ -29,22 +29,24 @@ typedef enum {
     X_LINK_PLATFORM_ERROR = -2,
     X_LINK_PLATFORM_TIMEOUT = -3,
     X_LINK_PLATFORM_DRIVER_NOT_LOADED = -4,
-    X_LINK_PLATFORM_INVALID_PARAMETERS = -5
+    X_LINK_PLATFORM_INVALID_PARAMETERS = -5,
+    X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS = -6,
+    X_LINK_PLATFORM_DEVICE_BUSY = -7,
 } xLinkPlatformErrorCode_t;
 
 // ------------------------------------
 // Device management. Begin.
 // ------------------------------------
 
-void XLinkPlatformInit();
+xLinkPlatformErrorCode_t XLinkPlatformInit(void* options);
 
-#ifdef __PC__
+#ifndef __DEVICE__
 /**
  * @brief Return Myriad device description which meets the requirements
  */
-xLinkPlatformErrorCode_t XLinkPlatformFindDeviceName(XLinkDeviceState_t state,
-                                                     const deviceDesc_t in_deviceRequirements,
-                                                     deviceDesc_t* out_foundDevice);
+xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
+                                                     deviceDesc_t* out_foundDevices, unsigned sizeFoundDevices,
+                                                     unsigned *out_amountOfFoundDevices);
 
 xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
     XLinkDeviceState_t state,
@@ -53,17 +55,17 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
     const unsigned int devicesArraySize,
     unsigned int *out_amountOfFoundDevices);
 
-int XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath);
-int XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
-int XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
+xLinkPlatformErrorCode_t XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath);
+xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
+xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
                          XLinkProtocol_t protocol, void** fd);
-int XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol);
+xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol);
 
 UsbSpeed_t get_usb_speed();
 const char* get_mx_serial();
-#endif // __PC__
+#endif // __DEVICE__
 
-int XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle);
+xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle);
 
 // ------------------------------------
 // Device management. End.
@@ -91,7 +93,7 @@ void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment);
 // Helpers. Begin.
 // ------------------------------------
 
-#ifdef __PC__
+#ifndef __DEVICE__
 
 int XLinkPlatformIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state);
 char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode);
@@ -101,7 +103,7 @@ XLinkPlatform_t XLinkPlatformPidToPlatform(const int pid);
 XLinkDeviceState_t XLinkPlatformPidToState(const int pid);
 // for deprecated API
 
-#endif // __PC__
+#endif // __DEVICE__
 
 // ------------------------------------
 // Helpers. End.

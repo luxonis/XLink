@@ -28,7 +28,7 @@ extern "C"
  */
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler);
 
-#ifdef __PC__
+#ifndef __DEVICE__
 
 /**
  * @brief Checks consistency of device description
@@ -40,7 +40,6 @@ int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDevice
 
 /**
  * @brief Returns Myriad device description which meets the requirements
- * @param[in]   state - state of device enum (booted, not booted or any state)
  * @param[in]   in_deviceRequirements - structure with device requirements (protocol, platform).
  * @note        If in_deviceRequirements has device name specified,
  *                  this function tries to get a device with that exact name
@@ -48,8 +47,7 @@ int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDevice
  * @param[out]  out_foundDevice - found device description
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkFindFirstSuitableDevice(XLinkDeviceState_t state,
-                                          const deviceDesc_t in_deviceRequirements,
+XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequirements,
                                           deviceDesc_t *out_foundDevice);
 
 /**
@@ -61,8 +59,7 @@ XLinkError_t XLinkFindFirstSuitableDevice(XLinkDeviceState_t state,
  * @param[out]     out_foundDevicesCount - amount of found devices
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkFindAllSuitableDevices(XLinkDeviceState_t state,
-                                         const deviceDesc_t in_deviceRequirements,
+XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirements,
                                          deviceDesc_t *out_foundDevicesPtr,
                                          const unsigned int devicesArraySize,
                                          unsigned int *out_foundDevicesCount);
@@ -167,7 +164,7 @@ const char* XLinkDeviceStateToStr(XLinkDeviceState_t val);
  */
 const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val);
 
-#endif // __PC__
+#endif // __DEVICE__
 
 /**
  * @brief Profiling funcs - keeping them global for now
@@ -325,7 +322,7 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffe
 // Deprecated API. Begin.
 // ------------------------------------
 
-#ifdef __PC__
+#ifndef __DEVICE__
 
 XLinkError_t XLinkGetDeviceName(int index, char* name, int nameSize);
 XLinkError_t XLinkGetDeviceNameExtended(int index, char* name, int nameSize, int pid);
@@ -347,7 +344,7 @@ XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);
  */
 XLinkError_t XLinkResetAll();
 
-#endif // __PC__
+#endif // __DEVICE__
 
 // ------------------------------------
 // Deprecated API. End.

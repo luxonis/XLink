@@ -16,12 +16,7 @@ extern "C"
 #endif
 
 #define XLINK_MAX_MX_ID_SIZE 32
-
-#ifdef XLINK_USE_MX_ID_NAME
-#define XLINK_MAX_NAME_SIZE (XLINK_MAX_MX_ID_SIZE + 16) // additional space for device name (see supportedDevices)
-#else
 #define XLINK_MAX_NAME_SIZE 64
-#endif
 
 #ifdef XLINK_MAX_STREAM_RES
 #define XLINK_MAX_STREAMS XLINK_MAX_STREAM_RES
@@ -51,6 +46,8 @@ typedef enum{
     X_LINK_TIMEOUT,
     X_LINK_ERROR,
     X_LINK_OUT_OF_MEMORY,
+    X_LINK_INSUFFICIENT_PERMISSIONS,
+    X_LINK_DEVICE_ALREADY_IN_USE,
     X_LINK_NOT_IMPLEMENTED
 } XLinkError_t;
 
@@ -96,6 +93,9 @@ typedef struct {
     XLinkProtocol_t protocol;
     XLinkPlatform_t platform;
     char name[XLINK_MAX_NAME_SIZE];
+    XLinkDeviceState_t state;
+    char mxid[XLINK_MAX_MX_ID_SIZE];
+    XLinkError_t status;
 } deviceDesc_t;
 
 typedef struct streamPacketDesc_t
@@ -118,6 +118,7 @@ typedef struct XLinkGlobalHandler_t
 {
     int profEnable;
     XLinkProf_t profilingData;
+    void* options;
 
     //Deprecated fields. Begin.
     int loglevel;

@@ -54,6 +54,10 @@ extern int pthread_getname_np (pthread_t , char *, size_t);
 #include <rtems/bspIo.h>
 #endif
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
+
 
 #define MVLOG_STR(x) _MVLOG_STR(x)
 #define _MVLOG_STR(x)  #x
@@ -154,10 +158,19 @@ logprintf(mvLog_t curLogLvl, mvLog_t lvl, const char * func, const int line,
     if(!rtems_interrupt_is_in_progress())
     {
 #endif
-#if defined __sparc__ || defined __PC__
+#if defined __sparc__ || !defined __DEVICE__
+#ifdef __ANDROID__
+    // Convert to Android logging enumeration
+    enum android_LogPriority logPrio = ANDROID_LOG_DEBUG + (lvl - MVLOG_DEBUG);
+    //__android_log_print(logPrio, UNIT_NAME_STR, headerFormat, mvLogHeader[lvl], UNIT_NAME_STR, timestamp, threadName, func, line);
+    __android_log_vprint(logPrio, UNIT_NAME_STR, format, args);
+    // __android_log_print(logPrio, UNIT_NAME_STR, "%s", ANSI_COLOR_RESET);
+#else
     fprintf(stdout, headerFormat, mvLogHeader[lvl], UNIT_NAME_STR, timestamp, threadName, func, line);
     vfprintf(stdout, format, args);
     fprintf(stdout, "%s\n", ANSI_COLOR_RESET);
+#endif
+
 #elif defined __shave__
     printf(headerFormat, mvLogHeader[lvl], UNIT_NAME_STR, timestamp, threadName, func, line);
     printf(format, args);
