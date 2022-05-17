@@ -75,18 +75,18 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc);
 
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
 {
+    XLINK_RET_IF(globalHandler == NULL);
     XLINK_RET_ERR_IF(pthread_mutex_lock(&init_mutex), X_LINK_ERROR);
     if(init_once){
+        pthread_mutex_unlock(&init_mutex);
         return X_LINK_SUCCESS;
     }
-    init_once = 1;
 
 #ifdef __DEVICE__
     mvLogLevelSet(MVLOG_FATAL);
     mvLogDefaultLevelSet(MVLOG_FATAL);
 #endif
 
-    XLINK_RET_IF(globalHandler == NULL);
     ASSERT_XLINK(XLINK_MAX_STREAMS <= MAX_POOLS_ALLOC);
     glHandler = globalHandler;
     if (sem_init(&pingSem,0,0)) {
@@ -94,7 +94,10 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     }
     int i;
 
-    XLinkPlatformInit(globalHandler->options);
+    if (XLinkPlatformInit(globalHandler->options) != X_LINK_PLATFORM_SUCCESS) {
+        pthread_mutex_unlock(&init_mutex);
+        return X_LINK_ERROR;
+    }
 
     //Using deprecated fields. Begin.
     int loglevel = globalHandler->loglevel;
@@ -115,7 +118,11 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     controlFunctionTbl.closeLink         = &dispatcherCloseLink;
     controlFunctionTbl.closeDeviceFd     = &dispatcherCloseDeviceFd;
 
-    XLINK_RET_IF(DispatcherInitialize(&controlFunctionTbl));
+    if (DispatcherInitialize(&controlFunctionTbl)) {
+        mvLog(MVLOG_ERROR, "Condition failed: DispatcherInitialize(&controlFunctionTbl)");
+        pthread_mutex_unlock(&init_mutex);
+        return X_LINK_ERROR;
+    }
 
     //initialize availableStreams
     memset(availableXLinks, 0, sizeof(availableXLinks));
@@ -134,23 +141,34 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
 
 #ifdef __DEVICE__
     link = getNextAvailableLink();
-    if (link == NULL)
+    if (link == NULL) {
+        pthread_mutex_unlock(&init_mutex);
         return X_LINK_COMMUNICATION_NOT_OPEN;
+    }
     link->peerState = XLINK_UP;
     link->deviceHandle.xLinkFD = NULL;
     link->deviceHandle.protocol = globalHandler->protocol;
 
     xLinkDeviceHandle_t temp = {0};
     temp.protocol = globalHandler->protocol;
-    XLINK_RET_IF_FAIL(DispatcherStart(&temp)); //myriad has one
+    {
+        int rc;
+        if (rc = DispatcherStart(&temp)) { //myriad has one
+            mvLog(MVLOG_ERROR, " DispatcherStart(&temp) method call failed with an error: %d", rc);
+            pthread_mutex_unlock(&init_mutex);
+            return rc;
+        }
+    }
 
     while(((sem_wait(&pingSem) == -1) && errno == EINTR)
         continue;
 
 #endif
 
+    init_once = 1;
     int status = pthread_mutex_unlock(&init_mutex);
     if(status){
+        // rare and unstable scenario; xlink is technically initialized yet mutex unlock failed
         return X_LINK_ERROR;
     }
 
