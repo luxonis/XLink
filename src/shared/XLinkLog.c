@@ -158,7 +158,7 @@ logprintf(mvLog_t curLogLvl, mvLog_t lvl, const char * func, const int line,
     if(!rtems_interrupt_is_in_progress())
     {
 #endif
-#if defined __sparc__ || !defined __DEVICE__
+#if 1
 #ifdef __ANDROID__
     // Convert to Android logging enumeration
     enum android_LogPriority logPrio = ANDROID_LOG_DEBUG + (lvl - MVLOG_DEBUG);

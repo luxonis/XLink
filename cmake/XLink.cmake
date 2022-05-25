@@ -11,6 +11,7 @@ file(GLOB PC_PROTO_SRC_CPP   "${XLINK_ROOT_DIR}/src/pc/protocols/*.cpp")
 file(GLOB_RECURSE SHARED_SRC "${XLINK_ROOT_DIR}/src/shared/*.c")
 
 list(APPEND XLINK_SOURCES ${PC_SRC} ${PC_SRC_CPP} ${PC_PROTO_SRC} ${PC_PROTO_SRC_CPP} ${SHARED_SRC})
+list(APPEND XLINK_SOURCES_SERVER ${SHARED_SRC} "${XLINK_ROOT_DIR}/src/server/Platform.c" "${XLINK_ROOT_DIR}/src/server/DeviceDiscovery.cpp")
 
 if(WIN32)
     set(XLINK_PLATFORM_INCLUDE ${XLINK_ROOT_DIR}/src/pc/Win/include)

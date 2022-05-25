@@ -38,7 +38,7 @@ typedef enum {
 // Device management. Begin.
 // ------------------------------------
 
-xLinkPlatformErrorCode_t XLinkPlatformInit(void* options);
+xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler);
 
 #ifndef __DEVICE__
 /**

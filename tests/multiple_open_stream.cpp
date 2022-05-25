@@ -35,6 +35,8 @@ int main() {
     XLinkGlobalHandler_t gHandler;
     XLinkInitialize(&gHandler);
 
+    deviceDesc_t deviceDesc;
+    /*
     // Search for booted device
     deviceDesc_t deviceDesc, inDeviceDesc;
     inDeviceDesc.protocol = X_LINK_ANY_PROTOCOL;
@@ -43,6 +45,10 @@ int main() {
         printf("Didn't find a device\n");
         return -1;
     }
+    */
+
+    strcpy(deviceDesc.name, "127.0.0.1");
+    deviceDesc.protocol = X_LINK_TCP_IP;
 
     printf("Device name: %s\n", deviceDesc.name);
 
@@ -92,7 +98,7 @@ int main() {
                 // OK
             } else {
                 streamId_t id;
-                memcpy(&id, p->data, sizeof(id));
+                // memcpy(&id, p->data, sizeof(id));
                 printf("DESYNC error - name %s, id: 0x%08X, response id: 0x%08X\n", name.c_str(), s, id);
                 success = false;
             }

@@ -280,14 +280,14 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
     }
 
 #ifdef __DEVICE__
-    if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0) {
-        mvLog(MVLOG_ERROR,"pthread_attr_setinheritsched error");
-        pthread_attr_destroy(&attr);
-    }
-    if (pthread_attr_setschedpolicy(&attr, SCHED_RR) != 0) {
-        mvLog(MVLOG_ERROR,"pthread_attr_setschedpolicy error");
-        pthread_attr_destroy(&attr);
-    }
+    // if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0) {
+    //     mvLog(MVLOG_ERROR,"pthread_attr_setinheritsched error");
+    //     pthread_attr_destroy(&attr);
+    // }
+    // if (pthread_attr_setschedpolicy(&attr, SCHED_RR) != 0) {
+    //     mvLog(MVLOG_ERROR,"pthread_attr_setschedpolicy error");
+    //     pthread_attr_destroy(&attr);
+    // }
 #ifdef XLINK_THREADS_PRIORITY
     struct sched_param param;
     if (pthread_attr_getschedparam(&attr, &param) != 0) {
@@ -739,16 +739,16 @@ static void* eventSchedulerRun(void* ctx)
     }
 
 #ifdef __DEVICE__
-    if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0) {
-        pthread_attr_destroy(&attr);
-        mvLog(MVLOG_ERROR,"pthread_attr_setinheritsched error");
-        return NULL;
-    }
-    if (pthread_attr_setschedpolicy(&attr, SCHED_RR) != 0) {
-        pthread_attr_destroy(&attr);
-        mvLog(MVLOG_ERROR,"pthread_attr_setschedpolicy error");
-        return NULL;
-    }
+    // if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0) {
+    //     pthread_attr_destroy(&attr);
+    //     mvLog(MVLOG_ERROR,"pthread_attr_setinheritsched error");
+    //     return NULL;
+    // }
+    // if (pthread_attr_setschedpolicy(&attr, SCHED_RR) != 0) {
+    //     pthread_attr_destroy(&attr);
+    //     mvLog(MVLOG_ERROR,"pthread_attr_setschedpolicy error");
+    //     return NULL;
+    // }
 #ifdef XLINK_THREADS_PRIORITY
     struct sched_param param;
     if (pthread_attr_getschedparam(&attr, &param) != 0) {

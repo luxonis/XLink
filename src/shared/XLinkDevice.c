@@ -82,10 +82,10 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
         return X_LINK_SUCCESS;
     }
 
-#ifdef __DEVICE__
-    mvLogLevelSet(MVLOG_FATAL);
-    mvLogDefaultLevelSet(MVLOG_FATAL);
-#endif
+// #ifdef __DEVICE__
+//     mvLogLevelSet(MVLOG_FATAL);
+//     mvLogDefaultLevelSet(MVLOG_FATAL);
+// #endif
 
     ASSERT_XLINK(XLINK_MAX_STREAMS <= MAX_POOLS_ALLOC);
     glHandler = globalHandler;
@@ -94,7 +94,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     }
     int i;
 
-    if (XLinkPlatformInit(globalHandler->options) != X_LINK_PLATFORM_SUCCESS) {
+    if (XLinkPlatformInit(globalHandler) != X_LINK_PLATFORM_SUCCESS) {
         pthread_mutex_unlock(&init_mutex);
         return X_LINK_ERROR;
     }
@@ -160,7 +160,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
         }
     }
 
-    while(((sem_wait(&pingSem) == -1) && errno == EINTR)
+    while(((sem_wait(&pingSem) == -1) && errno == EINTR))
         continue;
 
 #endif
