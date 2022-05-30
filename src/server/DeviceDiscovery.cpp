@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <thread>
 #include <cassert>
+#include <mutex>
 
 #include <sys/types.h>
 #include <sys/socketvar.h>
@@ -46,19 +47,27 @@ static const char default_serial_str[] = "deadbeef";
 namespace network {
 
 static std::thread serviceThread;
-
+static std::mutex serviceMutex;
+static bool initialized{false};
 void startDeviceDiscoveryService(DeviceState deviceState, std::function<void()> resetCb){
+    {
+        std::unique_lock<std::mutex> lock(serviceMutex);
+        if(initialized) {
+            return;
+        }
+        initialized = true;
+    }
 
     serviceThread = std::thread([deviceState, resetCb](){
         // TODO(themarpe) - afaik crashes in FW
         int gpioBootMode = 0x3; //getGpioBootstrap();
 
-        const char* serial_str = "holaseniorita";
+        const char* serial_str = "xlinkserver";
         if(serial_str == nullptr){
             serial_str = default_serial_str;
         }
 
-        printf("Started device discovery service!\n");
+        // printf("Started device discovery service!\n");
 
         int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
         if(sockfd < 0)
@@ -78,7 +87,7 @@ void startDeviceDiscoveryService(DeviceState deviceState, std::function<void()> 
             return -1;
         }
 
-        printf("Waiting broadcast message..\n");
+        // printf("Waiting broadcast message..\n");
 
         // TODO, document appropriatelly in a document somewhere
         enum class Command : uint32_t {
@@ -210,7 +219,7 @@ void startDeviceDiscoveryService(DeviceState deviceState, std::function<void()> 
 }
 
 
-extern "C" void c_bind_startDeviceDiscoveryService(uint32_t deviceState) {
+extern "C" void startDeviceDiscoveryService(uint32_t deviceState) {
     network::startDeviceDiscoveryService(static_cast<network::DeviceState>(deviceState));
 }
 

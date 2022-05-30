@@ -60,6 +60,8 @@ xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDes
 xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
                          XLinkProtocol_t protocol, void** fd);
 xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol);
+xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite,
+                         XLinkProtocol_t protocol, void** fd);
 
 UsbSpeed_t get_usb_speed();
 const char* get_mx_serial();
@@ -93,17 +95,8 @@ void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment);
 // Helpers. Begin.
 // ------------------------------------
 
-#ifndef __DEVICE__
-
 int XLinkPlatformIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state);
 char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode);
-
-// for deprecated API
-XLinkPlatform_t XLinkPlatformPidToPlatform(const int pid);
-XLinkDeviceState_t XLinkPlatformPidToState(const int pid);
-// for deprecated API
-
-#endif // __DEVICE__
 
 // ------------------------------------
 // Helpers. End.

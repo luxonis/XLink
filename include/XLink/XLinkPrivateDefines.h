@@ -117,11 +117,7 @@ typedef enum
     EVENT_REMOTE,
 } xLinkEventOrigin_t;
 
-#ifndef __DEVICE__
 #define MAX_LINKS 32
-#else
-#define MAX_LINKS 1
-#endif
 
 #define MAX_EVENTS 64
 #define MAX_SCHEDULERS MAX_LINKS

@@ -142,24 +142,6 @@ char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode) {
     }
 }
 
-XLinkPlatform_t XLinkPlatformPidToPlatform(const int pid) {
-    switch (pid) {
-        case DEFAULT_UNBOOTPID_2150: return X_LINK_MYRIAD_2;
-        case DEFAULT_UNBOOTPID_2485: return X_LINK_MYRIAD_X;
-        default:       return X_LINK_ANY_PLATFORM;
-    }
-}
-
-XLinkDeviceState_t XLinkPlatformPidToState(const int pid) {
-    switch (pid) {
-        case DEFAULT_OPENPID: return X_LINK_BOOTED;
-        case DEFAULT_BOOTLOADER_PID: return X_LINK_BOOTLOADER;
-        case DEFAULT_FLASH_BOOTED_PID: return X_LINK_FLASH_BOOTED;
-        case AUTO_PID: return X_LINK_ANY_STATE;
-        default:       return X_LINK_UNBOOTED;
-    }
-}
-
 // ------------------------------------
 // XLinkPlatform API implementation. End.
 // ------------------------------------

@@ -28,6 +28,13 @@ extern "C"
  */
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler);
 
+/**
+ * @brief Initializes XLink Server
+ * @param globalHandler[in] XLink global communication parameters
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkServer(XLinkHandler_t* handler);
+
 #ifndef __DEVICE__
 
 /**

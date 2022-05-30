@@ -25,6 +25,11 @@ int main(int argc, const char** argv){
         throw std::runtime_error("Couldn't initialize XLink");
     }
 
+    XLinkHandler_t handler;
+    handler.devicePath = "127.0.0.1";
+    handler.protocol = X_LINK_TCP_IP;
+    XLinkServer(&handler);
+
     // loop through streams
     constexpr static auto NUM_STREAMS = 16;
     std::array<std::thread, NUM_STREAMS> threads;
@@ -41,7 +46,7 @@ int main(int argc, const char** argv){
         thread.join();
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(3));
+    std::this_thread::sleep_for(std::chrono::seconds(1));
     std::cout << "All threads joined\n";
 
     return 0;

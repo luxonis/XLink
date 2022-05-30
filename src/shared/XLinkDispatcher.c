@@ -99,6 +99,7 @@ typedef struct {
 
     uint32_t dispatcherLinkDown;
     uint32_t dispatcherDeviceFdDown;
+    uint32_t server;
 } xLinkSchedulerState_t;
 
 
@@ -210,12 +211,17 @@ XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc) {
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
+XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle) {
+    return DispatcherStartImpl(deviceHandle, false);
+}
+XLinkError_t DispatcherStartServer(xLinkDeviceHandle_t *deviceHandle) {
+    return DispatcherStartImpl(deviceHandle, true);
+}
+
+XLinkError_t DispatcherStartImpl(xLinkDeviceHandle_t *deviceHandle, bool server)
 {
     ASSERT_XLINK(deviceHandle);
-#ifndef __DEVICE__
     ASSERT_XLINK(deviceHandle->xLinkFD != NULL);
-#endif
 
     pthread_attr_t attr;
     int eventIdx;
@@ -238,6 +244,7 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
     schedulerState[idx].resetXLink = 0;
     schedulerState[idx].dispatcherLinkDown = 0;
     schedulerState[idx].dispatcherDeviceFdDown = 0;
+    schedulerState[idx].server = server;
 
     schedulerState[idx].deviceHandle = *deviceHandle;
     schedulerState[idx].schedulerId = idx;
@@ -279,28 +286,6 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
         return X_LINK_ERROR;
     }
 
-#ifdef __DEVICE__
-    // if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0) {
-    //     mvLog(MVLOG_ERROR,"pthread_attr_setinheritsched error");
-    //     pthread_attr_destroy(&attr);
-    // }
-    // if (pthread_attr_setschedpolicy(&attr, SCHED_RR) != 0) {
-    //     mvLog(MVLOG_ERROR,"pthread_attr_setschedpolicy error");
-    //     pthread_attr_destroy(&attr);
-    // }
-#ifdef XLINK_THREADS_PRIORITY
-    struct sched_param param;
-    if (pthread_attr_getschedparam(&attr, &param) != 0) {
-        mvLog(MVLOG_ERROR,"pthread_attr_getschedparam error");
-        pthread_attr_destroy(&attr);
-    }
-    param.sched_priority = XLINK_THREADS_PRIORITY;
-    if (pthread_attr_setschedparam(&attr, &param) != 0) {
-        mvLog(MVLOG_ERROR,"pthread_attr_setschedparam error");
-        pthread_attr_destroy(&attr);
-    }
-#endif
-#endif
 
     while(((sem_wait(&addSchedulerSem) == -1) && errno == EINTR))
         continue;
@@ -435,24 +420,23 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
         while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
             continue;
     }
-#ifndef __DEVICE__
-    if (rc) {
-            xLinkEvent_t event = {0};
-            event.header.type = XLINK_RESET_REQ;
-            event.deviceHandle = *deviceHandle;
-            mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
-            DispatcherAddEvent(EVENT_LOCAL, &event);
-            id = getSem(pthread_self(), curr);
-            int rc;
-            while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
-                continue;
-            if (id == NULL || rc) {
-            // Calling non-thread safe dispatcherReset from external thread
-            // TODO - investigate further and resolve
-                dispatcherReset(curr);
-            }
+
+    if (!curr->server && rc) {
+        xLinkEvent_t event = {0};
+        event.header.type = XLINK_RESET_REQ;
+        event.deviceHandle = *deviceHandle;
+        mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
+        DispatcherAddEvent(EVENT_LOCAL, &event);
+        id = getSem(pthread_self(), curr);
+        int rc;
+        while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
+            continue;
+        if (id == NULL || rc) {
+        // Calling non-thread safe dispatcherReset from external thread
+        // TODO - investigate further and resolve
+            dispatcherReset(curr);
         }
-#endif
+    }
 
     return rc;
 }
@@ -470,8 +454,7 @@ int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct
     int rc = XLink_sem_timedwait(id, &abstime);
     int err = errno;
 
-#ifndef __DEVICE__
-    if (rc) {
+    if (curr->server && rc) {
         if(err == ETIMEDOUT){
             return X_LINK_TIMEOUT;
         } else {
@@ -488,7 +471,6 @@ int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct
             }
         }
     }
-#endif
 
     return rc;
 }
@@ -738,30 +720,6 @@ static void* eventSchedulerRun(void* ctx)
         return NULL;
     }
 
-#ifdef __DEVICE__
-    // if (pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) != 0) {
-    //     pthread_attr_destroy(&attr);
-    //     mvLog(MVLOG_ERROR,"pthread_attr_setinheritsched error");
-    //     return NULL;
-    // }
-    // if (pthread_attr_setschedpolicy(&attr, SCHED_RR) != 0) {
-    //     pthread_attr_destroy(&attr);
-    //     mvLog(MVLOG_ERROR,"pthread_attr_setschedpolicy error");
-    //     return NULL;
-    // }
-#ifdef XLINK_THREADS_PRIORITY
-    struct sched_param param;
-    if (pthread_attr_getschedparam(&attr, &param) != 0) {
-        mvLog(MVLOG_ERROR,"pthread_attr_getschedparam error");
-        pthread_attr_destroy(&attr);
-    }
-    param.sched_priority = XLINK_THREADS_PRIORITY;
-    if (pthread_attr_setschedparam(&attr, &param) != 0) {
-        mvLog(MVLOG_ERROR,"pthread_attr_setschedparam error");
-        pthread_attr_destroy(&attr);
-    }
-#endif
-#endif
     sc = pthread_create(&readerThreadId, &attr, eventReader, curr);
     if (sc) {
         mvLog(MVLOG_ERROR, "Thread creation failed");
@@ -1176,11 +1134,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
         event = dispatcherGetNextEvent(curr);
         if(event == NULL) {
             mvLog(MVLOG_ERROR,"Dispatcher received NULL event!");
-#ifndef __DEVICE__
-            break; //Mean that user reset XLink.
-#else
-            continue;
-#endif
+            break; // Means that user reset XLink.
         }
 
         if(event->packet.deviceHandle.xLinkFD
@@ -1214,7 +1168,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
             toSend = &response.packet;
         }
 
-        res = getResp(&event->packet, &response.packet);
+        res = getResp(&event->packet, &response.packet, curr->server);
         if (isEventTypeRequest(event)) {
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
             if (event->origin == EVENT_LOCAL) { //we need to do this for locals only
@@ -1227,22 +1181,15 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
             }
 
             if (res == 0 && event->packet.header.flags.bitField.localServe == 0) {
-#ifndef __DEVICE__
-                if (toSend->header.type == XLINK_RESET_REQ) {
+                if (!curr->server && toSend->header.type == XLINK_RESET_REQ) {
                     curr->resetXLink = 1;
                     mvLog(MVLOG_DEBUG,"Send XLINK_RESET_REQ, stopping sendEvents thread.");
                     if(toSend->deviceHandle.protocol == X_LINK_PCIE) {
                         toSend->header.type = XLINK_PING_REQ;
                         mvLog(MVLOG_DEBUG, "Request for reboot not sent, only ping event");
-                    } else {
-#if defined(NO_BOOT)
-                        toSend->header.type = XLINK_PING_REQ;
-                        mvLog(MVLOG_INFO, "Request for reboot not sent, only ping event");
-#endif // defined(NO_BOOT)
-
                     }
                 }
-#endif // __DEVICE__
+
                 XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
                 if (glControlFunc->eventSend(toSend) != 0) {
                     // Error out

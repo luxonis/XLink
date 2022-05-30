@@ -29,10 +29,7 @@
 // Helpers declaration. Begin.
 // ------------------------------------
 
-#ifndef __DEVICE__
 static XLinkError_t checkEventHeader(xLinkEventHeader_t header);
-#endif
-
 static float timespec_diff(struct timespec *start, struct timespec *stop);
 static XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs);
 static XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs);
@@ -69,7 +66,6 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
             DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
             INVALID_STREAM_ID);
 
-#ifndef __DEVICE__
         XLinkError_t eventStatus = checkEventHeader(event.header);
         if (eventStatus != X_LINK_SUCCESS) {
             mvLog(MVLOG_ERROR, "Got wrong package from device, error code = %s", XLinkErrorToStr(eventStatus));
@@ -80,22 +76,19 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
                 return INVALID_STREAM_ID;
             }
         }
-#endif
     }
     streamId_t streamId = getStreamIdByName(link, name);
 
-#ifndef __DEVICE__
     if (streamId > 0x0FFFFFFF) {
         mvLog(MVLOG_ERROR, "Cannot find stream id by the \"%s\" name", name);
         mvLog(MVLOG_ERROR,"Max streamId reached!");
         return INVALID_STREAM_ID;
     }
-#else
-    if (streamId == INVALID_STREAM_ID) {
-        mvLog(MVLOG_ERROR,"Max streamId reached %x!", streamId);
-        return INVALID_STREAM_ID;
-    }
-#endif
+    // TODO(themarpe) - server side
+    // if (streamId == INVALID_STREAM_ID) {
+    //     mvLog(MVLOG_ERROR,"Max streamId reached %x!", streamId);
+    //     return INVALID_STREAM_ID;
+    // }
 
     COMBINE_IDS(streamId, id);
     return streamId;

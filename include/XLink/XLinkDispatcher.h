@@ -12,13 +12,13 @@
 
 #include "XLinkPrivateDefines.h"
 #include "time.h"
+#include "stdbool.h"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
-typedef int (*getRespFunction) (xLinkEvent_t*,
-                xLinkEvent_t*);
+typedef int (*getRespFunction) (xLinkEvent_t*, xLinkEvent_t*, bool);
 typedef struct {
     int (*eventSend) (xLinkEvent_t*);
     int (*eventReceive) (xLinkEvent_t*);
@@ -30,6 +30,8 @@ typedef struct {
 
 XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc);
 XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle);
+XLinkError_t DispatcherStartServer(xLinkDeviceHandle_t *deviceHandle);
+XLinkError_t DispatcherStartImpl(xLinkDeviceHandle_t *deviceHandle, bool server);
 int DispatcherClean(xLinkDeviceHandle_t *deviceHandle);
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle);
 

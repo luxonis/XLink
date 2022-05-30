@@ -6,13 +6,12 @@
 #define _XLINKDISPATCHERIMPL_H
 
 #include "XLinkPrivateDefines.h"
+#include <stdbool.h>
 
 int dispatcherEventSend (xLinkEvent_t*);
 int dispatcherEventReceive (xLinkEvent_t*);
-int dispatcherLocalEventGetResponse (xLinkEvent_t*,
-                        xLinkEvent_t*);
-int dispatcherRemoteEventGetResponse (xLinkEvent_t*,
-                        xLinkEvent_t*);
+int dispatcherLocalEventGetResponse (xLinkEvent_t*, xLinkEvent_t*, bool);
+int dispatcherRemoteEventGetResponse (xLinkEvent_t*, xLinkEvent_t*, bool);
 void dispatcherCloseLink (void* fd, int fullClose);
 void dispatcherCloseDeviceFd (xLinkDeviceHandle_t* deviceHandle);
 

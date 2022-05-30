@@ -64,6 +64,7 @@ static const int statuswaittimeout = 5;
 
 static int pciePlatformConnect(UNUSED const char *devPathRead, const char *devPathWrite, void **fd);
 static int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
+static int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd);
 
 static xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name);
 static int pciePlatformBootBootloader(const char *name);
@@ -181,6 +182,17 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
     }
 }
 
+xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
+{
+    switch (protocol) {
+        case X_LINK_TCP_IP:
+            return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+}
+
 xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol)
 {
     switch (protocol) {
@@ -269,6 +281,68 @@ int pciePlatformConnect(UNUSED const char *devPathRead,
                         void **fd)
 {
     return pcie_init(devPathWrite, fd);
+}
+
+// TODO add IPv6 to tcpipPlatformConnect()
+int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
+{
+#if defined(USE_TCP_IP)
+
+    TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0)
+    {
+        perror("socket");
+        close(sock);
+    }
+
+    int reuse_addr = 1;
+    int sc;
+    sc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(int));
+    if(sc < 0)
+    {
+        perror("setsockopt");
+        close(sock);
+    }
+
+    // Disable sigpipe reception on send
+    #if defined(SO_NOSIGPIPE)
+        const int set = 1;
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+    #endif
+
+    struct sockaddr_in serv_addr = {}, client = {};
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_port = htons(TCPIP_LINK_SOCKET_PORT);
+    if(bind(sock, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0)
+    {
+        perror("bind");
+        close(sock);
+    }
+
+    if(listen(sock, 1) < 0)
+    {
+        perror("listen");
+        close(sock);
+    }
+
+    unsigned len = sizeof(client);
+    int connfd = accept(sock, (struct sockaddr*) &client, &len);
+    if(connfd < 0)
+    {
+        perror("accept");
+    }
+
+    // Store the socket and create a "unique" key instead
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
+    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) connfd);
+
+#else
+    assert(0 && "Selected incompatible option, compile with USE_TCP_IP set");
+#endif
+
+    return 0;
 }
 
 // TODO add IPv6 to tcpipPlatformConnect()

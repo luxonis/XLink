@@ -56,12 +56,7 @@ static uint32_t init_once = 0;
 static linkId_t getNextAvailableLinkUniqueId();
 static xLinkDesc_t* getNextAvailableLink();
 static void freeGivenLink(xLinkDesc_t* link);
-
-#ifndef __DEVICE__
-
 static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc);
-
-#endif // __DEVICE__
 
 // ------------------------------------
 // Helpers declaration. End.
@@ -81,11 +76,6 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
         pthread_mutex_unlock(&init_mutex);
         return X_LINK_SUCCESS;
     }
-
-// #ifdef __DEVICE__
-//     mvLogLevelSet(MVLOG_FATAL);
-//     mvLogDefaultLevelSet(MVLOG_FATAL);
-// #endif
 
     ASSERT_XLINK(XLINK_MAX_STREAMS <= MAX_POOLS_ALLOC);
     glHandler = globalHandler;
@@ -139,32 +129,6 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
             link->availableStreams[stream].id = INVALID_STREAM_ID;
     }
 
-#ifdef __DEVICE__
-    link = getNextAvailableLink();
-    if (link == NULL) {
-        pthread_mutex_unlock(&init_mutex);
-        return X_LINK_COMMUNICATION_NOT_OPEN;
-    }
-    link->peerState = XLINK_UP;
-    link->deviceHandle.xLinkFD = NULL;
-    link->deviceHandle.protocol = globalHandler->protocol;
-
-    xLinkDeviceHandle_t temp = {0};
-    temp.protocol = globalHandler->protocol;
-    {
-        int rc;
-        if (rc = DispatcherStart(&temp)) { //myriad has one
-            mvLog(MVLOG_ERROR, " DispatcherStart(&temp) method call failed with an error: %d", rc);
-            pthread_mutex_unlock(&init_mutex);
-            return rc;
-        }
-    }
-
-    while(((sem_wait(&pingSem) == -1) && errno == EINTR))
-        continue;
-
-#endif
-
     init_once = 1;
     int status = pthread_mutex_unlock(&init_mutex);
     if(status){
@@ -175,7 +139,52 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     return X_LINK_SUCCESS;
 }
 
-#ifndef __DEVICE__
+
+XLinkError_t XLinkServer(XLinkHandler_t* handler)
+{
+    // Start discovery if not already
+    extern void startDeviceDiscoveryService(uint32_t deviceState);
+    startDeviceDiscoveryService(3);
+
+    XLINK_RET_IF(handler == NULL);
+    if (strnlen(handler->devicePath, MAX_PATH_LENGTH) < 2) {
+        mvLog(MVLOG_ERROR, "Device path is incorrect");
+        return X_LINK_ERROR;
+    }
+
+    xLinkDesc_t* link = getNextAvailableLink();
+    XLINK_RET_IF(link == NULL);
+    mvLog(MVLOG_DEBUG,"%s() device name %s glHandler %p protocol %d\n", __func__, handler->devicePath, glHandler, handler->protocol);
+
+    link->deviceHandle.protocol = handler->protocol;
+    int connectStatus = XLinkPlatformServer(handler->devicePath2, handler->devicePath,
+                                             link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
+
+    if (connectStatus < 0) {
+        /**
+         * Connection may be unsuccessful at some amount of first tries.
+         * In this case, asserting the status provides enormous amount of logs in tests.
+         */
+
+        // Free used link
+        freeGivenLink(link);
+
+        // Return an informative error
+        return parsePlatformError(connectStatus);
+    }
+
+    XLINK_RET_ERR_IF(
+        DispatcherStartServer(&link->deviceHandle) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
+
+    // Wait till client pings
+    while(((sem_wait(&pingSem) == -1) && errno == EINTR))
+        continue;
+
+    link->peerState = XLINK_UP;
+    link->hostClosedFD = 0;
+    handler->linkId = link->id;
+    return X_LINK_SUCCESS;
+}
 
 int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state) {
     return XLinkPlatformIsDescriptionValid(in_deviceDesc, state);
@@ -253,14 +262,6 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     }
 
     link->peerState = XLINK_UP;
-    #if (!defined(_WIN32) && !defined(_WIN64) )
-        link->usbConnSpeed = get_usb_speed();
-        mv_strcpy(link->mxSerialId, XLINK_MAX_MX_ID_SIZE, get_mx_serial());
-    #else
-        link->usbConnSpeed = X_LINK_USB_SPEED_UNKNOWN;
-        mv_strcpy(link->mxSerialId, XLINK_MAX_MX_ID_SIZE, "UNKNOWN");
-    #endif
-
     link->hostClosedFD = 0;
     handler->linkId = link->id;
     return X_LINK_SUCCESS;
@@ -385,9 +386,6 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
 
 XLinkError_t XLinkResetAll()
 {
-#if defined(NO_BOOT)
-    mvLog(MVLOG_INFO, "Devices will not be restarted for this configuration (NO_BOOT)");
-#else
     int i;
     for (i = 0; i < MAX_LINKS; i++) {
         if (availableXLinks[i].id != INVALID_LINK_ID) {
@@ -409,11 +407,8 @@ XLinkError_t XLinkResetAll()
             }
         }
     }
-#endif
     return X_LINK_SUCCESS;
 }
-
-#endif // __DEVICE__
 
 XLinkError_t XLinkProfStart()
 {
@@ -482,7 +477,7 @@ const char* XLinkGetMxSerial(linkId_t id){
 // ------------------------------------
 
 // Used only by getNextAvailableLink
-static linkId_t getNextAvailableLinkUniqueId()
+linkId_t getNextAvailableLinkUniqueId()
 {
     linkId_t start = nextUniqueLinkId;
     do
@@ -508,7 +503,7 @@ static linkId_t getNextAvailableLinkUniqueId()
     return INVALID_LINK_ID;
 }
 
-static xLinkDesc_t* getNextAvailableLink() {
+xLinkDesc_t* getNextAvailableLink() {
 
     XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, NULL);
 
@@ -545,7 +540,7 @@ static xLinkDesc_t* getNextAvailableLink() {
     return link;
 }
 
-static void freeGivenLink(xLinkDesc_t* link) {
+void freeGivenLink(xLinkDesc_t* link) {
 
     if(pthread_mutex_lock(&availableXLinksMutex) != 0){
         mvLog(MVLOG_ERROR, "Cannot lock mutex\n");
@@ -561,9 +556,7 @@ static void freeGivenLink(xLinkDesc_t* link) {
 
 }
 
-#ifndef __DEVICE__
-
-static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
+XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
     switch (rc) {
         case X_LINK_PLATFORM_SUCCESS:
             return X_LINK_SUCCESS;
@@ -582,8 +575,6 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
             return X_LINK_ERROR;
     }
 }
-
-#endif // __DEVICE__
 
 /**
  * @brief Returns enum string value
@@ -670,10 +661,8 @@ const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val) {
         case X_LINK_PCIE_UNKNOWN_BOOTLOADER: return "X_LINK_PCIE_UNKNOWN_BOOTLOADER";
         case X_LINK_PCIE_SIMPLIFIED_BOOTLOADER: return "X_LINK_PCIE_SIMPLIFIED_BOOTLOADER";
         case X_LINK_PCIE_UNIFIED_BOOTLOADER: return "X_LINK_PCIE_UNIFIED_BOOTLOADER";
-        default:
-            return "INVALID_ENUM_VALUE";
-            break;
     }
+    return "INVALID_ENUM_VALUE";
 }
 
 // ------------------------------------

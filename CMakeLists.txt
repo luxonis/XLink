@@ -13,7 +13,6 @@ HunterGate(
 
 ### Constants
 set(TARGET_NAME "XLink")
-set(TARGET_NAME_SERVER "XLinkServer")
 set(TARGET_PUBLIC_NAME "XLinkPublic")
 
 # Create project
@@ -37,8 +36,6 @@ option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
 set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instead of Hunter")
 # Debug option
 option(XLINK_LIBUSB_SYSTEM "Use system libusb library instead of Hunter" OFF)
-# Debug option
-option(XLINK_SERVER "Build XLink server library" ON)
 
 if(XLINK_LIBUSB_LOCAL AND XLINK_LIBUSB_SYSTEM)
     message(FATAL_ERROR "XLINK_LIBUSB_LOCAL and XLINK_LIBUSB_SYSTEM options are mutually exclusive!")
@@ -49,16 +46,13 @@ message(STATUS "  XLINK_BUILD_EXAMPLES: ${XLINK_BUILD_EXAMPLES}")
 message(STATUS "  XLINK_BUILD_TESTS: ${XLINK_BUILD_TESTS}")
 message(STATUS "  XLINK_LIBUSB_LOCAL: ${XLINK_LIBUSB_LOCAL}")
 message(STATUS "  XLINK_LIBUSB_SYSTEM: ${XLINK_LIBUSB_SYSTEM}")
-message(STATUS "  XLINK_SERVER: ${XLINK_SERVER}")
 
 # Create library target
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
-add_library(${TARGET_NAME_SERVER} ${XLINK_SOURCES_SERVER})
 add_flag_source(src/shared/XLinkDevice.c "-Werror=switch-enum")
 get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
 if(is_multi_config)
     set_target_properties(${TARGET_NAME} PROPERTIES DEBUG_POSTFIX "d")
-    set_target_properties(${TARGET_NAME_SERVER} PROPERTIES DEBUG_POSTFIX "d")
 endif()
 
 # Add dependencies
@@ -89,22 +83,13 @@ endif()
 
 if(WIN32)
     target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
-    target_compile_definitions(${TARGET_NAME_SERVER} PRIVATE WIN32_LEAN_AND_MEAN)
 else()
     find_package(Threads REQUIRED)
     target_link_libraries(${TARGET_NAME} PRIVATE Threads::Threads)
-    target_link_libraries(${TARGET_NAME_SERVER} PRIVATE Threads::Threads)
 endif()
 
 if(MINGW)
     target_link_libraries(${TARGET_NAME}
-        PUBLIC
-            libwinusb.a
-            libsetupapi.a
-            ws2_32
-            Iphlpapi.lib
-    )
-    target_link_libraries(${TARGET_NAME_SERVER}
         PUBLIC
             libwinusb.a
             libsetupapi.a
@@ -122,16 +107,11 @@ target_include_directories(${TARGET_PUBLIC_NAME} INTERFACE
 
 # Link to headers (public, as itself also needs the headers)
 target_link_libraries(${TARGET_NAME} PUBLIC ${TARGET_PUBLIC_NAME})
-target_link_libraries(${TARGET_NAME_SERVER} PUBLIC ${TARGET_PUBLIC_NAME})
 
 target_include_directories(${TARGET_NAME}
     PRIVATE
         ${XLINK_PLATFORM_INCLUDE}
         ${XLINK_PRIVATE_INCLUDE}
-        ${XLINK_INCLUDE}/XLink
-)
-target_include_directories(${TARGET_NAME_SERVER}
-    PRIVATE
         ${XLINK_INCLUDE}/XLink
 )
 
@@ -146,28 +126,13 @@ target_compile_definitions(${TARGET_NAME}
         USE_USB_VSC
         USE_TCP_IP
 )
-target_compile_definitions(${TARGET_NAME_SERVER}
-    PRIVATE
-        HAVE_STRUCT_TIMESPEC
-        _CRT_SECURE_NO_WARNINGS
-        # USE_USB_VSC
-        USE_TCP_IP
-)
 
-# Add __DEVICE__ define for Server target
-target_compile_definitions(${TARGET_NAME_SERVER} PRIVATE __DEVICE__)
 
 # Set C99 and C++11 standard
 set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 99)
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 11)
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_EXTENSIONS OFF)
-# Set C99 and C++11 standard
-set_property(TARGET ${TARGET_NAME_SERVER} PROPERTY C_STANDARD 99)
-set_property(TARGET ${TARGET_NAME_SERVER} PROPERTY CXX_STANDARD 11)
-set_property(TARGET ${TARGET_NAME_SERVER} PROPERTY CXX_STANDARD_REQUIRED ON)
-set_property(TARGET ${TARGET_NAME_SERVER} PROPERTY CXX_EXTENSIONS OFF)
-
 # Add interface transitive property (C++11) to public library
 if(${CMAKE_VERSION} VERSION_LESS "3.8.0")
     target_compile_features(${TARGET_PUBLIC_NAME} INTERFACE cxx_range_for)
@@ -177,7 +142,6 @@ endif()
 
 # Add flags
 add_default_flags(${TARGET_NAME})
-add_default_flags(${TARGET_NAME_SERVER})
 
 # Check if pthread_getname_np exists
 if(NOT WIN32)
