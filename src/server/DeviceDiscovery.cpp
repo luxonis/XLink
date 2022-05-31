@@ -21,6 +21,7 @@
 #include <functional>
 
 #include <unistd.h>
+#include <XLink.h>
 
 
 namespace network {
@@ -219,7 +220,17 @@ void startDeviceDiscoveryService(DeviceState deviceState, std::function<void()> 
 }
 
 
-extern "C" void startDeviceDiscoveryService(uint32_t deviceState) {
-    network::startDeviceDiscoveryService(static_cast<network::DeviceState>(deviceState));
+extern "C" void startDeviceDiscoveryService(XLinkDeviceState_t state) {
+    network::DeviceState ds;
+    switch (state) {
+    case X_LINK_BOOTED: ds = network::DeviceState::BOOTED; break;
+    case X_LINK_BOOTLOADER: ds = network::DeviceState::BOOTLOADER; break;
+    case X_LINK_FLASH_BOOTED: ds = network::DeviceState::FLASH_BOOTED; break;
+    default:
+        assert(0 && "invalid state");
+        break;
+    }
+
+    network::startDeviceDiscoveryService(ds);
 }
 

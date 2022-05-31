@@ -65,6 +65,7 @@ typedef enum{
     X_LINK_ANY_PLATFORM = 0,
     X_LINK_MYRIAD_2 = 2450,
     X_LINK_MYRIAD_X = 2480,
+    X_LINK_KEEM_BAY = 3000,
 } XLinkPlatform_t;
 
 typedef enum{

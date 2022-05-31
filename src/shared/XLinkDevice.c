@@ -140,11 +140,11 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
 }
 
 
-XLinkError_t XLinkServer(XLinkHandler_t* handler)
+XLinkError_t XLinkServer(XLinkHandler_t* handler, XLinkDeviceState_t state, XLinkPlatform_t platform)
 {
     // Start discovery if not already
-    extern void startDeviceDiscoveryService(uint32_t deviceState);
-    startDeviceDiscoveryService(3);
+    extern void startDeviceDiscoveryService(XLinkDeviceState_t);
+    startDeviceDiscoveryService(state);
 
     XLINK_RET_IF(handler == NULL);
     if (strnlen(handler->devicePath, MAX_PATH_LENGTH) < 2) {
@@ -628,6 +628,7 @@ const char* XLinkPlatformToStr(XLinkPlatform_t val) {
         case X_LINK_ANY_PLATFORM: return "X_LINK_ANY_PLATFORM";
         case X_LINK_MYRIAD_2: return "X_LINK_MYRIAD_2";
         case X_LINK_MYRIAD_X: return "X_LINK_MYRIAD_X";
+        case X_LINK_KEEM_BAY: return "X_LINK_KEEM_BAY";
         default:
             return "INVALID_ENUM_VALUE";
             break;
