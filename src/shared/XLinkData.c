@@ -135,6 +135,32 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
     return X_LINK_SUCCESS;
 }
 
+XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, size_t buffer1Size, const uint8_t* buffer2, size_t buffer2Size)
+{
+    ASSERT_XLINK(buffer1);
+    ASSERT_XLINK(buffer2);
+
+    float opTime = 0;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId = EXTRACT_STREAM_ID(streamId);
+
+    int totalSize = buffer1Size + buffer2Size;
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_REQ, totalSize,(void*)buffer1, link->deviceHandle);
+    event.data2 = (void*)buffer2;
+    event.data2Size = buffer2Size;
+
+    XLINK_RET_IF(addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT));
+
+    if( glHandler->profEnable) {
+        glHandler->profilingData.totalWriteBytes += totalSize;
+        glHandler->profilingData.totalWriteTime += opTime;
+    }
+
+    return X_LINK_SUCCESS;
+}
+
 XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packet)
 {
     XLINK_RET_IF(packet == NULL);

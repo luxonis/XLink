@@ -26,7 +26,8 @@ int main(int argc, const char** argv){
     }
 
     XLinkHandler_t handler;
-    handler.devicePath = "127.0.0.1";
+    std::string serverIp{"127.0.0.1"};
+    handler.devicePath = &serverIp[0];
     handler.protocol = X_LINK_TCP_IP;
     XLinkServer(&handler, X_LINK_BOOTED, X_LINK_MYRIAD_X);
 
@@ -38,7 +39,7 @@ int main(int argc, const char** argv){
             std::string name = "test_";
             auto s = XLinkOpenStream(0, (name + std::to_string(i)).c_str(), 1024);
             assert(s != INVALID_STREAM_ID);
-            auto w = XLinkWriteData(s, (uint8_t*) &s, sizeof(s));
+            auto w = XLinkWriteData2(s, (uint8_t*) &s, sizeof(s/2), ((uint8_t*) &s) + sizeof(s/2), sizeof(s) - sizeof(s/2));
             assert(w == X_LINK_SUCCESS);
         });
     }

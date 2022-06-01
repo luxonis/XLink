@@ -43,6 +43,103 @@ static int handleIncomingEvent(xLinkEvent_t* event);
 // XLinkDispatcherImpl.h implementation. Begin.
 // ------------------------------------
 
+int writeEventMultipart(xLinkDeviceHandle_t* deviceHandle, void* data, int totalSize, void* data2, int data2Size)
+{
+    // Regular, single-part case
+    if(data2 == NULL || data2Size <= 0) {
+        return XLinkPlatformWrite(deviceHandle, data, totalSize);
+    }
+
+    // Multipart case
+    int errorCode = 0;
+    void *dataToWrite[] = {data, data2, NULL};
+    int sizeToWrite[] = {totalSize - data2Size, data2Size, 0};
+
+    int writtenByteCount = 0, toWrite = 0, rc = 0;
+
+    int totalSizeToWrite = 0;
+
+    int pktlen = 0;
+
+    // restriction on the output data size
+    // mitigates kernel crash on RPI when USB is used
+    const int xlinkPacketSizeMultiply = deviceHandle->protocol == X_LINK_USB_VSC ? 1024 : 1; //for usb3, usb2 is 512
+    uint8_t swapSpaceScratchBuffer[xlinkPacketSizeMultiply + 64];
+    uint8_t *swapSpace = swapSpaceScratchBuffer + ALIGN_UP((((uintptr_t)swapSpaceScratchBuffer) % 64), 64);
+
+    // the amount of bytes written from split transfer for "next" packet
+    int previousSplitWriteSize = 0;
+    for (int i = 0;; i++) {
+        void *currentPacket = dataToWrite[i];
+        int currentPacketSize = sizeToWrite[i];
+        if (currentPacket == NULL) break;
+        if (currentPacketSize == 0) break;
+        // printf("currentPacket %p size %d \n", currentPacket, currentPacketSize);
+        void *nextPacket = dataToWrite[i + 1];
+        int nextPacketSize = sizeToWrite[i + 1];
+        bool shouldSplitData = false;
+
+        if (nextPacket != NULL && nextPacketSize > 0) {
+            totalSizeToWrite += currentPacketSize - (currentPacketSize % xlinkPacketSizeMultiply);
+            if(currentPacketSize % xlinkPacketSizeMultiply) {
+                shouldSplitData = true;
+            }
+        } else {
+            totalSizeToWrite += currentPacketSize;
+        }
+
+        // printf("writtenByteCount %d %d\n",writtenByteCount , totalSizeToWrite);
+        int byteCountRelativeOffset = writtenByteCount;
+        while (writtenByteCount < totalSizeToWrite) {
+            toWrite = (pktlen && (totalSizeToWrite - writtenByteCount) > pktlen)
+                          ? pktlen
+                          : (totalSizeToWrite - writtenByteCount);
+
+            rc = XLinkPlatformWrite(deviceHandle, &((char *)currentPacket)[writtenByteCount - byteCountRelativeOffset + previousSplitWriteSize], toWrite);
+            if (rc < 0)
+            {
+                errorCode = rc;
+                goto function_epilogue;
+            }
+            writtenByteCount += rc;
+        }
+        if (shouldSplitData) {
+            int remainingToWriteCurrent = currentPacketSize - (totalSizeToWrite - byteCountRelativeOffset);
+            // printf("remainingToWriteCurrent %d \n", remainingToWriteCurrent);
+            if(remainingToWriteCurrent < 0 || remainingToWriteCurrent > xlinkPacketSizeMultiply) ASSERT_XLINK(0);
+            int remainingToWriteNext = nextPacketSize > xlinkPacketSizeMultiply - remainingToWriteCurrent ? xlinkPacketSizeMultiply - remainingToWriteCurrent : nextPacketSize;
+            // printf("remainingToWriteNext %d \n", remainingToWriteNext);
+            if(remainingToWriteNext < 0 || remainingToWriteNext > xlinkPacketSizeMultiply) ASSERT_XLINK(0);
+
+            if (remainingToWriteCurrent) {
+                memcpy(swapSpace, &((char *)currentPacket)[writtenByteCount - byteCountRelativeOffset + previousSplitWriteSize], remainingToWriteCurrent);
+                if(remainingToWriteNext) {
+                    memcpy(swapSpace + remainingToWriteCurrent, nextPacket, remainingToWriteNext);
+                }
+                toWrite = remainingToWriteCurrent + remainingToWriteNext;
+                if(toWrite > xlinkPacketSizeMultiply) ASSERT_XLINK(0);
+                rc = XLinkPlatformWrite(deviceHandle, swapSpace, toWrite);
+                if (rc < 0)
+                {
+                    errorCode = rc;
+                    goto function_epilogue;
+                }
+                writtenByteCount += rc;
+                totalSizeToWrite += remainingToWriteCurrent;
+                // printf("%s wrote %d \n", __FUNCTION__, rc);
+
+                previousSplitWriteSize = remainingToWriteNext;
+            }
+        } else {
+            previousSplitWriteSize = 0;
+        }
+    }
+
+function_epilogue:
+    if (errorCode) return errorCode;
+    return writtenByteCount;
+}
+
 //adds a new event with parameters and returns event id
 int dispatcherEventSend(xLinkEvent_t *event)
 {
@@ -58,8 +155,7 @@ int dispatcherEventSend(xLinkEvent_t *event)
     }
 
     if (event->header.type == XLINK_WRITE_REQ) {
-        rc = XLinkPlatformWrite(&event->deviceHandle,
-            event->data, event->header.size);
+        rc = writeEventMultipart(&event->deviceHandle, event->data, event->header.size, event->data2, event->data2Size);
         if(rc < 0) {
             mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
             return rc;

@@ -10,6 +10,7 @@
 #ifndef _XLINKPUBLICDEFINES_H
 #define _XLINKPUBLICDEFINES_H
 #include <stdint.h>
+#include <stddef.h>
 #ifdef __cplusplus
 extern "C"
 {

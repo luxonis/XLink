@@ -225,6 +225,18 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer, in
  * @brief Sends a package to initiate the writing of data to a remote stream
  * @warning Actual size of the written data is ALIGN_UP(size, 64)
  * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
+ * @param[in] buffer1 – data buffer to be transmitted
+ * @param[in] buffer1Size – size of the data to be transmitted
+ * @param[in] buffer2 – data buffer to be transmitted
+ * @param[in] buffer2Size – size of the data to be transmitted
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, size_t buffer1Size, const uint8_t* buffer2, size_t buffer2Size);
+
+/**
+ * @brief Sends a package to initiate the writing of data to a remote stream
+ * @warning Actual size of the written data is ALIGN_UP(size, 64)
+ * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
  * @param[in] buffer – data buffer to be transmitted
  * @param[in] size – size of the data to be transmitted
  * @param[in] msTimeout – time in milliseconds after which operation times out
