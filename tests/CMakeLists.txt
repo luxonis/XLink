@@ -11,3 +11,6 @@ endmacro()
 
 # Multiple stream open
 add_test(multiple_open_stream multiple_open_stream.cpp)
+
+# Multithreading search
+add_test(multithreading_search_test multithreading_search_test.cpp)
