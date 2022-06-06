@@ -26,6 +26,10 @@ typedef int TCPIP_SOCKET;
 #endif
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* **************************************************************************/
 /*      Public Macro Definitions                                            */
 /* **************************************************************************/
@@ -106,5 +110,9 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 */
 xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* TCPIP_HOST_H */

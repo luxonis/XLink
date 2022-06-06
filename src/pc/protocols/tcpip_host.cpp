@@ -39,6 +39,8 @@
 #include <ifaddrs.h>
 #endif
 
+#include <chrono>
+
 /* **************************************************************************/
 /*      Private Macro Definitions                                            */
 /* **************************************************************************/
@@ -53,8 +55,9 @@
 #define MAX_DEVICE_DISCOVERY_IFACE          10
 
 #define MSEC_TO_USEC(x)                     (x * 1000)
-#define DEVICE_DISCOVERY_RES_TIMEOUT_SEC    0.2
 #define DEVICE_RES_TIMEOUT_MSEC             20
+
+static constexpr auto DEVICE_DISCOVERY_RES_TIMEOUT = std::chrono::milliseconds{200};
 
 #ifdef HAS_DEBUG
 #define DEBUG(...) do { printf(__VA_ARGS__); } while(0)
@@ -62,23 +65,6 @@
 #define DEBUG(fmt, ...) do {} while(0)
 #endif
 
-
-/* **************************************************************************/
-/*      Private Function Definitions                                        */
-/* **************************************************************************/
-#if (defined(_WIN32) || defined(_WIN64) )
-#include <win_time.h>
-#endif
-static inline double seconds()
-{
-    static double s;
-    struct timespec ts;
-
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    if(!s)
-        s = ts.tv_sec + ts.tv_nsec * 1e-9;
-    return ts.tv_sec + ts.tv_nsec * 1e-9 - s;
-}
 
 static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
 {
@@ -191,7 +177,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
         MIB_IPADDRROW addr = ipaddrtable->table[i];
         broadcast.sin_addr.s_addr = (addr.dwAddr & addr.dwMask)
             | (addr.dwMask ^ (DWORD)0xffffffff);
-        sendto(sock, (const char *) &send_buffer, sizeof(send_buffer), 0, (struct sockaddr*) & broadcast, sizeof(broadcast));
+        sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr*) & broadcast, sizeof(broadcast));
 
 #ifdef HAS_DEBUG
         char ip_broadcast_str[INET_ADDRSTRLEN] = { 0 };
@@ -248,7 +234,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
                 broadcast_addr.sin_port = htons(BROADCAST_UDP_PORT);
 
                 tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
-                if(sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr)) < 0)
+                if(sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr)) < 0)
                 {
                     // Ignore if not successful. The devices on that interface won't be found
                 }
@@ -332,7 +318,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 
         tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
 
-        if(sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr *) &device_address, sizeof(device_address)) < 0)
+        if(sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &device_address, sizeof(device_address)) < 0)
         {
             tcpip_close_socket(sock);
             return X_LINK_PLATFORM_ERROR;
@@ -358,7 +344,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     // loop to receive message response from devices
     int num_devices_match = 0;
     // Loop through all sockets and received messages that arrived
-    double t1 = seconds();
+    auto t1 = std::chrono::steady_clock::now();
     do {
         if(num_devices_match >= (long) devices_size){
             // Enough devices matched, exit the loop
@@ -366,7 +352,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
         }
 
         char ip_addr[INET_ADDRSTRLEN] = {0};
-        tcpipHostDeviceDiscoveryResp_t recv_buffer = {0};
+        tcpipHostDeviceDiscoveryResp_t recv_buffer = {};
         struct sockaddr_in dev_addr;
         #if (defined(_WIN32) || defined(_WIN64) )
             int len = sizeof(dev_addr);
@@ -419,7 +405,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
                 num_devices_match++;
             }
         }
-    } while(seconds() - t1 < DEVICE_DISCOVERY_RES_TIMEOUT_SEC);
+    } while(std::chrono::steady_clock::now() - t1 < DEVICE_DISCOVERY_RES_TIMEOUT);
 
     tcpip_close_socket(sock);
 
@@ -480,7 +466,7 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     #endif
 
     tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_RESET;
-    if (sendto(sock, (const char *)&send_buffer, sizeof(send_buffer), 0, (struct sockaddr *)&device_address, sizeof(device_address)) < 0)
+    if (sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *)&device_address, sizeof(device_address)) < 0)
     {
         return X_LINK_PLATFORM_ERROR;
     }

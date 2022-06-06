@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 #include <atomic>
+#include <array>
 
 // The following is an Server side (host) test that opens many streams in random order.
 // Mainly used to test stream desync issue.
