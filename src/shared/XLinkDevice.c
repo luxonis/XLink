@@ -94,9 +94,10 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     }
     int i;
 
-    if (XLinkPlatformInit(globalHandler->options) != X_LINK_PLATFORM_SUCCESS) {
+    xLinkPlatformErrorCode_t init_status = XLinkPlatformInit(globalHandler->options);
+    if (init_status != X_LINK_PLATFORM_SUCCESS) {
         pthread_mutex_unlock(&init_mutex);
-        return X_LINK_ERROR;
+        return parsePlatformError(init_status);
     }
 
     //Using deprecated fields. Begin.
@@ -575,8 +576,13 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
             return X_LINK_INSUFFICIENT_PERMISSIONS;
         case X_LINK_PLATFORM_DEVICE_BUSY:
             return X_LINK_DEVICE_ALREADY_IN_USE;
+        case X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED:
+            return X_LINK_INIT_USB_ERROR;
+        case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED:
+            return X_LINK_INIT_TCP_IP_ERROR;
+        case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED:
+            return X_LINK_INIT_PCIE_ERROR;
         case X_LINK_PLATFORM_ERROR:
-        case X_LINK_PLATFORM_DRIVER_NOT_LOADED:
         case X_LINK_PLATFORM_INVALID_PARAMETERS:
         default:
             return X_LINK_ERROR;
@@ -603,6 +609,9 @@ const char* XLinkErrorToStr(XLinkError_t val) {
         case X_LINK_INSUFFICIENT_PERMISSIONS: return "X_LINK_INSUFFICIENT_PERMISSIONS";
         case X_LINK_DEVICE_ALREADY_IN_USE: return "X_LINK_DEVICE_ALREADY_IN_USE";
         case X_LINK_NOT_IMPLEMENTED: return "X_LINK_NOT_IMPLEMENTED";
+        case X_LINK_INIT_USB_ERROR: return "X_LINK_INIT_USB_ERROR";
+        case X_LINK_INIT_TCP_IP_ERROR: return "X_LINK_INIT_TCP_IP_ERROR";
+        case X_LINK_INIT_PCIE_ERROR: return "X_LINK_INIT_PCIE_ERROR";
         default:
             return "INVALID_ENUM_VALUE";
             break;

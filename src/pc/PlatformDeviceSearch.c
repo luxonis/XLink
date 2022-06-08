@@ -136,7 +136,9 @@ char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode) {
         case X_LINK_PLATFORM_DEVICE_NOT_FOUND: return "X_LINK_PLATFORM_DEVICE_NOT_FOUND";
         case X_LINK_PLATFORM_ERROR: return "X_LINK_PLATFORM_ERROR";
         case X_LINK_PLATFORM_TIMEOUT: return "X_LINK_PLATFORM_TIMEOUT";
-        case X_LINK_PLATFORM_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_DRIVER_NOT_LOADED";
+        case X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED";
+        case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED";
+        case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED";
         case X_LINK_PLATFORM_INVALID_PARAMETERS: return "X_LINK_PLATFORM_INVALID_PARAMETERS";
         default: return "";
     }
@@ -229,7 +231,7 @@ xLinkPlatformErrorCode_t parsePCIeHostError(pcieHostError_t rc) {
         case PCIE_HOST_TIMEOUT:
             return X_LINK_PLATFORM_TIMEOUT;
         case PCIE_HOST_DRIVER_NOT_LOADED:
-            return X_LINK_PLATFORM_DRIVER_NOT_LOADED;
+            return X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED;
         case PCIE_INVALID_PARAMETERS:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
         default:

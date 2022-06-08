@@ -89,7 +89,7 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(void* options)
 {
     // check for failed initialization; LIBUSB_SUCCESS = 0
     if (usbInitialize(options) != 0)
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED;
+        return X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED;
 
     // TODO(themarpe) - move to tcpip_host
     //tcpipInitialize();
