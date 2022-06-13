@@ -101,7 +101,7 @@ int writeEventMultipart(xLinkDeviceHandle_t* deviceHandle, void* data, int total
                 errorCode = rc;
                 goto function_epilogue;
             }
-            writtenByteCount += rc;
+            writtenByteCount += toWrite;
         }
         if (shouldSplitData) {
             int remainingToWriteCurrent = currentPacketSize - (totalSizeToWrite - byteCountRelativeOffset);
@@ -124,7 +124,7 @@ int writeEventMultipart(xLinkDeviceHandle_t* deviceHandle, void* data, int total
                     errorCode = rc;
                     goto function_epilogue;
                 }
-                writtenByteCount += rc;
+                writtenByteCount += toWrite;
                 totalSizeToWrite += remainingToWriteCurrent;
                 // printf("%s wrote %d \n", __FUNCTION__, rc);
 
