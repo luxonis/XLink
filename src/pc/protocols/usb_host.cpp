@@ -870,13 +870,13 @@ int usbPlatformClose(void *fdKey)
 
     void* tmpUsbHandle = NULL;
     if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
-        mvLog(MVLOG_FATAL, "Cannot find USB Handle by key");
+        mvLog(MVLOG_FATAL, "Cannot find USB Handle by key: %" PRIxPTR, (uintptr_t) fdKey);
         return -1;
     }
     usbLinkClose((libusb_device_handle *) tmpUsbHandle);
 
     if(destroyPlatformDeviceFdKey(fdKey)){
-        mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key");
+        mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key: %" PRIxPTR, (uintptr_t) fdKey);
         return -1;
     }
 
