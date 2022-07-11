@@ -79,6 +79,10 @@ static int tcpipPlatformWrite(void *fd, void *data, int size);
 
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 {
+    if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+    }
+
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
@@ -97,6 +101,10 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 
 int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 {
+    if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+    }
+
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:

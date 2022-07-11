@@ -80,6 +80,7 @@ static int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char*
 // ------------------------------------
 
 
+void xlinkSetProtocolInitialized(const XLinkProtocol_t protocol, int initialized);
 
 // ------------------------------------
 // XLinkPlatform API implementation. Begin.
@@ -87,9 +88,15 @@ static int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char*
 
 xLinkPlatformErrorCode_t XLinkPlatformInit(void* options)
 {
+    // Set that all protocols are initialized at first
+    for(int i = 0; i < X_LINK_NMB_OF_PROTOCOLS; i++) {
+        xlinkSetProtocolInitialized(i, 1);
+    }
+
     // check for failed initialization; LIBUSB_SUCCESS = 0
-    if (usbInitialize(options) != 0)
-        return X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED;
+    if (usbInitialize(options) != 0) {
+        xlinkSetProtocolInitialized(X_LINK_USB_VSC, 0);
+    }
 
     // TODO(themarpe) - move to tcpip_host
     //tcpipInitialize();
@@ -145,6 +152,10 @@ xLinkPlatformErrorCode_t XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc,
 
 xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
 
+    if(!XLinkIsProtocolInitialized(deviceDesc->protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceDesc->protocol;
+    }
+
     switch (deviceDesc->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
@@ -165,6 +176,9 @@ xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDes
 
 xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
 {
+    if(!XLinkIsProtocolInitialized(protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
+    }
     switch (protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
@@ -183,6 +197,9 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
 
 xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol)
 {
+    if(!XLinkIsProtocolInitialized(protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
+    }
     switch (protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
@@ -204,6 +221,10 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
     if(deviceHandle->protocol == X_LINK_ANY_PROTOCOL ||
        deviceHandle->protocol == X_LINK_NMB_OF_PROTOCOLS) {
         return X_LINK_PLATFORM_ERROR;
+    }
+
+    if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
     }
 
     switch (deviceHandle->protocol) {
