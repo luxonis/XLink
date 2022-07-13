@@ -59,6 +59,10 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
     switch (in_deviceRequirements.protocol){
         case X_LINK_USB_CDC:
         case X_LINK_USB_VSC:
+            if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
+                return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
+            }
+            // Check if protocol is initialized
             return getUSBDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 
         /* TODO(themarpe) - reenable PCIe
@@ -67,47 +71,57 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
         */
 
         case X_LINK_TCP_IP:
+            if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
+                return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
+            }
             return getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 
         case X_LINK_ANY_PROTOCOL:
 
-            // Find first correct USB Device
-            numFoundDevices = 0;
-            USB_rc = getUSBDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
-            *out_amountOfFoundDevices += numFoundDevices;
-            out_foundDevices += numFoundDevices;
-            // Found enough devices, return
-            if (numFoundDevices >= sizeFoundDevices) {
-                return X_LINK_PLATFORM_SUCCESS;
-            } else {
-                sizeFoundDevices -= numFoundDevices;
+            // If USB protocol is initialized
+            if(XLinkIsProtocolInitialized(X_LINK_USB_VSC)) {
+                // Find first correct USB Device
+                numFoundDevices = 0;
+                USB_rc = getUSBDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
+                *out_amountOfFoundDevices += numFoundDevices;
+                out_foundDevices += numFoundDevices;
+                // Found enough devices, return
+                if (numFoundDevices >= sizeFoundDevices) {
+                    return X_LINK_PLATFORM_SUCCESS;
+                } else {
+                    sizeFoundDevices -= numFoundDevices;
+                }
             }
 
 
             /* TODO(themarpe) - reenable PCIe
-            numFoundDevices = 0;
-            PCIe_rc = getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
-            // Found enough devices, return
-            out_foundDevices += numFoundDevices;
-            if (numFoundDevices >= sizeFoundDevices) {
-                return X_LINK_PLATFORM_SUCCESS;
-            } else {
-                sizeFoundDevices -= numFoundDevices;
+            if(XLinkIsProtocolInitialized(X_LINK_PCIE)) {
+                numFoundDevices = 0;
+                PCIe_rc = getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
+                // Found enough devices, return
+                out_foundDevices += numFoundDevices;
+                if (numFoundDevices >= sizeFoundDevices) {
+                    return X_LINK_PLATFORM_SUCCESS;
+                } else {
+                    sizeFoundDevices -= numFoundDevices;
+                }
+                *out_amountOfFoundDevices += numFoundDevices;
             }
-            *out_amountOfFoundDevices += numFoundDevices;
             */
 
             // Try find TCPIP device
-            numFoundDevices = 0;
-            TCPIP_rc = getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
-            *out_amountOfFoundDevices += numFoundDevices;
-            out_foundDevices += numFoundDevices;
-            sizeFoundDevices -= numFoundDevices;
-            // Found enough devices, return
-            if (numFoundDevices >= sizeFoundDevices) {
-                return X_LINK_PLATFORM_SUCCESS;
-            } else {
+            if(XLinkIsProtocolInitialized(X_LINK_TCP_IP)) {
+                numFoundDevices = 0;
+                TCPIP_rc = getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
+                *out_amountOfFoundDevices += numFoundDevices;
+                out_foundDevices += numFoundDevices;
                 sizeFoundDevices -= numFoundDevices;
+                // Found enough devices, return
+                if (numFoundDevices >= sizeFoundDevices) {
+                    return X_LINK_PLATFORM_SUCCESS;
+                } else {
+                    sizeFoundDevices -= numFoundDevices;
+                }
             }
 
             return X_LINK_PLATFORM_SUCCESS;
@@ -118,7 +132,6 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
     }
 
     return X_LINK_PLATFORM_SUCCESS;
-
 }
 
 
@@ -136,7 +149,9 @@ char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode) {
         case X_LINK_PLATFORM_DEVICE_NOT_FOUND: return "X_LINK_PLATFORM_DEVICE_NOT_FOUND";
         case X_LINK_PLATFORM_ERROR: return "X_LINK_PLATFORM_ERROR";
         case X_LINK_PLATFORM_TIMEOUT: return "X_LINK_PLATFORM_TIMEOUT";
-        case X_LINK_PLATFORM_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_DRIVER_NOT_LOADED";
+        case X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED";
+        case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED";
+        case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED";
         case X_LINK_PLATFORM_INVALID_PARAMETERS: return "X_LINK_PLATFORM_INVALID_PARAMETERS";
         default: return "";
     }
@@ -211,7 +226,7 @@ xLinkPlatformErrorCode_t parsePCIeHostError(pcieHostError_t rc) {
         case PCIE_HOST_TIMEOUT:
             return X_LINK_PLATFORM_TIMEOUT;
         case PCIE_HOST_DRIVER_NOT_LOADED:
-            return X_LINK_PLATFORM_DRIVER_NOT_LOADED;
+            return X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED;
         case PCIE_INVALID_PARAMETERS:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
         default:

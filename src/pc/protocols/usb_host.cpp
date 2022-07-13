@@ -105,6 +105,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                      unsigned int *out_amountOfFoundDevices) {
 
+    // Also protects usb_mx_id_cache
     std::lock_guard<std::mutex> l(mutex);
 
     // Get list of usb devices

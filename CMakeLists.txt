@@ -98,6 +98,11 @@ if(MINGW)
     )
 endif()
 
+if(ANDROID)
+    find_library(log-lib log)
+    target_link_libraries(${TARGET_NAME} PRIVATE ${log-lib})
+endif()
+
 # Create public "interface" library (no linking)
 add_library(${TARGET_PUBLIC_NAME} INTERFACE)
 target_include_directories(${TARGET_PUBLIC_NAME} INTERFACE

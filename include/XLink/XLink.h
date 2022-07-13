@@ -46,6 +46,13 @@ XLinkError_t XLinkServer(XLinkHandler_t* handler, XLinkDeviceState_t state, XLin
 int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state);
 
 /**
+ * @brief Checks if protocol was initialized
+ * @param[in]   protocol - protocol to check if it is initialized
+ * @return Result of checking: (1) protocol was initialized, otherwise (0)
+ */
+int XLinkIsProtocolInitialized(const XLinkProtocol_t protocol);
+
+/**
  * @brief Returns Myriad device description which meets the requirements
  * @param[in]   in_deviceRequirements - structure with device requirements (protocol, platform).
  * @note        If in_deviceRequirements has device name specified,

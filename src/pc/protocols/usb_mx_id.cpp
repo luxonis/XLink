@@ -9,6 +9,8 @@
 #endif
 
 #include "string.h"
+#include <chrono>
+#include <mutex>
 
 static double steady_seconds()
 {
@@ -16,19 +18,6 @@ static double steady_seconds()
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
-
-static double seconds()
-{
-    static double s;
-    struct timespec ts;
-
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    if (!s)
-        s = ts.tv_sec + ts.tv_nsec * 1e-9;
-    return ts.tv_sec + ts.tv_nsec * 1e-9 - s;
-}
-
-
 
 #define ADDRESS_BUFF_SIZE 35
 
@@ -99,6 +88,7 @@ typedef struct {
 } MxIdListEntry;
 static MxIdListEntry list_mx_id[MX_ID_LIST_SIZE] = { 0 };
 static bool list_initialized = false;
+static std::mutex list_mutex;
 
 static bool list_mx_id_is_entry_valid(MxIdListEntry* entry) {
     if (entry == NULL) return false;
