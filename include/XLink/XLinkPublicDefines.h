@@ -10,6 +10,7 @@
 #ifndef _XLINKPUBLICDEFINES_H
 #define _XLINKPUBLICDEFINES_H
 #include <stdint.h>
+#include <stdbool.h>
 #ifdef __cplusplus
 extern "C"
 {
@@ -99,6 +100,7 @@ typedef struct {
     XLinkDeviceState_t state;
     char mxid[XLINK_MAX_MX_ID_SIZE];
     XLinkError_t status;
+    bool nameHintOnly;
 } deviceDesc_t;
 
 typedef struct streamPacketDesc_t

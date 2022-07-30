@@ -154,11 +154,14 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
 
             // Get device name
             std::string devicePath = getLibusbDevicePath(devs[i]);
-            // Check if compare with name
-            std::string requiredName(in_deviceRequirements.name);
-            if(requiredName.length() > 0 && requiredName != devicePath){
-                // Current device doesn't match the "filter"
-                continue;
+            // Check if compare with name, if name is only a hint, don't filter
+
+            if(!in_deviceRequirements.nameHintOnly){
+                std::string requiredName(in_deviceRequirements.name);
+                if(requiredName.length() > 0 && requiredName != devicePath){
+                    // Current device doesn't match the "filter"
+                    continue;
+                }
             }
 
             // Get device mxid
