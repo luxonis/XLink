@@ -72,6 +72,10 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     {
         return X_LINK_BOOTED;
     }
+    else if(state == TCPIP_HOST_STATE_UNBOOTED)
+    {
+        return X_LINK_UNBOOTED;
+    }
     else if(state == TCPIP_HOST_STATE_BOOTLOADER)
     {
         return X_LINK_BOOTLOADER;
@@ -80,12 +84,42 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     {
         return X_LINK_FLASH_BOOTED;
     }
+    else if(state == TCPIP_HOST_STATE_GATE)
+    {
+        return X_LINK_GATE;
+    }
     else
     {
         return X_LINK_ANY_STATE;
     }
 }
 
+static XLinkProtocol_t tcpip_convert_device_protocol(uint32_t protocol)
+{
+    switch (protocol)
+    {
+    case TCPIP_HOST_PROTOCOL_USB_VSC: return X_LINK_USB_VSC;
+    case TCPIP_HOST_PROTOCOL_USB_CDC: return X_LINK_USB_CDC;
+    case TCPIP_HOST_PROTOCOL_PCIE: return X_LINK_PCIE;
+    case TCPIP_HOST_PROTOCOL_IPC: return X_LINK_IPC;
+    case TCPIP_HOST_PROTOCOL_TCP_IP: return X_LINK_TCP_IP;
+    default:
+        return X_LINK_ANY_PROTOCOL;
+        break;
+    }
+}
+
+static XLinkPlatform_t tcpip_convert_device_platform(uint32_t platform)
+{
+    switch (platform)
+    {
+    case TCPIP_HOST_PLATFORM_MYRIAD_X: return X_LINK_MYRIAD_X;
+    case TCPIP_HOST_PLATFORM_KEEMBAY: return X_LINK_KEEMBAY;
+    default:
+        return X_LINK_ANY_PLATFORM;
+        break;
+    }
+}
 
 static tcpipHostError_t tcpip_create_socket(TCPIP_SOCKET* out_sock, bool broadcast, int timeout_ms)
 {
@@ -352,7 +386,8 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
         }
 
         char ip_addr[INET_ADDRSTRLEN] = {0};
-        tcpipHostDeviceDiscoveryResp_t recv_buffer = {};
+        // tcpipHostDeviceDiscoveryResp_t recv_buffer = {};
+        uint8_t recv_buffer[1500] = {};
         struct sockaddr_in dev_addr;
         #if (defined(_WIN32) || defined(_WIN64) )
             int len = sizeof(dev_addr);
@@ -364,46 +399,62 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
         if(ret > 0)
         {
             DEBUG("Received UDP response, length: %d\n", ret);
-            XLinkDeviceState_t foundState = tcpip_convert_device_state(recv_buffer.state);
-            if(recv_buffer.command == TCPIP_HOST_CMD_DEVICE_DISCOVER && (target_state == X_LINK_ANY_STATE || target_state == foundState))
-            {
-                // Correct device found, increase matched num and save details
-
-                // convert IP address in binary into string
-                inet_ntop(AF_INET, &dev_addr.sin_addr, ip_addr, sizeof(ip_addr));
-                // if(state == X_LINK_BOOTED){
-                //     strncat(ip_addr, ":11492", 16);
-                // }
-
-                // Check IP if needed
-                if(check_target_ip && strcmp(target_ip, ip_addr) != 0){
-                    // IP doesn't match, skip this device
-                    continue;
-                }
-                // Check MXID if needed
-                if(check_target_mxid && strcmp(target_mxid, recv_buffer.mxid)){
-                    // MXID doesn't match, skip this device
-                    continue;
-                }
-
-                // copy device information
-                // Status
-                devices[num_devices_match].status = X_LINK_SUCCESS;
-                // IP
-                memset(devices[num_devices_match].name, 0, sizeof(devices[num_devices_match].name));
-                strncpy(devices[num_devices_match].name, ip_addr, sizeof(devices[num_devices_match].name));
-                // MXID
-                memset(devices[num_devices_match].mxid, 0, sizeof(devices[num_devices_match].mxid));
-                strncpy(devices[num_devices_match].mxid, recv_buffer.mxid, sizeof(devices[num_devices_match].mxid));
-                // Platform
-                devices[num_devices_match].platform = X_LINK_MYRIAD_X;
-                // Protocol
-                devices[num_devices_match].protocol = X_LINK_TCP_IP;
-                // State
-                devices[num_devices_match].state = foundState;
-
-                num_devices_match++;
+            tcpipHostCommand_t command = *reinterpret_cast<tcpipHostCommand_t*>(recv_buffer);
+            XLinkDeviceState_t foundState = X_LINK_ANY_STATE;
+            XLinkError_t status = X_LINK_SUCCESS;
+            XLinkPlatform_t platform = X_LINK_MYRIAD_X;
+            XLinkProtocol_t protocol = X_LINK_TCP_IP;
+            char bufferId[64] = {};
+            DEBUG("Command %d\n", command);
+            if(command == TCPIP_HOST_CMD_DEVICE_DISCOVER) {
+                tcpipHostDeviceDiscoveryResp_t* discovery = reinterpret_cast<tcpipHostDeviceDiscoveryResp_t*>(recv_buffer);
+                foundState = tcpip_convert_device_state(discovery->state);
+                strncpy(bufferId, discovery->mxid, sizeof(bufferId));
+            } else if(command == TCPIP_HOST_CMD_DEVICE_DISCOVERY_EX) {
+                tcpipHostDeviceDiscoveryExResp_t* discoveryEx = reinterpret_cast<tcpipHostDeviceDiscoveryExResp_t*>(recv_buffer);
+                foundState = tcpip_convert_device_state(discoveryEx->state);
+                strncpy(bufferId, discoveryEx->id, sizeof(bufferId));
+                protocol = tcpip_convert_device_protocol(discoveryEx->protocol);
+                platform = tcpip_convert_device_platform(discoveryEx->platform);
+            } else {
+                continue;
             }
+            // Check that state matches
+            DEBUG("target_state: %d, foundState: %d\n", target_state, foundState);
+            if(target_state != X_LINK_ANY_STATE && foundState != target_state) continue;
+
+            // Correct device found, increase matched num and save details
+            // Convert IP address in binary into string
+            inet_ntop(AF_INET, &dev_addr.sin_addr, ip_addr, sizeof(ip_addr));
+
+            // Check IP if needed
+            if(check_target_ip && strcmp(target_ip, ip_addr) != 0){
+                // IP doesn't match, skip this device
+                continue;
+            }
+            // Check MXID if needed
+            if(check_target_mxid && strcmp(target_mxid, bufferId)){
+                // MXID doesn't match, skip this device
+                continue;
+            }
+
+            // copy device information
+            // Status
+            devices[num_devices_match].status = status;
+            // IP
+            memset(devices[num_devices_match].name, 0, sizeof(devices[num_devices_match].name));
+            strncpy(devices[num_devices_match].name, ip_addr, sizeof(devices[num_devices_match].name));
+            // MXID
+            memset(devices[num_devices_match].mxid, 0, sizeof(devices[num_devices_match].mxid));
+            strncpy(devices[num_devices_match].mxid, bufferId, sizeof(devices[num_devices_match].mxid));
+            // Platform
+            devices[num_devices_match].platform = platform;
+            // Protocol
+            devices[num_devices_match].protocol = protocol;
+            // State
+            devices[num_devices_match].state = foundState;
+
+            num_devices_match++;
         }
     } while(std::chrono::steady_clock::now() - t1 < DEVICE_DISCOVERY_RES_TIMEOUT);
 

@@ -637,7 +637,7 @@ const char* XLinkPlatformToStr(XLinkPlatform_t val) {
         case X_LINK_ANY_PLATFORM: return "X_LINK_ANY_PLATFORM";
         case X_LINK_MYRIAD_2: return "X_LINK_MYRIAD_2";
         case X_LINK_MYRIAD_X: return "X_LINK_MYRIAD_X";
-        case X_LINK_KEEM_BAY: return "X_LINK_KEEM_BAY";
+        case X_LINK_KEEMBAY: return "X_LINK_KEEMBAY";
         default:
             return "INVALID_ENUM_VALUE";
             break;
@@ -655,6 +655,7 @@ const char* XLinkDeviceStateToStr(XLinkDeviceState_t val) {
         case X_LINK_UNBOOTED: return "X_LINK_UNBOOTED";
         case X_LINK_BOOTLOADER: return "X_LINK_BOOTLOADER";
         case X_LINK_FLASH_BOOTED: return "X_LINK_FLASH_BOOTED";
+        case X_LINK_GATE: return "X_LINK_GATE";
         default:
             return "INVALID_ENUM_VALUE";
             break;

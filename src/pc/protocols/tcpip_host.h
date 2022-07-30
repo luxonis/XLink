@@ -52,22 +52,41 @@ typedef enum
 } tcpipHostError_t;
 
 /* Host-to-device command list */
-typedef enum
+typedef enum : uint32_t
 {
     TCPIP_HOST_CMD_NO_COMMAND = 0,
     TCPIP_HOST_CMD_DEVICE_DISCOVER = 1,
     TCPIP_HOST_CMD_DEVICE_INFO = 2,
-    TCPIP_HOST_CMD_RESET = 3
+    TCPIP_HOST_CMD_RESET = 3,
+    TCPIP_HOST_CMD_DEVICE_DISCOVERY_EX = 4,
 } tcpipHostCommand_t;
 
 /* Device state */
-typedef enum
+typedef enum : uint32_t
 {
     TCPIP_HOST_STATE_BOOTED = 1,
+    TCPIP_HOST_STATE_UNBOOTED = 2,
     TCPIP_HOST_STATE_BOOTLOADER = 3,
     TCPIP_HOST_STATE_FLASH_BOOTED = 4,
+    TCPIP_HOST_STATE_GATE = 5,
 } tcpipHostDeviceState_t;
 
+/* Device protocol */
+typedef enum : uint32_t
+{
+    TCPIP_HOST_PROTOCOL_USB_VSC = 0,
+    TCPIP_HOST_PROTOCOL_USB_CDC = 1,
+    TCPIP_HOST_PROTOCOL_PCIE = 2,
+    TCPIP_HOST_PROTOCOL_IPC = 3,
+    TCPIP_HOST_PROTOCOL_TCP_IP = 4,
+} tcpipHostDeviceProtocol_t;
+
+/* Device platform */
+typedef enum : uint32_t
+{
+    TCPIP_HOST_PLATFORM_MYRIAD_X = 2,
+    TCPIP_HOST_PLATFORM_KEEMBAY = 3,
+} tcpipHostDevicePlatform_t;
 /* Device response payload */
 typedef struct
 {
@@ -75,6 +94,16 @@ typedef struct
     char mxid[32];
     uint32_t state;
 } tcpipHostDeviceDiscoveryResp_t;
+
+typedef struct
+{
+    tcpipHostCommand_t command;
+    char id[32];
+    uint32_t state;
+    uint32_t protocol;
+    uint32_t platform;
+    uint32_t status;
+} tcpipHostDeviceDiscoveryExResp_t;
 
 /* **************************************************************************/
 /*      Public Function Declarations                                        */
