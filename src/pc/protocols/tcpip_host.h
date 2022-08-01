@@ -52,7 +52,7 @@ typedef enum
 } tcpipHostError_t;
 
 /* Host-to-device command list */
-typedef enum : uint32_t
+typedef enum
 {
     TCPIP_HOST_CMD_NO_COMMAND = 0,
     TCPIP_HOST_CMD_DEVICE_DISCOVER = 1,
@@ -62,7 +62,7 @@ typedef enum : uint32_t
 } tcpipHostCommand_t;
 
 /* Device state */
-typedef enum : uint32_t
+typedef enum
 {
     TCPIP_HOST_STATE_BOOTED = 1,
     TCPIP_HOST_STATE_UNBOOTED = 2,
@@ -72,7 +72,7 @@ typedef enum : uint32_t
 } tcpipHostDeviceState_t;
 
 /* Device protocol */
-typedef enum : uint32_t
+typedef enum
 {
     TCPIP_HOST_PROTOCOL_USB_VSC = 0,
     TCPIP_HOST_PROTOCOL_USB_CDC = 1,
@@ -82,7 +82,7 @@ typedef enum : uint32_t
 } tcpipHostDeviceProtocol_t;
 
 /* Device platform */
-typedef enum : uint32_t
+typedef enum
 {
     TCPIP_HOST_PLATFORM_MYRIAD_X = 2,
     TCPIP_HOST_PLATFORM_KEEMBAY = 3,
@@ -102,7 +102,8 @@ typedef struct
     uint32_t state;
     uint32_t protocol;
     uint32_t platform;
-    uint32_t status;
+    uint16_t portHttp;
+    uint16_t portHttps;
 } tcpipHostDeviceDiscoveryExResp_t;
 
 /* **************************************************************************/
