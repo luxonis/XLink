@@ -320,28 +320,31 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     TCPIP_SOCKET sock;
 
     bool check_target_ip = false;
+    bool has_target_ip = false;
     if(target_ip != NULL && strlen(target_ip) > 0){
-        check_target_ip = true;
+        has_target_ip = true;
+        if(!in_deviceRequirements.nameHintOnly){
+            check_target_ip = true;
+        }
     }
+
     bool check_target_mxid = false;
     if(target_mxid != NULL && strlen(target_mxid) > 0){
         check_target_mxid = true;
     }
 
+    // Create socket first (also capable of doing broadcasts)
+    if(tcpip_create_socket_broadcast(&sock) != TCPIP_HOST_SUCCESS){
+        return X_LINK_PLATFORM_ERROR;
+    }
+
     // If IP is specified, do UNICAST
-    if(check_target_ip) {
-
-        // Create socket for UDP unicast
-        if(tcpip_create_socket(&sock, false, 100) != TCPIP_HOST_SUCCESS){
-            return X_LINK_PLATFORM_ERROR;
-        }
-
+    if(has_target_ip) {
         // TODO(themarpe) - Add IPv6 capabilities
         // send unicast device discovery
         struct sockaddr_in device_address;
         device_address.sin_family = AF_INET;
         device_address.sin_port = htons(BROADCAST_UDP_PORT);
-
 
         // Convert address to binary
         #if (defined(_WIN32) || defined(__USE_W32_SOCKETS)) && (_WIN32_WINNT <= 0x0501)
@@ -357,23 +360,15 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
             tcpip_close_socket(sock);
             return X_LINK_PLATFORM_ERROR;
         }
+    }
 
-    } else {
-        // do a broadcast search
-
-        // Create ANY receiving socket first
-        if(tcpip_create_socket_broadcast(&sock) != TCPIP_HOST_SUCCESS){
-            return X_LINK_PLATFORM_ERROR;
-        }
-
-        // Then send broadcast
+    // If IP isn't enforced, do a broadcast
+    if(!check_target_ip) {
         if (tcpip_send_broadcast(sock) != TCPIP_HOST_SUCCESS) {
             tcpip_close_socket(sock);
             return X_LINK_PLATFORM_ERROR;
         }
-
     }
-
 
     // loop to receive message response from devices
     int num_devices_match = 0;
