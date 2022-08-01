@@ -249,7 +249,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     }
 
     XLINK_RET_ERR_IF(
-        DispatcherStart(&link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
+        DispatcherStart(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
 
     xLinkEvent_t event = {0};
 
