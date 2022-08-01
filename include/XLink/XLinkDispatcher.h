@@ -29,9 +29,9 @@ typedef struct {
 } DispatcherControlFunctions;
 
 XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc);
-XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle);
-XLinkError_t DispatcherStartServer(xLinkDeviceHandle_t *deviceHandle);
-XLinkError_t DispatcherStartImpl(xLinkDeviceHandle_t *deviceHandle, bool server);
+XLinkError_t DispatcherStart(xLinkDesc_t *deviceHandle);
+XLinkError_t DispatcherStartServer(xLinkDesc_t *deviceHandle);
+XLinkError_t DispatcherStartImpl(xLinkDesc_t *deviceHandle, bool server);
 int DispatcherClean(xLinkDeviceHandle_t *deviceHandle);
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle);
 

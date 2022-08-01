@@ -211,17 +211,22 @@ XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc) {
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle) {
-    return DispatcherStartImpl(deviceHandle, false);
+XLinkError_t DispatcherStart(xLinkDesc_t *link) {
+    return DispatcherStartImpl(link, false);
 }
-XLinkError_t DispatcherStartServer(xLinkDeviceHandle_t *deviceHandle) {
-    return DispatcherStartImpl(deviceHandle, true);
+XLinkError_t DispatcherStartServer(xLinkDesc_t *link) {
+    return DispatcherStartImpl(link, true);
 }
 
-XLinkError_t DispatcherStartImpl(xLinkDeviceHandle_t *deviceHandle, bool server)
+typedef struct {
+    int schedulerId;
+    linkId_t linkId;
+} eventSchedulerContext;
+
+XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
 {
-    ASSERT_XLINK(deviceHandle);
-    ASSERT_XLINK(deviceHandle->xLinkFD != NULL);
+    ASSERT_XLINK(link);
+    ASSERT_XLINK(link->deviceHandle.xLinkFD != NULL);
 
     pthread_attr_t attr;
     int eventIdx;
@@ -246,7 +251,7 @@ XLinkError_t DispatcherStartImpl(xLinkDeviceHandle_t *deviceHandle, bool server)
     schedulerState[idx].dispatcherDeviceFdDown = 0;
     schedulerState[idx].server = server;
 
-    schedulerState[idx].deviceHandle = *deviceHandle;
+    schedulerState[idx].deviceHandle = link->deviceHandle;
     schedulerState[idx].schedulerId = idx;
 
     schedulerState[idx].lQueue.cur = schedulerState[idx].lQueue.q;
@@ -286,19 +291,24 @@ XLinkError_t DispatcherStartImpl(xLinkDeviceHandle_t *deviceHandle, bool server)
         return X_LINK_ERROR;
     }
 
-
     while(((sem_wait(&addSchedulerSem) == -1) && errno == EINTR))
         continue;
     mvLog(MVLOG_DEBUG,"%s() starting a new thread - schedulerId %d \n", __func__, idx);
+
+    eventSchedulerContext* ctx = malloc(sizeof(eventSchedulerContext));
+    ASSERT_XLINK(ctx);
+    ctx->schedulerId = idx;
+    ctx->linkId = link->id;
     int sc = pthread_create(&schedulerState[idx].xLinkThreadId,
                             &attr,
                             eventSchedulerRun,
-                            (void*)&schedulerState[idx].schedulerId);
+                            (void*)ctx);
     if (sc) {
         mvLog(MVLOG_ERROR,"Thread creation failed with error: %d", sc);
         if (pthread_attr_destroy(&attr) != 0) {
             perror("Thread attr destroy failed\n");
         }
+        free(ctx);
         return X_LINK_ERROR;
     }
 
@@ -706,7 +716,10 @@ static void* __cdecl eventSchedulerRun(void* ctx)
 static void* eventSchedulerRun(void* ctx)
 #endif
 {
-    int schedulerId = *((int*) ctx);
+    eventSchedulerContext context = *((eventSchedulerContext*)ctx);
+    free(ctx);
+
+    int schedulerId = context.schedulerId;
     mvLog(MVLOG_DEBUG,"%s() schedulerId %d\n", __func__, schedulerId);
     XLINK_RET_ERR_IF(schedulerId >= MAX_SCHEDULERS, NULL);
 
@@ -747,6 +760,10 @@ static void* eventSchedulerRun(void* ctx)
     if (sc) {
         mvLog(MVLOG_ERROR, "Waiting for thread failed");
     }
+
+    // Notify that the link went down
+    void XLinkPlatformLinkDownNotify(linkId_t linkId);
+    XLinkPlatformLinkDownNotify(context.linkId);
 
     sc = pthread_attr_destroy(&attr);
     if (sc) {

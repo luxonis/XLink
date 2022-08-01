@@ -405,6 +405,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
             XLinkPlatform_t platform = X_LINK_MYRIAD_X;
             XLinkProtocol_t protocol = X_LINK_TCP_IP;
             char bufferId[64] = {};
+            uint16_t port = TCPIP_LINK_SOCKET_PORT;
             DEBUG("Command %d\n", command);
             if(command == TCPIP_HOST_CMD_DEVICE_DISCOVER) {
                 tcpipHostDeviceDiscoveryResp_t* discovery = reinterpret_cast<tcpipHostDeviceDiscoveryResp_t*>(recv_buffer);
@@ -416,6 +417,9 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
                 strncpy(bufferId, discoveryEx->id, sizeof(bufferId));
                 protocol = tcpip_convert_device_protocol(discoveryEx->protocol);
                 platform = tcpip_convert_device_platform(discoveryEx->platform);
+                // TODO(status)
+                platform = tcpip_convert_device_platform(discoveryEx->platform);
+                port = discoveryEx->portHttp;
             } else {
                 continue;
             }

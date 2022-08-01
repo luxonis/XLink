@@ -175,7 +175,7 @@ XLinkError_t XLinkServer(XLinkHandler_t* handler, XLinkDeviceState_t state, XLin
     }
 
     XLINK_RET_ERR_IF(
-        DispatcherStartServer(&link->deviceHandle) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
+        DispatcherStartServer(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
 
     // Wait till client pings
     while(((sem_wait(&pingSem) == -1) && errno == EINTR))
@@ -249,7 +249,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     }
 
     XLINK_RET_ERR_IF(
-        DispatcherStart(&link->deviceHandle) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
+        DispatcherStart(&link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
 
     xLinkEvent_t event = {0};
 

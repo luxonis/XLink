@@ -118,6 +118,7 @@ typedef enum
 } xLinkEventOrigin_t;
 
 #define MAX_LINKS 32
+#define MAX_LINK_DOWN_CBS 32
 
 #define MAX_EVENTS 64
 #define MAX_SCHEDULERS MAX_LINKS
