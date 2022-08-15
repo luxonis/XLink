@@ -33,7 +33,7 @@ int pthread_sem_init(pthread_sem_t *psem, int pshared, unsigned int value) {
         errno = ENOSYS;
         return -1;
     }
-    struct pthread_sem_private_t *psem_private = malloc(sizeof(struct pthread_sem_private_t));
+    struct pthread_sem_private_t *psem_private = (pthread_sem_private_t *)malloc(sizeof(struct pthread_sem_private_t));
     if (NULL == psem_private) {
         return -1;
     }
