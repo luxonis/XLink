@@ -220,7 +220,7 @@ void startDeviceDiscoveryService(DeviceState deviceState, std::function<void()> 
 }
 
 
-extern "C" void startDeviceDiscoveryService(XLinkDeviceState_t state) {
+void startDeviceDiscoveryService(XLinkDeviceState_t state) {
     network::DeviceState ds;
     switch (state) {
     case X_LINK_BOOTED: ds = network::DeviceState::BOOTED; break;

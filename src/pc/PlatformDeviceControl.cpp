@@ -91,7 +91,7 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler)
 {
     // Set that all protocols are initialized at first
     for(int i = 0; i < X_LINK_NMB_OF_PROTOCOLS; i++) {
-        xlinkSetProtocolInitialized(i, 1);
+        xlinkSetProtocolInitialized((const XLinkProtocol_t)i, 1);
     }
 
     // check for failed initialization; LIBUSB_SUCCESS = 0
@@ -121,7 +121,7 @@ xLinkPlatformErrorCode_t XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc,
 
     if(file == NULL) {
         mvLog(MVLOG_ERROR, "Cannot open file by path: %s", binaryPath);
-        return -7;
+        return (xLinkPlatformErrorCode_t)-7;
     }
 
     fseek(file, 0, SEEK_END);
@@ -131,42 +131,42 @@ xLinkPlatformErrorCode_t XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc,
     {
         mvLog(MVLOG_ERROR, "cannot allocate image_buffer. file_size = %ld", file_size);
         fclose(file);
-        return -3;
+        return (xLinkPlatformErrorCode_t)-3;
     }
     if((long) fread(image_buffer, 1, file_size, file) != file_size)
     {
         mvLog(MVLOG_ERROR, "cannot read file to image_buffer");
         fclose(file);
         free(image_buffer);
-        return -7;
+        return (xLinkPlatformErrorCode_t)-7;
     }
     fclose(file);
 
     if(XLinkPlatformBootFirmware(deviceDesc, image_buffer, file_size)) {
         free(image_buffer);
-        return -1;
+        return (xLinkPlatformErrorCode_t)-1;
     }
 
     free(image_buffer);
-    return 0;
+    return (xLinkPlatformErrorCode_t)0;
 }
 
 xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
 
     if(!XLinkIsProtocolInitialized(deviceDesc->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceDesc->protocol;
+        return (xLinkPlatformErrorCode_t)(X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceDesc->protocol);
     }
 
     switch (deviceDesc->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformBootFirmware(deviceDesc, firmware, length);
+            return (xLinkPlatformErrorCode_t)usbPlatformBootFirmware(deviceDesc, firmware, length);
 
         case X_LINK_PCIE:
-            return pciePlatformBootFirmware(deviceDesc, firmware, length);
+            return (xLinkPlatformErrorCode_t)pciePlatformBootFirmware(deviceDesc, firmware, length);
 
         case X_LINK_TCP_IP:
-            return tcpipPlatformBootFirmware(deviceDesc, firmware, length);
+            return (xLinkPlatformErrorCode_t)tcpipPlatformBootFirmware(deviceDesc, firmware, length);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -178,18 +178,18 @@ xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDes
 xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
 {
     if(!XLinkIsProtocolInitialized(protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
+        return (xLinkPlatformErrorCode_t)(X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol);
     }
     switch (protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformConnect(devPathRead, devPathWrite, fd);
+            return (xLinkPlatformErrorCode_t)usbPlatformConnect(devPathRead, devPathWrite, fd);
 
         case X_LINK_PCIE:
-            return pciePlatformConnect(devPathRead, devPathWrite, fd);
+            return (xLinkPlatformErrorCode_t)pciePlatformConnect(devPathRead, devPathWrite, fd);
 
         case X_LINK_TCP_IP:
-            return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
+            return (xLinkPlatformErrorCode_t)tcpipPlatformConnect(devPathRead, devPathWrite, fd);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -200,7 +200,7 @@ xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char
 {
     switch (protocol) {
         case X_LINK_TCP_IP:
-            return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+            return (xLinkPlatformErrorCode_t)tcpipPlatformServer(devPathRead, devPathWrite, fd);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -210,18 +210,18 @@ xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char
 xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol)
 {
     if(!XLinkIsProtocolInitialized(protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
+        return (xLinkPlatformErrorCode_t)(X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol);
     }
     switch (protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformBootBootloader(name);
+            return (xLinkPlatformErrorCode_t)usbPlatformBootBootloader(name);
 
         case X_LINK_PCIE:
-            return pciePlatformBootBootloader(name);
+            return (xLinkPlatformErrorCode_t)pciePlatformBootBootloader(name);
 
         case X_LINK_TCP_IP:
-            return tcpipPlatformBootBootloader(name);
+            return (xLinkPlatformErrorCode_t)tcpipPlatformBootBootloader(name);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -236,19 +236,19 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
     }
 
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+        return (xLinkPlatformErrorCode_t)(X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol);
     }
 
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformClose(deviceHandle->xLinkFD);
+            return (xLinkPlatformErrorCode_t)usbPlatformClose(deviceHandle->xLinkFD);
 
         case X_LINK_PCIE:
-            return pciePlatformClose(deviceHandle->xLinkFD);
+            return (xLinkPlatformErrorCode_t)pciePlatformClose(deviceHandle->xLinkFD);
 
         case X_LINK_TCP_IP:
-            return tcpipPlatformClose(deviceHandle->xLinkFD);
+            return (xLinkPlatformErrorCode_t)tcpipPlatformClose(deviceHandle->xLinkFD);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -417,7 +417,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     if(ret <= 0)
     {
         tcpip_close_socket(sock);
-        return -1;
+        return (xLinkPlatformErrorCode_t)-1;
     }
 
     int on = 1;
@@ -425,13 +425,13 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     {
         perror("setsockopt TCP_NODELAY");
         tcpip_close_socket(sock);
-        return -1;
+        return (xLinkPlatformErrorCode_t)-1;
     }
 
     if(connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
     {
         tcpip_close_socket(sock);
-        return -1;
+        return (xLinkPlatformErrorCode_t)-1;
     }
 
     // Store the socket and create a "unique" key instead
@@ -451,7 +451,7 @@ xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name)
 int pciePlatformBootBootloader(const char *name)
 {
     // TODO(themarpe)
-    return -1;
+    return (xLinkPlatformErrorCode_t)-1;
 }
 
 xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name)
@@ -462,9 +462,9 @@ xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name)
 
 static char* pciePlatformStateToStr(const pciePlatformState_t platformState) {
     switch (platformState) {
-        case PCIE_PLATFORM_ANY_STATE: return "PCIE_PLATFORM_ANY_STATE";
-        case PCIE_PLATFORM_BOOTED: return "PCIE_PLATFORM_BOOTED";
-        case PCIE_PLATFORM_UNBOOTED: return "PCIE_PLATFORM_UNBOOTED";
+        case PCIE_PLATFORM_ANY_STATE: return (char*)"PCIE_PLATFORM_ANY_STATE";
+        case PCIE_PLATFORM_BOOTED: return (char*)"PCIE_PLATFORM_BOOTED";
+        case PCIE_PLATFORM_UNBOOTED: return (char*)"PCIE_PLATFORM_UNBOOTED";
         default: return "";
     }
 }
@@ -481,7 +481,7 @@ int pciePlatformClose(void *f)
     if (rc) {
         mvLog(MVLOG_ERROR, "Device resetting failed with error %d", rc);
         pciePlatformState_t state = PCIE_PLATFORM_ANY_STATE;
-        pcie_get_device_state(f, &state);
+        pcie_get_device_state((const char *)f, &state);
         mvLog(MVLOG_INFO, "Device state is %s", pciePlatformStateToStr(state));
     }
     rc = pcie_close(f);
@@ -500,7 +500,7 @@ int tcpipPlatformClose(void *fdKey)
     void* tmpsockfd = NULL;
     if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
         mvLog(MVLOG_FATAL, "Cannot find file descriptor by key");
-        return -1;
+        return (xLinkPlatformErrorCode_t)-1;
     }
     TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
 
@@ -517,13 +517,13 @@ int tcpipPlatformClose(void *fdKey)
 
     if(destroyPlatformDeviceFdKey(fdKey)){
         mvLog(MVLOG_FATAL, "Cannot destroy file descriptor key");
-        return -1;
+        return (xLinkPlatformErrorCode_t)-1;
     }
 
     return status;
 
 #endif
-    return -1;
+    return (xLinkPlatformErrorCode_t)-1;
 }
 
 
@@ -546,7 +546,7 @@ int pciePlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmwar
 
 int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length){
     // TCPIP doesn't support a boot mechanism
-    return -1;
+    return (xLinkPlatformErrorCode_t)-1;
 }
 
 // ------------------------------------

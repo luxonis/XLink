@@ -60,7 +60,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
         case X_LINK_USB_CDC:
         case X_LINK_USB_VSC:
             if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
-                return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
+                return (xLinkPlatformErrorCode_t)(X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol);
             }
             // Check if protocol is initialized
             return getUSBDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
@@ -72,7 +72,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
 
         case X_LINK_TCP_IP:
             if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
-                return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
+                return (xLinkPlatformErrorCode_t)(X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol);
             }
             return getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 

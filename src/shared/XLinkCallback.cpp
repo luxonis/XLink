@@ -9,7 +9,6 @@ static std::mutex mtx;
 static uint16_t uniqueId{0};
 static std::unordered_map<int, std::function<void(linkId_t)>> callbacks;
 
-extern "C" {
 
 int XLinkAddLinkDownCb(void (*cb)(linkId_t)) {
     std::unique_lock<std::mutex> l(mtx);
@@ -41,4 +40,3 @@ void XLinkPlatformLinkDownNotify(linkId_t linkId) {
     }
 }
 
-}

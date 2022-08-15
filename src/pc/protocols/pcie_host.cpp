@@ -560,7 +560,7 @@ pcieHostError_t pcie_boot_device(HANDLE fd, const char  *buffer, size_t length)
         int resetDeviceRC = pcie_reset_device(fd);
         if (resetDeviceRC) {
             mvLog(MVLOG_ERROR, "Device resetting failed with error: %d\n", resetDeviceRC);
-            return resetDeviceRC;
+            return (pcieHostError_t)resetDeviceRC;
         }
     }
 #if !defined(_WIN32)

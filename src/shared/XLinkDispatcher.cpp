@@ -233,12 +233,14 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     if (numSchedulers >= MAX_SCHEDULERS)
     {
         mvLog(MVLOG_ERROR,"Max number Schedulers reached!\n");
-        return -1;
+        // return -1;
+        return X_LINK_ERROR;
     }
     int idx = findAvailableScheduler();
     if (idx == -1) {
         mvLog(MVLOG_ERROR,"Max number Schedulers reached!\n");
-        return -1;
+        // return -1;
+        return X_LINK_ERROR;
     }
 
     memset(&schedulerState[idx], 0, sizeof(xLinkSchedulerState_t));
@@ -272,11 +274,13 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
 
     if (XLink_sem_init(&schedulerState[idx].addEventSem, 0, 1)) {
         perror("Can't create semaphore\n");
-        return -1;
+        // return -1;
+        return X_LINK_ERROR;
     }
     if (pthread_mutex_init(&(schedulerState[idx].queueMutex), NULL) != 0) {
         perror("pthread_mutex_init error");
-        return -1;
+        // return -1;
+        return X_LINK_ERROR;
     }
     if (XLink_sem_init(&schedulerState[idx].notifyDispatcherSem, 0, 0)) {
         perror("Can't create semaphore\n");
@@ -295,7 +299,7 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
         continue;
     mvLog(MVLOG_DEBUG,"%s() starting a new thread - schedulerId %d \n", __func__, idx);
 
-    eventSchedulerContext* ctx = malloc(sizeof(eventSchedulerContext));
+    eventSchedulerContext* ctx = (eventSchedulerContext*)malloc(sizeof(eventSchedulerContext));
     ASSERT_XLINK(ctx);
     ctx->schedulerId = idx;
     ctx->linkId = link->id;
@@ -330,7 +334,7 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
 
     sem_post(&addSchedulerSem);
 
-    return 0;
+    return X_LINK_SUCCESS;
 }
 
 int DispatcherClean(xLinkDeviceHandle_t *deviceHandle) {
@@ -490,28 +494,28 @@ char* TypeToStr(int type)
 {
     switch(type)
     {
-        case XLINK_WRITE_REQ:     return "XLINK_WRITE_REQ";
-        case XLINK_READ_REQ:      return "XLINK_READ_REQ";
-        case XLINK_READ_REL_REQ:  return "XLINK_READ_REL_REQ";
-        case XLINK_READ_REL_SPEC_REQ:  return "XLINK_READ_REL_SPEC_REQ";
-        case XLINK_CREATE_STREAM_REQ:return "XLINK_CREATE_STREAM_REQ";
-        case XLINK_CLOSE_STREAM_REQ: return "XLINK_CLOSE_STREAM_REQ";
-        case XLINK_PING_REQ:         return "XLINK_PING_REQ";
-        case XLINK_RESET_REQ:        return "XLINK_RESET_REQ";
-        case XLINK_REQUEST_LAST:     return "XLINK_REQUEST_LAST";
-        case XLINK_WRITE_RESP:   return "XLINK_WRITE_RESP";
-        case XLINK_READ_RESP:     return "XLINK_READ_RESP";
-        case XLINK_READ_REL_RESP: return "XLINK_READ_REL_RESP";
-        case XLINK_READ_REL_SPEC_RESP:  return "XLINK_READ_REL_SPEC_RESP";
-        case XLINK_CREATE_STREAM_RESP: return "XLINK_CREATE_STREAM_RESP";
-        case XLINK_CLOSE_STREAM_RESP:  return "XLINK_CLOSE_STREAM_RESP";
-        case XLINK_PING_RESP:  return "XLINK_PING_RESP";
-        case XLINK_RESET_RESP: return "XLINK_RESET_RESP";
-        case XLINK_RESP_LAST:  return "XLINK_RESP_LAST";
+        case XLINK_WRITE_REQ:     return (char*)"XLINK_WRITE_REQ";
+        case XLINK_READ_REQ:      return (char*)"XLINK_READ_REQ";
+        case XLINK_READ_REL_REQ:  return (char*)"XLINK_READ_REL_REQ";
+        case XLINK_READ_REL_SPEC_REQ:  return (char*)"XLINK_READ_REL_SPEC_REQ";
+        case XLINK_CREATE_STREAM_REQ:return (char*)"XLINK_CREATE_STREAM_REQ";
+        case XLINK_CLOSE_STREAM_REQ: return (char*)"XLINK_CLOSE_STREAM_REQ";
+        case XLINK_PING_REQ:         return (char*)"XLINK_PING_REQ";
+        case XLINK_RESET_REQ:        return (char*)"XLINK_RESET_REQ";
+        case XLINK_REQUEST_LAST:     return (char*)"XLINK_REQUEST_LAST";
+        case XLINK_WRITE_RESP:   return (char*)"XLINK_WRITE_RESP";
+        case XLINK_READ_RESP:     return (char*)"XLINK_READ_RESP";
+        case XLINK_READ_REL_RESP: return (char*)"XLINK_READ_REL_RESP";
+        case XLINK_READ_REL_SPEC_RESP:  return (char*)"XLINK_READ_REL_SPEC_RESP";
+        case XLINK_CREATE_STREAM_RESP: return (char*)"XLINK_CREATE_STREAM_RESP";
+        case XLINK_CLOSE_STREAM_RESP:  return (char*)"XLINK_CLOSE_STREAM_RESP";
+        case XLINK_PING_RESP:  return (char*)"XLINK_PING_RESP";
+        case XLINK_RESET_RESP: return (char*)"XLINK_RESET_RESP";
+        case XLINK_RESP_LAST:  return (char*)"XLINK_RESP_LAST";
         default:
             break;
     }
-    return "";
+    return (char*)"";
 }
 
 int DispatcherUnblockEvent(eventId_t id, xLinkEventType_t type, streamId_t stream, void *xlinkFD)

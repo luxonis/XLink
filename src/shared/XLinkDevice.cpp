@@ -87,7 +87,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     xLinkPlatformErrorCode_t init_status = XLinkPlatformInit(globalHandler);
     if (init_status != X_LINK_PLATFORM_SUCCESS) {
         pthread_mutex_unlock(&init_mutex);
-        return parsePlatformError(init_status);
+        return parsePlatformError((xLinkPlatformErrorCode_t)init_status);
     }
 
     //Using deprecated fields. Begin.
@@ -171,7 +171,7 @@ XLinkError_t XLinkServer(XLinkHandler_t* handler, XLinkDeviceState_t state, XLin
         freeGivenLink(link);
 
         // Return an informative error
-        return parsePlatformError(connectStatus);
+        return parsePlatformError((xLinkPlatformErrorCode_t)connectStatus);
     }
 
     XLINK_RET_ERR_IF(
@@ -245,7 +245,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
         freeGivenLink(link);
 
         // Return an informative error
-        return parsePlatformError(connectStatus);
+        return parsePlatformError((xLinkPlatformErrorCode_t)connectStatus);
     }
 
     XLINK_RET_ERR_IF(
@@ -367,7 +367,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
         return X_LINK_ERROR;
     }
 
-    XLinkError_t ret = DispatcherWaitEventCompleteTimeout(&link->deviceHandle, absTimeout);
+    XLinkError_t ret = (XLinkError_t)DispatcherWaitEventCompleteTimeout(&link->deviceHandle, absTimeout);
 
     if(ret != X_LINK_SUCCESS){
         // Closing device link unblocks any blocked events

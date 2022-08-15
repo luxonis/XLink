@@ -204,7 +204,7 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t*
         size,(void*)buffer, link->deviceHandle);
 
     mvLog(MVLOG_WARN,"XLinkWriteDataWithTimeout is not fully supported yet. The XLinkWriteData method is called instead. Desired timeout = %d\n", timeoutMs);
-    XLINK_RET_IF_FAIL(addEventWithPerf(&event, &opTime, timeoutMs));
+    XLINK_RET_IF_FAIL2(addEventWithPerf(&event, &opTime, timeoutMs),XLinkError_t);
 
     if( glHandler->profEnable) {
         glHandler->profilingData.totalWriteBytes += size;
@@ -227,7 +227,7 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
     XLINK_INIT_EVENT(event, streamId, XLINK_READ_REQ,
         0, NULL, link->deviceHandle);
 
-    XLINK_RET_IF_FAIL(addEventWithPerf(&event, &opTime, timeoutMs));
+    XLINK_RET_IF_FAIL2(addEventWithPerf(&event, &opTime, timeoutMs),XLinkError_t);
 
     *packet = (streamPacketDesc_t *)event.data;
     if(*packet == NULL) {
@@ -479,7 +479,7 @@ XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int t
     struct timespec start, end;
     clock_gettime(CLOCK_REALTIME, &start);
 
-    XLINK_RET_IF_FAIL(addEvent(event, timeoutMs));
+    XLINK_RET_IF_FAIL2(addEvent(event, timeoutMs), XLinkError_t);
 
     clock_gettime(CLOCK_REALTIME, &end);
     *opTime = timespec_diff(&start, &end);
@@ -525,7 +525,7 @@ XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigne
     absTimeout.tv_sec += secOver;
 
     int rc = addEventTimeout(event, absTimeout);
-    if(rc != X_LINK_SUCCESS) return rc;
+    if(rc != X_LINK_SUCCESS) return (XLinkError_t)rc;
 
     clock_gettime(CLOCK_REALTIME, &end);
     *opTime = timespec_diff(&start, &end);

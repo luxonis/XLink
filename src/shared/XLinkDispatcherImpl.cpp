@@ -396,6 +396,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
         case XLINK_READ_REQ:
             break;
         case XLINK_READ_REL_SPEC_REQ:
+        {
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_READ_REL_SPEC_RESP;
             response->deviceHandle = event->deviceHandle;
@@ -421,6 +422,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                                        event->deviceHandle.xLinkFD);
             }
             break;
+        }
         case XLINK_READ_REL_REQ:
         {
             XLINK_EVENT_ACKNOWLEDGE(response);
@@ -691,7 +693,7 @@ streamPacketDesc_t* movePacketFromStream(streamDesc_t* stream)
     streamPacketDesc_t *ret = NULL;
     if (stream->availablePackets)
     {
-        ret = malloc(sizeof(streamPacketDesc_t));
+        ret = (streamPacketDesc_t*)malloc(sizeof(streamPacketDesc_t));
         if (!ret)
         {
             mvLog(MVLOG_FATAL, "out of memory to move packet from stream\n");
@@ -793,7 +795,7 @@ int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize
 int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size) {
     if (stream->availablePackets + stream->blockedPackets < XLINK_MAX_PACKETS_PER_STREAM)
     {
-        stream->packets[stream->firstPacketFree].data = buffer;
+        stream->packets[stream->firstPacketFree].data = (uint8_t*)buffer;
         stream->packets[stream->firstPacketFree].length = size;
         CIRCULAR_INCREMENT(stream->firstPacketFree, XLINK_MAX_PACKETS_PER_STREAM);
         stream->availablePackets++;
@@ -817,6 +819,7 @@ int handleIncomingEvent(xLinkEvent_t* event) {
     }
 
     int rc = -1;
+    int sc = -1;
     streamDesc_t* stream = getStreamById(event->deviceHandle.xLinkFD, event->header.streamId);
     ASSERT_XLINK(stream);
 
@@ -828,7 +831,7 @@ int handleIncomingEvent(xLinkEvent_t* event) {
     XLINK_OUT_WITH_LOG_IF(buffer == NULL,
         mvLog(MVLOG_FATAL,"out of memory to receive data of size = %zu\n", event->header.size));
 
-    const int sc = XLinkPlatformRead(&event->deviceHandle, buffer, event->header.size);
+    sc = XLinkPlatformRead(&event->deviceHandle, buffer, event->header.size);
     XLINK_OUT_WITH_LOG_IF(sc < 0, mvLog(MVLOG_ERROR,"%s() Read failed %d\n", __func__, sc));
 
     event->data = buffer;

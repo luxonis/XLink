@@ -70,6 +70,15 @@ extern "C"
     } while(0)
 #endif  // XLINK_RET_IF_FAIL
 
+#ifndef XLINK_RET_IF_FAIL2
+#define XLINK_RET_IF_FAIL2(call, ret_type) do { \
+        int rc; \
+        if ((rc = (call))) { \
+            mvLog(MVLOG_ERROR, " %s method call failed with an error: %d", #call, rc); \
+            return (ret_type)rc; \
+        } \
+    } while(0)
+#endif  // XLINK_RET_IF_FAIL2
 
 //-------------------------------------------------------------
 //------- Check an expression and goto out if needed. ---------

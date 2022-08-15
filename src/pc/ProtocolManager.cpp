@@ -3,13 +3,13 @@
 
 static std::atomic<bool> protocolInitialized[X_LINK_NMB_OF_PROTOCOLS];
 
-extern "C" void xlinkSetProtocolInitialized(const XLinkProtocol_t protocol, int initialized) {
+void xlinkSetProtocolInitialized(const XLinkProtocol_t protocol, int initialized) {
     if(protocol >= 0 && protocol < X_LINK_NMB_OF_PROTOCOLS) {
         protocolInitialized[protocol] = initialized;
     }
 }
 
-extern "C" int XLinkIsProtocolInitialized(const XLinkProtocol_t protocol) {
+int XLinkIsProtocolInitialized(const XLinkProtocol_t protocol) {
     if(protocol >= 0 && protocol < X_LINK_NMB_OF_PROTOCOLS) {
         return protocolInitialized[protocol];
     }

@@ -101,7 +101,7 @@ static const char* xlink_libusb_strerror(int x);
 
 
 
-extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
+xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                      unsigned int *out_amountOfFoundDevices) {
 
@@ -217,7 +217,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
     return X_LINK_PLATFORM_SUCCESS;
 }
 
-extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libusb_device** pdev) {
+xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libusb_device** pdev) {
 
     std::lock_guard<std::mutex> l(mutex);
 

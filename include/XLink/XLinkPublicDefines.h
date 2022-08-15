@@ -13,6 +13,9 @@
 #include <stddef.h>
 #include <stdbool.h>
 #ifdef __cplusplus
+
+// namespace dai {
+
 extern "C"
 {
 #endif
@@ -156,6 +159,8 @@ typedef enum{
 
 #ifdef __cplusplus
 }
+
+// }  // namespace dai
 #endif
 
 #endif
