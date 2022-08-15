@@ -80,44 +80,44 @@ static int tcpipPlatformWrite(void *fd, void *data, int size);
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 {
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+        return XLINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
     }
 
     switch (deviceHandle->protocol) {
-        case X_LINK_USB_VSC:
-        case X_LINK_USB_CDC:
+        case XLINK_USB_VSC:
+        case XLINK_USB_CDC:
             return usbPlatformWrite(deviceHandle->xLinkFD, data, size);
 
-        case X_LINK_PCIE:
+        case XLINK_PCIE:
             return pciePlatformWrite(deviceHandle->xLinkFD, data, size);
 
-        case X_LINK_TCP_IP:
+        case XLINK_TCP_IP:
             return tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
 
         default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+            return XLINK_PLATFORM_INVALID_PARAMETERS;
     }
 }
 
 int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 {
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+        return XLINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
     }
 
     switch (deviceHandle->protocol) {
-        case X_LINK_USB_VSC:
-        case X_LINK_USB_CDC:
+        case XLINK_USB_VSC:
+        case XLINK_USB_CDC:
             return usbPlatformRead(deviceHandle->xLinkFD, data, size);
 
-        case X_LINK_PCIE:
+        case XLINK_PCIE:
             return pciePlatformRead(deviceHandle->xLinkFD, data, size);
 
-        case X_LINK_TCP_IP:
+        case XLINK_TCP_IP:
             return tcpipPlatformRead(deviceHandle->xLinkFD, data, size);
 
         default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+            return XLINK_PLATFORM_INVALID_PARAMETERS;
     }
 }
 

@@ -23,7 +23,7 @@ extern "C"
 /**
  * @brief Initializes XLink and scheduler
  * @param globalHandler[in] XLink global communication parameters
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  * Now XLink can work with PCIe and USB simultaneously.
  */
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler);
@@ -31,7 +31,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler);
 /**
  * @brief Initializes XLink Server
  * @param globalHandler[in] XLink global communication parameters
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkServer(XLinkHandler_t* handler, XLinkDeviceState_t state, XLinkPlatform_t platform);
 
@@ -74,7 +74,7 @@ int XLinkIsProtocolInitialized(const XLinkProtocol_t protocol);
  *                  this function tries to get a device with that exact name
  *                  and fails if such device is unavailable
  * @param[out]  out_foundDevice - found device description
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequirements,
                                           deviceDesc_t *out_foundDevice);
@@ -86,7 +86,7 @@ XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequiremen
  * @param[in,out]  out_foundDevicesPtr - pointer to array with all found devices descriptions
  * @param[out]     devicesArraySize - size of out_foundDevicesPtr
  * @param[out]     out_foundDevicesCount - amount of found devices
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirements,
                                          deviceDesc_t *out_foundDevicesPtr,
@@ -96,14 +96,14 @@ XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirement
 /**
  * @brief Connects to specific device, starts dispatcher and pings remote
  * @param[in,out] handler - XLink communication parameters (file path name for underlying layer)
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkConnect(XLinkHandler_t* handler);
 
 /**
  * @brief Puts device into bootloader mode
  * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkBootBootloader(const deviceDesc_t* deviceDesc);
 
@@ -112,7 +112,7 @@ XLinkError_t XLinkBootBootloader(const deviceDesc_t* deviceDesc);
  * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
  * @param buffer - mvcmd file contents
  * @param size - size of buffer
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkBootMemory(const deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size);
 
@@ -120,7 +120,7 @@ XLinkError_t XLinkBootMemory(const deviceDesc_t* deviceDesc, const uint8_t* buff
  * @brief Boots specified firmware binary to the remote device
  * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
  * @param binaryPath - path to the *.mvcmd file
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkBoot(const deviceDesc_t* deviceDesc, const char* binaryPath);
 
@@ -129,7 +129,7 @@ XLinkError_t XLinkBoot(const deviceDesc_t* deviceDesc, const char* binaryPath);
  * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
  * @param firmware - firmware buffer
  * @param length - firmware buffer length
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, unsigned long length);
 
@@ -137,7 +137,7 @@ XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmw
  * @brief Resets the remote device and close all open local handles for this device
  * @warning This function should be used in a host application
  * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 
 XLinkError_t XLinkResetRemote(linkId_t id);
@@ -146,7 +146,7 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  * @brief Resets the remote device and close all open local handles for this device
  * @warning This function should be used in a host application
  * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 
 XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs);
@@ -197,7 +197,7 @@ const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val);
 
 /**
  * @brief Profiling funcs - keeping them global for now
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkProfStart();
 XLinkError_t XLinkProfStop();
@@ -229,7 +229,7 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
  * @brief Closes stream for any further data transfer
  *        Stream will be deallocated when all pending data has been released
  * @param[in] streamId - link Id obtained from XLinkOpenStream call
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkCloseStream(streamId_t const streamId);
 
@@ -239,7 +239,7 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId);
  * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
  * @param[in] buffer - data buffer to be transmitted
  * @param[in] size - size of the data to be transmitted
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer, int size);
 
@@ -251,7 +251,7 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer, in
  * @param[in] buffer1Size – size of the data to be transmitted
  * @param[in] buffer2 – data buffer to be transmitted
  * @param[in] buffer2Size – size of the data to be transmitted
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, size_t buffer1Size, const uint8_t* buffer2, size_t buffer2Size);
 
@@ -262,7 +262,7 @@ XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, size_t
  * @param[in] buffer – data buffer to be transmitted
  * @param[in] size – size of the data to be transmitted
  * @param[in] msTimeout – time in milliseconds after which operation times out
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success,  X_LINK_TIMEOUT when msTimeout time passes
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success,  XLINK_TIMEOUT when msTimeout time passes
  */
 XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t* buffer, int size, unsigned int msTimeout);
 
@@ -270,7 +270,7 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t*
  * @brief Reads data from local stream. Will only have something if it was written to by the remote
  * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet - structure containing output data buffer and received size
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packet);
 
@@ -279,7 +279,7 @@ XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packe
  * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet – structure containing output data buffer and received size
  * @param[in]   msTimeout – time in milliseconds after which operation times out
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT when msTimeout time passes
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success, XLINK_TIMEOUT when msTimeout time passes
  */
 XLinkError_t XLinkReadDataWithTimeout(streamId_t const streamId, streamPacketDesc_t** packet, unsigned int msTimeout);
 
@@ -287,7 +287,7 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t const streamId, streamPacketDes
  * @brief Releases specific data from stream
  * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
  * @param[in] packetId – ID of the package to be released from the stream
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReleaseSpecificData(streamId_t streamId, streamPacketDesc_t* packetDesc);
 
@@ -296,7 +296,7 @@ XLinkError_t XLinkReleaseSpecificData(streamId_t streamId, streamPacketDesc_t* p
  * @note Caller is responsible for deallocating with XLinkDeallocateMoveData(streamPacketDesc_t::data, streamPacketDesc_t::length)
  * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet - structure containing output data buffer and received size
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* const packet);
 
@@ -306,7 +306,7 @@ XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* co
  * @param[in]   streamId - stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet - structure containing output data buffer and received size
  * @param[in]   msTimeout – time in milliseconds after which operation times out
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT when msTimeout time passes
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success, XLINK_TIMEOUT when msTimeout time passes
  */
 XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t const streamId, streamPacketDesc_t *const packet, const unsigned int msTimeout);
 
@@ -321,7 +321,7 @@ void XLinkDeallocateMoveData(void* const data, const uint32_t length);
  * @brief Releases data from stream - This should be called after the data obtained from
  *  XlinkReadData is processed
  * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReleaseData(streamId_t const streamId);
 
@@ -336,7 +336,7 @@ XLinkError_t XLinkReleaseData(streamId_t const streamId);
  * @param[in]   streamId – stream link Id obtained from XLinkOpenStream call
  * @param[out]  packet – structure containing output data buffer and received size
  * @param[in]   timeoutMs – timeout for a read operation in milliseconds
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** packet, unsigned int timeoutMs);
 
@@ -348,7 +348,7 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
  * @param[in] buffer – data buffer to be transmitted
  * @param[in] size – size of the data to be transmitted
  * @param[in] timeoutMs – timeout for a write operation in milliseconds
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int timeoutMs);
 
@@ -381,7 +381,7 @@ XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);
 /**
  * Deprecated - issues
  * @brief Closes all and release all memory
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ * @return Status code of the operation: XLINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkResetAll();
 

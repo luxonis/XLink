@@ -15,7 +15,7 @@ int main(){
     // Initialize and suppress XLink logs
     mvLogDefaultLevelSet(MVLOG_LAST);
     auto status = XLinkInitialize(&xlinkGlobalHandler);
-    if(X_LINK_SUCCESS != status) {
+    if(XLINK_SUCCESS != status) {
         throw std::runtime_error("Couldn't initialize XLink");
     }
 
@@ -23,15 +23,15 @@ int main(){
     unsigned int numdev = 0;
     std::array<deviceDesc_t, 32> deviceDescAll = {};
     deviceDesc_t suitableDevice = {};
-    suitableDevice.protocol = X_LINK_ANY_PROTOCOL;
-    suitableDevice.platform = X_LINK_ANY_PLATFORM;
-    suitableDevice.state = X_LINK_FLASH_BOOTED;
+    suitableDevice.protocol = XLINK_ANY_PROTOCOL;
+    suitableDevice.platform = XLINK_ANY_PLATFORM;
+    suitableDevice.state = XLINK_FLASH_BOOTED;
 
     status = XLinkFindAllSuitableDevices(suitableDevice, deviceDescAll.data(), deviceDescAll.size(), &numdev);
-    if(status != X_LINK_SUCCESS) throw std::runtime_error("Couldn't retrieve all connected devices");
+    if(status != XLINK_SUCCESS) throw std::runtime_error("Couldn't retrieve all connected devices");
 
     if(numdev == 0){
-        std::cout << "No " << XLinkDeviceStateToStr(X_LINK_FLASH_BOOTED) << " devices found to reset" << std::endl;
+        std::cout << "No " << XLinkDeviceStateToStr(XLINK_FLASH_BOOTED) << " devices found to reset" << std::endl;
         return 0;
     }
 

@@ -78,7 +78,7 @@ streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,
 //events which are coming from remote
 typedef enum
 {
-    /*USB-X_LINK_PCIE related events*/
+    /*USB-XLINK_PCIE related events*/
     XLINK_WRITE_REQ,
     XLINK_READ_REQ,
     XLINK_READ_REL_REQ,
@@ -97,7 +97,7 @@ typedef enum
     XLINK_RESET_RESP,
     XLINK_RESP_LAST,
 
-    /*X_LINK_IPC related events*/
+    /*XLINK_IPC related events*/
     IPC_WRITE_REQ,
     IPC_READ_REQ,
     IPC_CREATE_STREAM_REQ,
@@ -117,12 +117,12 @@ typedef enum
     EVENT_REMOTE,
 } xLinkEventOrigin_t;
 
-#define MAX_LINKS 32
-#define MAX_LINK_DOWN_CBS 32
+#define MAXLINKS 32
+#define MAXLINK_DOWN_CBS 32
 
 #define MAX_EVENTS 64
-#define MAX_SCHEDULERS MAX_LINKS
-#define XLINK_MAX_DEVICES MAX_LINKS
+#define MAX_SCHEDULERS MAXLINKS
+#define XLINK_MAX_DEVICES MAXLINKS
 
 typedef struct xLinkEventHeader_t{
     eventId_t           id;

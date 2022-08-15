@@ -89,10 +89,10 @@ struct pair_hash {
 };
 
 static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceState = {
-    {{0x03E7, 0x2485}, X_LINK_UNBOOTED},
-    {{0x03E7, 0xf63b}, X_LINK_BOOTED},
-    {{0x03E7, 0xf63c}, X_LINK_BOOTLOADER},
-    {{0x03E7, 0xf63d}, X_LINK_FLASH_BOOTED},
+    {{0x03E7, 0x2485}, XLINK_UNBOOTED},
+    {{0x03E7, 0xf63b}, XLINK_BOOTED},
+    {{0x03E7, 0xf63c}, XLINK_BOOTLOADER},
+    {{0x03E7, 0xf63d}, XLINK_FLASH_BOOTED},
 };
 
 static std::string getLibusbDevicePath(libusb_device *dev);
@@ -113,7 +113,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
     auto numDevices = libusb_get_device_list(context, &devs);
     if(numDevices < 0) {
         mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 
     // Initialize mx id cache
@@ -142,12 +142,12 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             // Device found
 
             // Device status
-            XLinkError_t status = X_LINK_SUCCESS;
+            XLinkError_t status = XLINK_SUCCESS;
 
             // Get device state
             XLinkDeviceState_t state = vidPidToDeviceState.at(vidpid);
             // Check if compare with state
-            if(in_deviceRequirements.state != X_LINK_ANY_STATE && state != in_deviceRequirements.state){
+            if(in_deviceRequirements.state != XLINK_ANY_STATE && state != in_deviceRequirements.state){
                 // Current device doesn't match the "filter"
                 continue;
             }
@@ -171,16 +171,16 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             switch (rc)
             {
             case LIBUSB_SUCCESS:
-                status = X_LINK_SUCCESS;
+                status = XLINK_SUCCESS;
                 break;
             case LIBUSB_ERROR_ACCESS:
-                status = X_LINK_INSUFFICIENT_PERMISSIONS;
+                status = XLINK_INSUFFICIENT_PERMISSIONS;
                 break;
             case LIBUSB_ERROR_BUSY:
-                status = X_LINK_DEVICE_ALREADY_IN_USE;
+                status = XLINK_DEVICE_ALREADY_IN_USE;
                 break;
             default:
-                status = X_LINK_ERROR;
+                status = XLINK_ERROR;
                 break;
             }
 
@@ -195,8 +195,8 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
 
             // Everything passed, fillout details of found device
             out_foundDevices[numDevicesFound].status = status;
-            out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
-            out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
+            out_foundDevices[numDevicesFound].platform = XLINK_MYRIAD_X;
+            out_foundDevices[numDevicesFound].protocol = XLINK_USB_VSC;
             out_foundDevices[numDevicesFound].state = state;
             memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
             strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
@@ -214,7 +214,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
     // Write the number of found devices
     *out_amountOfFoundDevices = numDevicesFound;
 
-    return X_LINK_PLATFORM_SUCCESS;
+    return XLINK_PLATFORM_SUCCESS;
 }
 
 extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libusb_device** pdev) {
@@ -226,7 +226,7 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libu
     auto numDevices = libusb_get_device_list(context, &devs);
     if(numDevices < 0) {
         mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 
     // Loop over all usb devices, increase count only if myriad device
@@ -251,10 +251,10 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libu
     libusb_free_device_list(devs, 1);
 
     if(!found){
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        return XLINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
-    return X_LINK_PLATFORM_SUCCESS;
+    return XLINK_PLATFORM_SUCCESS;
 }
 
 
@@ -331,7 +331,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
             }
 
             // if UNBOOTED state, perform mx_id retrieval procedure using small program and a read command
-            if(state == X_LINK_UNBOOTED){
+            if(state == XLINK_UNBOOTED){
 
                 // Get configuration first (From OS cache)
                 int active_configuration = -1;
@@ -612,14 +612,14 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
 
     auto t1 = steady_clock::now();
     do {
-        if(refLibusbDeviceByName(addr, &dev) == X_LINK_PLATFORM_SUCCESS){
+        if(refLibusbDeviceByName(addr, &dev) == XLINK_PLATFORM_SUCCESS){
             break;
         }
         std::this_thread::sleep_for(milliseconds(10));
     } while(steady_clock::now() - t1 < DEFAULT_CONNECT_TIMEOUT);
 
     if(dev == nullptr) {
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        return XLINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
     auto t2 = steady_clock::now();
@@ -636,11 +636,11 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
         libusb_close(h);
     } else {
         if(res == LIBUSB_ERROR_ACCESS) {
-            rc = X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
+            rc = XLINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
         } else if(res == LIBUSB_ERROR_BUSY) {
-            rc = X_LINK_PLATFORM_DEVICE_BUSY;
+            rc = XLINK_PLATFORM_DEVICE_BUSY;
         } else {
-            rc = X_LINK_PLATFORM_ERROR;
+            rc = XLINK_PLATFORM_ERROR;
         }
     }
 
@@ -657,7 +657,7 @@ xLinkPlatformErrorCode_t usbLinkOpen(const char *path, libusb_device_handle*& h)
 {
     using namespace std::chrono;
     if (path == NULL) {
-        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+        return XLINK_PLATFORM_INVALID_PARAMETERS;
     }
 
     usbBootError_t rc = USB_BOOT_DEVICE_NOT_FOUND;
@@ -667,26 +667,26 @@ xLinkPlatformErrorCode_t usbLinkOpen(const char *path, libusb_device_handle*& h)
 
     auto t1 = steady_clock::now();
     do {
-        if(refLibusbDeviceByName(path, &dev) == X_LINK_PLATFORM_SUCCESS){
+        if(refLibusbDeviceByName(path, &dev) == XLINK_PLATFORM_SUCCESS){
             found = true;
             break;
         }
     } while(steady_clock::now() - t1 < DEFAULT_OPEN_TIMEOUT);
 
     if(!found) {
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        return XLINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
     uint8_t ep = 0;
     libusb_error libusb_rc = usb_open_device(dev, &ep, h);
     if(libusb_rc == LIBUSB_SUCCESS) {
-        return X_LINK_PLATFORM_SUCCESS;
+        return XLINK_PLATFORM_SUCCESS;
     } else if(libusb_rc == LIBUSB_ERROR_ACCESS) {
-        return X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
+        return XLINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
     } else if(libusb_rc == LIBUSB_ERROR_BUSY) {
-        return X_LINK_PLATFORM_DEVICE_BUSY;
+        return XLINK_PLATFORM_DEVICE_BUSY;
     } else {
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 }
 
@@ -695,11 +695,11 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
 
     libusb_device *dev = nullptr;
     auto refErr = refLibusbDeviceByName(path, &dev);
-    if(refErr != X_LINK_PLATFORM_SUCCESS) {
+    if(refErr != XLINK_PLATFORM_SUCCESS) {
         return refErr;
     }
     if(dev == NULL){
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
     libusb_device_handle *h = NULL;
 
@@ -708,9 +708,9 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
     if (libusb_rc < 0) {
         libusb_unref_device(dev);
         if(libusb_rc == LIBUSB_ERROR_ACCESS) {
-            return X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
+            return XLINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
         }
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 
     // Make control transfer
@@ -729,10 +729,10 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
     libusb_close(h);
 
     if(libusb_rc < 0) {
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 
-    return X_LINK_PLATFORM_SUCCESS;
+    return XLINK_PLATFORM_SUCCESS;
 }
 
 void usbLinkClose(libusb_device_handle *f)
@@ -767,7 +767,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
             close(usbFdWrite);
         usbFdRead = -1;
         usbFdWrite = -1;
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
     return 0;
 
@@ -775,7 +775,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     usbFdRead= open(devPathRead, O_RDWR);
     if(usbFdRead < 0)
     {
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        return XLINK_PLATFORM_DEVICE_NOT_FOUND;
     }
     // set tty to raw mode
     struct termios  tty;
@@ -785,7 +785,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     if (rc < 0) {
         close(usbFdRead);
         usbFdRead = -1;
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 
     spd = B115200;
@@ -798,7 +798,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     if (rc < 0) {
         close(usbFdRead);
         usbFdRead = -1;
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 
     usbFdWrite= open(devPathWrite, O_RDWR);
@@ -806,7 +806,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     {
         close(usbFdRead);
         usbFdWrite = -1;
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
     // set tty to raw mode
     rc = tcgetattr(usbFdWrite, &tty);
@@ -814,7 +814,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
         close(usbFdRead);
         close(usbFdWrite);
         usbFdWrite = -1;
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 
     spd = B115200;
@@ -828,7 +828,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
         close(usbFdRead);
         close(usbFdWrite);
         usbFdWrite = -1;
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
     return 0;
 #endif  /*USE_LINK_JTAG*/
@@ -837,7 +837,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     libusb_device_handle* usbHandle = nullptr;
     xLinkPlatformErrorCode_t ret = usbLinkOpen(devPathWrite, usbHandle);
 
-    if (ret != X_LINK_PLATFORM_SUCCESS)
+    if (ret != XLINK_PLATFORM_SUCCESS)
     {
         /* could fail due to port name change */
         return ret;

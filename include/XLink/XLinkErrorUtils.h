@@ -16,7 +16,7 @@ extern "C"
     #define ASSERT_XLINK(condition) do { \
             if(!(condition)) { \
                 mvLog(MVLOG_ERROR, "Assertion Failed: %s \n", #condition); \
-                return X_LINK_ERROR; \
+                return XLINK_ERROR; \
             } \
         } while(0)
     #endif  // ASSERT_XLINK
@@ -53,7 +53,7 @@ extern "C"
 #ifndef XLINK_RET_IF
 #define XLINK_RET_IF(condition) do { \
         \
-        XLINK_RET_ERR_IF((condition), X_LINK_ERROR);\
+        XLINK_RET_ERR_IF((condition), XLINK_ERROR);\
         \
     } while(0)
 #endif  // XLINK_RET_IF

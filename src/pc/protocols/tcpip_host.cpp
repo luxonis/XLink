@@ -70,27 +70,27 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
 {
     if(state == TCPIP_HOST_STATE_BOOTED)
     {
-        return X_LINK_BOOTED;
+        return XLINK_BOOTED;
     }
     else if(state == TCPIP_HOST_STATE_UNBOOTED)
     {
-        return X_LINK_UNBOOTED;
+        return XLINK_UNBOOTED;
     }
     else if(state == TCPIP_HOST_STATE_BOOTLOADER)
     {
-        return X_LINK_BOOTLOADER;
+        return XLINK_BOOTLOADER;
     }
     else if(state == TCPIP_HOST_STATE_FLASH_BOOTED)
     {
-        return X_LINK_FLASH_BOOTED;
+        return XLINK_FLASH_BOOTED;
     }
     else if(state == TCPIP_HOST_STATE_GATE)
     {
-        return X_LINK_GATE;
+        return XLINK_GATE;
     }
     else
     {
-        return X_LINK_ANY_STATE;
+        return XLINK_ANY_STATE;
     }
 }
 
@@ -98,13 +98,13 @@ static XLinkProtocol_t tcpip_convert_device_protocol(uint32_t protocol)
 {
     switch (protocol)
     {
-    case TCPIP_HOST_PROTOCOL_USB_VSC: return X_LINK_USB_VSC;
-    case TCPIP_HOST_PROTOCOL_USB_CDC: return X_LINK_USB_CDC;
-    case TCPIP_HOST_PROTOCOL_PCIE: return X_LINK_PCIE;
-    case TCPIP_HOST_PROTOCOL_IPC: return X_LINK_IPC;
-    case TCPIP_HOST_PROTOCOL_TCP_IP: return X_LINK_TCP_IP;
+    case TCPIP_HOST_PROTOCOL_USB_VSC: return XLINK_USB_VSC;
+    case TCPIP_HOST_PROTOCOL_USB_CDC: return XLINK_USB_CDC;
+    case TCPIP_HOST_PROTOCOL_PCIE: return XLINK_PCIE;
+    case TCPIP_HOST_PROTOCOL_IPC: return XLINK_IPC;
+    case TCPIP_HOST_PROTOCOL_TCP_IP: return XLINK_TCP_IP;
     default:
-        return X_LINK_ANY_PROTOCOL;
+        return XLINK_ANY_PROTOCOL;
         break;
     }
 }
@@ -113,10 +113,10 @@ static XLinkPlatform_t tcpip_convert_device_platform(uint32_t platform)
 {
     switch (platform)
     {
-    case TCPIP_HOST_PLATFORM_MYRIAD_X: return X_LINK_MYRIAD_X;
-    case TCPIP_HOST_PLATFORM_KEEMBAY: return X_LINK_KEEMBAY;
+    case TCPIP_HOST_PLATFORM_MYRIAD_X: return XLINK_MYRIAD_X;
+    case TCPIP_HOST_PLATFORM_KEEMBAY: return XLINK_KEEMBAY;
     default:
-        return X_LINK_ANY_PLATFORM;
+        return XLINK_ANY_PLATFORM;
         break;
     }
 }
@@ -335,7 +335,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 
     // Create socket first (also capable of doing broadcasts)
     if(tcpip_create_socket_broadcast(&sock) != TCPIP_HOST_SUCCESS){
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 
     // If IP is specified, do UNICAST
@@ -358,7 +358,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
         if(sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &device_address, sizeof(device_address)) < 0)
         {
             tcpip_close_socket(sock);
-            return X_LINK_PLATFORM_ERROR;
+            return XLINK_PLATFORM_ERROR;
         }
     }
 
@@ -366,7 +366,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     if(!check_target_ip) {
         if (tcpip_send_broadcast(sock) != TCPIP_HOST_SUCCESS) {
             tcpip_close_socket(sock);
-            return X_LINK_PLATFORM_ERROR;
+            return XLINK_PLATFORM_ERROR;
         }
     }
 
@@ -395,10 +395,10 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
         {
             DEBUG("Received UDP response, length: %d\n", ret);
             tcpipHostCommand_t command = *reinterpret_cast<tcpipHostCommand_t*>(recv_buffer);
-            XLinkDeviceState_t foundState = X_LINK_ANY_STATE;
-            XLinkError_t status = X_LINK_SUCCESS;
-            XLinkPlatform_t platform = X_LINK_MYRIAD_X;
-            XLinkProtocol_t protocol = X_LINK_TCP_IP;
+            XLinkDeviceState_t foundState = XLINK_ANY_STATE;
+            XLinkError_t status = XLINK_SUCCESS;
+            XLinkPlatform_t platform = XLINK_MYRIAD_X;
+            XLinkProtocol_t protocol = XLINK_TCP_IP;
             char bufferId[64] = {};
             uint16_t port = TCPIP_LINK_SOCKET_PORT;
             DEBUG("Command %d\n", command);
@@ -420,7 +420,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
             }
             // Check that state matches
             DEBUG("target_state: %d, foundState: %d\n", target_state, foundState);
-            if(target_state != X_LINK_ANY_STATE && foundState != target_state) continue;
+            if(target_state != XLINK_ANY_STATE && foundState != target_state) continue;
 
             // Correct device found, increase matched num and save details
             // Convert IP address in binary into string
@@ -481,25 +481,25 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     // if at least one device matched, return OK otherwise return not found
     if(num_devices_match <= 0)
     {
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        return XLINK_PLATFORM_DEVICE_NOT_FOUND;
     }
     // return total device found
     *device_count = write_index;
 
     // Return success if search was successful (if atleast on device was found)
-    return X_LINK_PLATFORM_SUCCESS;
+    return XLINK_PLATFORM_SUCCESS;
 }
 
 
 xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     if(name == NULL || name[0] == 0){
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        return XLINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
     // Create socket for UDP unicast
     TCPIP_SOCKET sock;
     if(tcpip_create_socket(&sock, false, 100) != TCPIP_HOST_SUCCESS){
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 
     // TODO(themarpe) - Add IPv6 capabilities
@@ -518,10 +518,10 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_RESET;
     if (sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *)&device_address, sizeof(device_address)) < 0)
     {
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     }
 
     tcpip_close_socket(sock);
 
-    return X_LINK_PLATFORM_SUCCESS;
+    return XLINK_PLATFORM_SUCCESS;
 }

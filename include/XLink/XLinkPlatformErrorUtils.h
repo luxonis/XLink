@@ -24,7 +24,7 @@ extern "C"
     #ifndef ASSERT_XLINK_PLATFORM
     #define ASSERT_XLINK_PLATFORM(condition) do { \
             \
-            ASSERT_XLINK_PLATFORM_R((condition), X_LINK_PLATFORM_ERROR);\
+            ASSERT_XLINK_PLATFORM_R((condition), XLINK_PLATFORM_ERROR);\
             \
         } while(0)
     #endif  // ASSERT_XLINK_PLATFORM
@@ -43,7 +43,7 @@ extern "C"
     #ifndef ASSERT_XLINK_PLATFORM
     #define ASSERT_XLINK_PLATFORM(condition) do { \
             \
-            ASSERT_XLINK_PLATFORM_R((condition), X_LINK_PLATFORM_ERROR);\
+            ASSERT_XLINK_PLATFORM_R((condition), XLINK_PLATFORM_ERROR);\
             \
         } while(0)
     #endif // ASSERT_XLINK_PLATFORM

@@ -136,7 +136,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 /**
  * Send a boot to bootloader message to device with address 'name'
  * @param name device
- * @returns X_LINK_PLATFORM_SUCCESS If successfully sent boot to bootloader request or X_LINK_PLATFORM_ERROR couldn't send boot to bootloader request
+ * @returns XLINK_PLATFORM_SUCCESS If successfully sent boot to bootloader request or XLINK_PLATFORM_ERROR couldn't send boot to bootloader request
 */
 xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name);
 

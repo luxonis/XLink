@@ -23,7 +23,7 @@
 //            auto s = XLinkOpenStream(0, (name + std::to_string(i)).c_str(), 1024);
 //            assert(s != INVALID_STREAM_ID);
 //            auto w = XLinkWriteData(s, (uint8_t*) &s, sizeof(s));
-//            assert(w == X_LINK_SUCCESS);
+//            assert(w == XLINK_SUCCESS);
 //        });
 //    }
 //    for(auto& thread : threads){
@@ -40,16 +40,16 @@ int main() {
     /*
     // Search for booted device
     deviceDesc_t deviceDesc, inDeviceDesc;
-    inDeviceDesc.protocol = X_LINK_ANY_PROTOCOL;
-    inDeviceDesc.state = X_LINK_BOOTED;
-    if(X_LINK_SUCCESS != XLinkFindFirstSuitableDevice(inDeviceDesc, &deviceDesc)){
+    inDeviceDesc.protocol = XLINK_ANY_PROTOCOL;
+    inDeviceDesc.state = XLINK_BOOTED;
+    if(XLINK_SUCCESS != XLinkFindFirstSuitableDevice(inDeviceDesc, &deviceDesc)){
         printf("Didn't find a device\n");
         return -1;
     }
     */
 
     strcpy(deviceDesc.name, "127.0.0.1");
-    deviceDesc.protocol = X_LINK_TCP_IP;
+    deviceDesc.protocol = XLINK_TCP_IP;
 
     printf("Device name: %s\n", deviceDesc.name);
 
@@ -95,7 +95,7 @@ int main() {
             streamPacketDesc_t* p;
             XLinkError_t err = XLinkReadData(s, &p);
 
-            if(err == X_LINK_SUCCESS && p && p->data && s == *((streamId_t*) p->data)) {
+            if(err == XLINK_SUCCESS && p && p->data && s == *((streamId_t*) p->data)) {
                 // OK
             } else {
                 streamId_t id;

@@ -223,9 +223,9 @@ void startDeviceDiscoveryService(DeviceState deviceState, std::function<void()> 
 extern "C" void startDeviceDiscoveryService(XLinkDeviceState_t state) {
     network::DeviceState ds;
     switch (state) {
-    case X_LINK_BOOTED: ds = network::DeviceState::BOOTED; break;
-    case X_LINK_BOOTLOADER: ds = network::DeviceState::BOOTLOADER; break;
-    case X_LINK_FLASH_BOOTED: ds = network::DeviceState::FLASH_BOOTED; break;
+    case XLINK_BOOTED: ds = network::DeviceState::BOOTED; break;
+    case XLINK_BOOTLOADER: ds = network::DeviceState::BOOTLOADER; break;
+    case XLINK_FLASH_BOOTED: ds = network::DeviceState::FLASH_BOOTED; break;
     default:
         assert(0 && "invalid state");
         break;

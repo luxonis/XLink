@@ -14,21 +14,21 @@ int main(){
 
     mvLogDefaultLevelSet(MVLOG_WARN);
     auto status = XLinkInitialize(&xlinkGlobalHandler);
-    if(X_LINK_SUCCESS != status) {
+    if(XLINK_SUCCESS != status) {
         throw std::runtime_error("Couldn't initialize XLink");
     }
 
-    XLinkDeviceState_t state = X_LINK_ANY_STATE;
+    XLinkDeviceState_t state = XLINK_ANY_STATE;
 
     // Get all available devices
     unsigned int numdev = 0;
     std::array<deviceDesc_t, 32> deviceDescAll = {};
     deviceDesc_t suitableDevice = {};
-    suitableDevice.protocol = X_LINK_ANY_PROTOCOL;
-    suitableDevice.platform = X_LINK_ANY_PLATFORM;
+    suitableDevice.protocol = XLINK_ANY_PROTOCOL;
+    suitableDevice.platform = XLINK_ANY_PLATFORM;
 
     status = XLinkFindAllSuitableDevices(suitableDevice, deviceDescAll.data(), deviceDescAll.size(), &numdev);
-    if(status != X_LINK_SUCCESS) throw std::runtime_error("Couldn't retrieve all connected devices");
+    if(status != XLINK_SUCCESS) throw std::runtime_error("Couldn't retrieve all connected devices");
 
     // Print device details
     for(int i = 0; i < numdev; i++){

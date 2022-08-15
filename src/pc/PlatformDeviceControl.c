@@ -33,7 +33,7 @@ int usbFdRead = -1;
 #define UNUSED __attribute__((unused))
 
 
-static UsbSpeed_t usb_speed_enum = X_LINK_USB_SPEED_UNKNOWN;
+static UsbSpeed_t usb_speed_enum = XLINK_USB_SPEED_UNKNOWN;
 static char mx_serial[XLINK_MAX_MX_ID_SIZE] = { 0 };
 #ifdef USE_USB_VSC
 static const int statuswaittimeout = 5;
@@ -90,13 +90,13 @@ void xlinkSetProtocolInitialized(const XLinkProtocol_t protocol, int initialized
 xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler)
 {
     // Set that all protocols are initialized at first
-    for(int i = 0; i < X_LINK_NMB_OF_PROTOCOLS; i++) {
+    for(int i = 0; i < XLINK_NMB_OF_PROTOCOLS; i++) {
         xlinkSetProtocolInitialized(i, 1);
     }
 
     // check for failed initialization; LIBUSB_SUCCESS = 0
     if (usbInitialize(globalHandler->options) != 0) {
-        xlinkSetProtocolInitialized(X_LINK_USB_VSC, 0);
+        xlinkSetProtocolInitialized(XLINK_USB_VSC, 0);
     }
 
     // TODO(themarpe) - move to tcpip_host
@@ -105,7 +105,7 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler)
     WSADATA wsa_data;
     WSAStartup(MAKEWORD(2,2), &wsa_data);
 #endif
-    return X_LINK_PLATFORM_SUCCESS;
+    return XLINK_PLATFORM_SUCCESS;
 }
 
 
@@ -154,22 +154,22 @@ xLinkPlatformErrorCode_t XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc,
 xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
 
     if(!XLinkIsProtocolInitialized(deviceDesc->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceDesc->protocol;
+        return XLINK_PLATFORM_DRIVER_NOT_LOADED+deviceDesc->protocol;
     }
 
     switch (deviceDesc->protocol) {
-        case X_LINK_USB_VSC:
-        case X_LINK_USB_CDC:
+        case XLINK_USB_VSC:
+        case XLINK_USB_CDC:
             return usbPlatformBootFirmware(deviceDesc, firmware, length);
 
-        case X_LINK_PCIE:
+        case XLINK_PCIE:
             return pciePlatformBootFirmware(deviceDesc, firmware, length);
 
-        case X_LINK_TCP_IP:
+        case XLINK_TCP_IP:
             return tcpipPlatformBootFirmware(deviceDesc, firmware, length);
 
         default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+            return XLINK_PLATFORM_INVALID_PARAMETERS;
     }
 
 }
@@ -178,80 +178,80 @@ xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDes
 xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
 {
     if(!XLinkIsProtocolInitialized(protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
+        return XLINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
     }
     switch (protocol) {
-        case X_LINK_USB_VSC:
-        case X_LINK_USB_CDC:
+        case XLINK_USB_VSC:
+        case XLINK_USB_CDC:
             return usbPlatformConnect(devPathRead, devPathWrite, fd);
 
-        case X_LINK_PCIE:
+        case XLINK_PCIE:
             return pciePlatformConnect(devPathRead, devPathWrite, fd);
 
-        case X_LINK_TCP_IP:
+        case XLINK_TCP_IP:
             return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
 
         default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+            return XLINK_PLATFORM_INVALID_PARAMETERS;
     }
 }
 
 xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
 {
     switch (protocol) {
-        case X_LINK_TCP_IP:
+        case XLINK_TCP_IP:
             return tcpipPlatformServer(devPathRead, devPathWrite, fd);
 
         default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+            return XLINK_PLATFORM_INVALID_PARAMETERS;
     }
 }
 
 xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol)
 {
     if(!XLinkIsProtocolInitialized(protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
+        return XLINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
     }
     switch (protocol) {
-        case X_LINK_USB_VSC:
-        case X_LINK_USB_CDC:
+        case XLINK_USB_VSC:
+        case XLINK_USB_CDC:
             return usbPlatformBootBootloader(name);
 
-        case X_LINK_PCIE:
+        case XLINK_PCIE:
             return pciePlatformBootBootloader(name);
 
-        case X_LINK_TCP_IP:
+        case XLINK_TCP_IP:
             return tcpipPlatformBootBootloader(name);
 
         default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+            return XLINK_PLATFORM_INVALID_PARAMETERS;
     }
 }
 
 xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
 {
-    if(deviceHandle->protocol == X_LINK_ANY_PROTOCOL ||
-       deviceHandle->protocol == X_LINK_NMB_OF_PROTOCOLS) {
-        return X_LINK_PLATFORM_ERROR;
+    if(deviceHandle->protocol == XLINK_ANY_PROTOCOL ||
+       deviceHandle->protocol == XLINK_NMB_OF_PROTOCOLS) {
+        return XLINK_PLATFORM_ERROR;
     }
 
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+        return XLINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
     }
 
     switch (deviceHandle->protocol) {
-        case X_LINK_USB_VSC:
-        case X_LINK_USB_CDC:
+        case XLINK_USB_VSC:
+        case XLINK_USB_CDC:
             return usbPlatformClose(deviceHandle->xLinkFD);
 
-        case X_LINK_PCIE:
+        case XLINK_PCIE:
             return pciePlatformClose(deviceHandle->xLinkFD);
 
-        case X_LINK_TCP_IP:
+        case XLINK_TCP_IP:
             return tcpipPlatformClose(deviceHandle->xLinkFD);
 
         default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+            return XLINK_PLATFORM_INVALID_PARAMETERS;
     }
 
 }
@@ -371,7 +371,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 {
 #if defined(USE_TCP_IP)
     if (!devPathWrite || !fd) {
-        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+        return XLINK_PLATFORM_INVALID_PARAMETERS;
     }
 
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -399,10 +399,10 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     const size_t maxlen = 255;
     size_t len = strnlen(devPathWrite, maxlen + 1);
     if (len == 0 || len >= maxlen + 1)
-        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+        return XLINK_PLATFORM_INVALID_PARAMETERS;
     char *const serv_ip = (char *)malloc(len + 1);
     if (!serv_ip)
-        return X_LINK_PLATFORM_ERROR;
+        return XLINK_PLATFORM_ERROR;
     serv_ip[0] = 0;
     // Parse port if specified, or use default
     int port = TCPIP_LINK_SOCKET_PORT;

@@ -16,20 +16,20 @@ XLinkGlobalHandler_t xlinkGlobalHandler = {};
 
 int main(int argc, const char** argv){
 
-    xlinkGlobalHandler.protocol = X_LINK_TCP_IP;
+    xlinkGlobalHandler.protocol = XLINK_TCP_IP;
 
     // Initialize and suppress XLink logs
     mvLogDefaultLevelSet(MVLOG_ERROR);
     auto status = XLinkInitialize(&xlinkGlobalHandler);
-    if(X_LINK_SUCCESS != status) {
+    if(XLINK_SUCCESS != status) {
         throw std::runtime_error("Couldn't initialize XLink");
     }
 
     XLinkHandler_t handler;
     std::string serverIp{"127.0.0.1"};
     handler.devicePath = &serverIp[0];
-    handler.protocol = X_LINK_TCP_IP;
-    XLinkServer(&handler, X_LINK_BOOTED, X_LINK_MYRIAD_X);
+    handler.protocol = XLINK_TCP_IP;
+    XLinkServer(&handler, XLINK_BOOTED, XLINK_MYRIAD_X);
 
     // loop through streams
     constexpr static auto NUM_STREAMS = 16;
@@ -40,7 +40,7 @@ int main(int argc, const char** argv){
             auto s = XLinkOpenStream(0, (name + std::to_string(i)).c_str(), 1024);
             assert(s != INVALID_STREAM_ID);
             auto w = XLinkWriteData2(s, (uint8_t*) &s, sizeof(s/2), ((uint8_t*) &s) + sizeof(s/2), sizeof(s) - sizeof(s/2));
-            assert(w == X_LINK_SUCCESS);
+            assert(w == XLINK_SUCCESS);
         });
     }
     for(auto& thread : threads){

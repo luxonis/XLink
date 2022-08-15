@@ -131,12 +131,12 @@ XLinkError_t getNextAvailableStreamIndex(xLinkDesc_t* link, int* out_id)
     for (int idx = 0; idx < XLINK_MAX_STREAMS; idx++) {
         if (link->availableStreams[idx].id == INVALID_STREAM_ID) {
             *out_id = idx;
-            return X_LINK_SUCCESS;
+            return XLINK_SUCCESS;
         }
     }
 
     mvLog(MVLOG_DEBUG,"No next available stream!\n");
-    return X_LINK_ERROR;
+    return XLINK_ERROR;
 }
 
 streamId_t getNextStreamUniqueId(xLinkDesc_t *link)

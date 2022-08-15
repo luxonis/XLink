@@ -24,14 +24,14 @@ XLinkError_t XLinkStreamInitialize(
 
     if (XLink_sem_init(&stream->sem, 0, 0)) {
         mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
     stream->id = id;
     mv_strncpy(stream->name, MAX_STREAM_NAME_LENGTH,
                name, MAX_STREAM_NAME_LENGTH - 1);
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 void XLinkStreamReset(streamDesc_t* stream) {

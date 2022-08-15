@@ -67,10 +67,10 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
             INVALID_STREAM_ID);
 
         XLinkError_t eventStatus = checkEventHeader(event.header);
-        if (eventStatus != X_LINK_SUCCESS) {
+        if (eventStatus != XLINK_SUCCESS) {
             mvLog(MVLOG_ERROR, "Got wrong package from device, error code = %s", XLinkErrorToStr(eventStatus));
             // FIXME: not good solution, but seems the only in the case of such XLink API
-            if (eventStatus == X_LINK_OUT_OF_MEMORY) {
+            if (eventStatus == XLINK_OUT_OF_MEMORY) {
                 return INVALID_STREAM_ID_OUT_OF_MEMORY;
             } else {
                 return INVALID_STREAM_ID;
@@ -108,7 +108,7 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId)
         0, NULL, link->deviceHandle);
 
     XLINK_RET_IF(addEvent(&event, XLINK_NO_RW_TIMEOUT));
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
@@ -132,7 +132,7 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
         glHandler->profilingData.totalWriteTime += opTime;
     }
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, size_t buffer1Size, const uint8_t* buffer2, size_t buffer2Size)
@@ -158,7 +158,7 @@ XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, size_t
         glHandler->profilingData.totalWriteTime += opTime;
     }
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packet)
@@ -178,7 +178,7 @@ XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packe
 
     *packet = (streamPacketDesc_t *)event.data;
     if(*packet == NULL) {
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
     if( glHandler->profEnable) {
@@ -186,7 +186,7 @@ XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packe
         glHandler->profilingData.totalReadTime += opTime;
     }
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t* buffer,
@@ -211,7 +211,7 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t*
         glHandler->profilingData.totalWriteTime += opTime;
     }
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** packet, unsigned int timeoutMs)
@@ -231,7 +231,7 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
 
     *packet = (streamPacketDesc_t *)event.data;
     if(*packet == NULL) {
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
     if( glHandler->profEnable) {
@@ -239,7 +239,7 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
         glHandler->profilingData.totalReadTime += opTime;
     }
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* const packet)
@@ -259,7 +259,7 @@ XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* co
 
     if (!event.data)
     {
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
     *packet = *(streamPacketDesc_t *)event.data;
 
@@ -274,7 +274,7 @@ XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* co
     }
 
     const XLinkError_t retVal = XLinkReleaseData(streamId);
-    if (retVal != X_LINK_SUCCESS) {
+    if (retVal != XLINK_SUCCESS) {
         // severe error; deallocate here as the caller might forget to dealloc on errors; or be less able to manage
         XLinkPlatformDeallocateData(packet->data, ALIGN_UP_INT32((int32_t)packet->length, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
         packet->data = NULL;
@@ -298,12 +298,12 @@ XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t const streamId, streamPacke
     event.header.flags.bitField.moveSemantic = 1;
 
     const XLinkError_t rc = addEventWithPerfTimeout(&event, &opTime, msTimeout);
-    if(rc == X_LINK_TIMEOUT) return rc;
+    if(rc == XLINK_TIMEOUT) return rc;
     else XLINK_RET_IF(rc);
 
     if (!event.data)
     {
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
     *packet = *(streamPacketDesc_t *)event.data;
 
@@ -318,7 +318,7 @@ XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t const streamId, streamPacke
     }
 
     const XLinkError_t retVal = XLinkReleaseData(streamId);
-    if (retVal != X_LINK_SUCCESS) {
+    if (retVal != XLINK_SUCCESS) {
         // severe error; deallocate here as the caller might forget to dealloc on errors; or be less able to manage
         XLinkPlatformDeallocateData(packet->data, ALIGN_UP_INT32((int32_t)packet->length, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
         packet->data = NULL;
@@ -343,7 +343,7 @@ XLinkError_t XLinkReleaseData(streamId_t const streamId)
 
     XLINK_RET_IF(addEvent(&event, XLINK_NO_RW_TIMEOUT));
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkReleaseSpecificData(streamId_t streamId, streamPacketDesc_t* packetDesc)
@@ -358,7 +358,7 @@ XLinkError_t XLinkReleaseSpecificData(streamId_t streamId, streamPacketDesc_t* p
 
     XLINK_RET_IF(addEvent(&event, XLINK_NO_RW_TIMEOUT));
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkGetFillLevel(streamId_t const streamId, int isRemote, int* fillLevel)
@@ -379,7 +379,7 @@ XLinkError_t XLinkGetFillLevel(streamId_t const streamId, int isRemote, int* fil
     }
 
     releaseStream(stream);
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 // ------------------------------------
@@ -399,13 +399,13 @@ XLinkError_t checkEventHeader(xLinkEventHeader_t header) {
 
 
     if (header.flags.bitField.ack) {
-        return X_LINK_SUCCESS;
+        return XLINK_SUCCESS;
     } else if (header.flags.bitField.nack) {
-        return X_LINK_COMMUNICATION_FAIL;
+        return XLINK_COMMUNICATION_FAIL;
     } else if (header.flags.bitField.sizeTooBig) {
-        return X_LINK_OUT_OF_MEMORY;
+        return XLINK_OUT_OF_MEMORY;
     } else {
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 }
 
@@ -430,7 +430,7 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
             TypeToStr(event->header.type), event->header.id, event->header.streamName);
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
     if (timeoutMs != XLINK_NO_RW_TIMEOUT) {
@@ -454,22 +454,22 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
             }
             releaseStream(stream);
 
-            return X_LINK_TIMEOUT;
+            return XLINK_TIMEOUT;
         }
     }
     else  // No timeout
     {
         if (DispatcherWaitEventComplete(&event->deviceHandle, timeoutMs))
         {
-            return X_LINK_TIMEOUT;
+            return XLINK_TIMEOUT;
         }
     }
 
     XLINK_RET_ERR_IF(
         event->header.flags.bitField.ack != 1,
-        X_LINK_COMMUNICATION_FAIL);
+        XLINK_COMMUNICATION_FAIL);
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs)
@@ -484,7 +484,7 @@ XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int t
     clock_gettime(CLOCK_REALTIME, &end);
     *opTime = timespec_diff(&start, &end);
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t addEventTimeout(xLinkEvent_t *event, struct timespec abstime)
@@ -495,18 +495,18 @@ XLinkError_t addEventTimeout(xLinkEvent_t *event, struct timespec abstime)
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
             TypeToStr(event->header.type), event->header.id, event->header.streamName);
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
     if (DispatcherWaitEventCompleteTimeout(&event->deviceHandle, abstime)) {
-        return X_LINK_TIMEOUT;
+        return XLINK_TIMEOUT;
     }
 
     XLINK_RET_ERR_IF(
         event->header.flags.bitField.ack != 1,
-        X_LINK_COMMUNICATION_FAIL);
+        XLINK_COMMUNICATION_FAIL);
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigned int msTimeout)
@@ -525,12 +525,12 @@ XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigne
     absTimeout.tv_sec += secOver;
 
     int rc = addEventTimeout(event, absTimeout);
-    if(rc != X_LINK_SUCCESS) return rc;
+    if(rc != XLINK_SUCCESS) return rc;
 
     clock_gettime(CLOCK_REALTIME, &end);
     *opTime = timespec_diff(&start, &end);
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_link) {
@@ -539,11 +539,11 @@ static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_lin
     linkId_t id = EXTRACT_LINK_ID(streamId);
     *out_link = getLinkById(id);
 
-    XLINK_RET_ERR_IF(*out_link == NULL, X_LINK_ERROR);
+    XLINK_RET_ERR_IF(*out_link == NULL, XLINK_ERROR);
     XLINK_RET_ERR_IF(getXLinkState(*out_link) != XLINK_UP,
-                    X_LINK_COMMUNICATION_NOT_OPEN);
+                    XLINK_COMMUNICATION_NOT_OPEN);
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 // ------------------------------------
 // Helpers declaration. End.

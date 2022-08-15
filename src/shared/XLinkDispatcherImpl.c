@@ -63,7 +63,7 @@ int writeEventMultipart(xLinkDeviceHandle_t* deviceHandle, void* data, int total
 
     // restriction on the output data size
     // mitigates kernel crash on RPI when USB is used
-    const int xlinkPacketSizeMultiply = deviceHandle->protocol == X_LINK_USB_VSC ? 1024 : 1; //for usb3, usb2 is 512
+    const int xlinkPacketSizeMultiply = deviceHandle->protocol == XLINK_USB_VSC ? 1024 : 1; //for usb3, usb2 is 512
     uint8_t swapSpaceScratchBuffer[xlinkPacketSizeMultiply + 64];
     uint8_t *swapSpace = swapSpaceScratchBuffer + ALIGN_UP((((uintptr_t)swapSpaceScratchBuffer) % 64), 64);
 
@@ -605,7 +605,7 @@ void dispatcherCloseLink(void* fd, int fullClose)
     }
 
     // TODO investigate race condition that is (probably) later caught
-    // due to changing the global `xLinkDesc_t availableXLinks[MAX_LINKS]`
+    // due to changing the global `xLinkDesc_t availableXLinks[MAXLINKS]`
     // without any thread protection. The dispatcher thread can be calling this function
     // while an app thread calls `XLinkReadData()` which calls `getLinkByStreamId()` which calls
     // both `getLinkById()` and `getXLinkState()`. The latter two read the global `availableXLinks`

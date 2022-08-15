@@ -35,7 +35,7 @@
 XLinkGlobalHandler_t* glHandler; //TODO need to either protect this with semaphor
                                  //or make profiling data per device
 
-xLinkDesc_t availableXLinks[MAX_LINKS];
+xLinkDesc_t availableXLinks[MAXLINKS];
 pthread_mutex_t availableXLinksMutex = PTHREAD_MUTEX_INITIALIZER;
 sem_t  pingSem; //to b used by myriad
 DispatcherControlFunctions controlFunctionTbl;
@@ -71,10 +71,10 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc);
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
 {
     XLINK_RET_IF(globalHandler == NULL);
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&init_mutex), X_LINK_ERROR);
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&init_mutex), XLINK_ERROR);
     if(init_once){
         pthread_mutex_unlock(&init_mutex);
-        return X_LINK_SUCCESS;
+        return XLINK_SUCCESS;
     }
 
     ASSERT_XLINK(XLINK_MAX_STREAMS <= MAX_POOLS_ALLOC);
@@ -85,7 +85,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     int i;
 
     xLinkPlatformErrorCode_t init_status = XLinkPlatformInit(globalHandler);
-    if (init_status != X_LINK_PLATFORM_SUCCESS) {
+    if (init_status != XLINK_PLATFORM_SUCCESS) {
         pthread_mutex_unlock(&init_mutex);
         return parsePlatformError(init_status);
     }
@@ -112,14 +112,14 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     if (DispatcherInitialize(&controlFunctionTbl)) {
         mvLog(MVLOG_ERROR, "Condition failed: DispatcherInitialize(&controlFunctionTbl)");
         pthread_mutex_unlock(&init_mutex);
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
     //initialize availableStreams
     memset(availableXLinks, 0, sizeof(availableXLinks));
 
     xLinkDesc_t* link;
-    for (i = 0; i < MAX_LINKS; i++) {
+    for (i = 0; i < MAXLINKS; i++) {
         link = &availableXLinks[i];
 
         link->id = INVALID_LINK_ID;
@@ -134,10 +134,10 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     int status = pthread_mutex_unlock(&init_mutex);
     if(status){
         // rare and unstable scenario; xlink is technically initialized yet mutex unlock failed
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 
@@ -150,7 +150,7 @@ XLinkError_t XLinkServer(XLinkHandler_t* handler, XLinkDeviceState_t state, XLin
     XLINK_RET_IF(handler == NULL);
     if (strnlen(handler->devicePath, MAX_PATH_LENGTH) < 2) {
         mvLog(MVLOG_ERROR, "Device path is incorrect");
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
     xLinkDesc_t* link = getNextAvailableLink();
@@ -175,7 +175,7 @@ XLinkError_t XLinkServer(XLinkHandler_t* handler, XLinkDeviceState_t state, XLin
     }
 
     XLINK_RET_ERR_IF(
-        DispatcherStartServer(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
+        DispatcherStartServer(link) != XLINK_SUCCESS, XLINK_TIMEOUT);
 
     // Wait till client pings
     while(((sem_wait(&pingSem) == -1) && errno == EINTR))
@@ -184,7 +184,7 @@ XLinkError_t XLinkServer(XLinkHandler_t* handler, XLinkDeviceState_t state, XLin
     link->peerState = XLINK_UP;
     link->hostClosedFD = 0;
     handler->linkId = link->id;
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state) {
@@ -199,9 +199,9 @@ XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequiremen
     unsigned numFoundDevices = 0;
     rc = XLinkPlatformFindDevices(in_deviceRequirements, out_foundDevice, 1, &numFoundDevices);
     if(numFoundDevices <= 0){
-        return X_LINK_DEVICE_NOT_FOUND;
+        return XLINK_DEVICE_NOT_FOUND;
     }
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirements,
@@ -224,7 +224,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     XLINK_RET_IF(handler == NULL);
     if (strnlen(handler->devicePath, MAX_PATH_LENGTH) < 2) {
         mvLog(MVLOG_ERROR, "Device path is incorrect");
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
     xLinkDesc_t* link = getNextAvailableLink();
@@ -249,7 +249,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     }
 
     XLINK_RET_ERR_IF(
-        DispatcherStart(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
+        DispatcherStart(link) != XLINK_SUCCESS, XLINK_TIMEOUT);
 
     xLinkEvent_t event = {0};
 
@@ -259,13 +259,13 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 
     if (DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT)) {
         DispatcherClean(&link->deviceHandle);
-        return X_LINK_TIMEOUT;
+        return XLINK_TIMEOUT;
     }
 
     link->peerState = XLINK_UP;
     link->hostClosedFD = 0;
     handler->linkId = link->id;
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 
@@ -278,27 +278,27 @@ XLinkError_t XLinkBootBootloader(const deviceDesc_t* deviceDesc)
 XLinkError_t XLinkBootMemory(const deviceDesc_t* deviceDesc, const uint8_t* buffer, unsigned long size)
 {
     if (XLinkPlatformBootFirmware(deviceDesc, (const char*) buffer, size) == 0) {
-        return X_LINK_SUCCESS;
+        return XLINK_SUCCESS;
     }
 
-    return X_LINK_COMMUNICATION_FAIL;
+    return XLINK_COMMUNICATION_FAIL;
 }
 
 XLinkError_t XLinkBoot(const deviceDesc_t* deviceDesc, const char* binaryPath)
 {
     if (XLinkPlatformBootRemote(deviceDesc, binaryPath) == 0) {
-        return X_LINK_SUCCESS;
+        return XLINK_SUCCESS;
     }
 
-    return X_LINK_COMMUNICATION_FAIL;
+    return XLINK_COMMUNICATION_FAIL;
 }
 
 XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, unsigned long length) {
     if (!XLinkPlatformBootFirmware(deviceDesc, firmware, length)) {
-        return X_LINK_SUCCESS;
+        return XLINK_SUCCESS;
     }
 
-    return X_LINK_COMMUNICATION_FAIL;
+    return XLINK_COMMUNICATION_FAIL;
 }
 
 XLinkError_t XLinkResetRemote(linkId_t id)
@@ -309,7 +309,7 @@ XLinkError_t XLinkResetRemote(linkId_t id)
     if (getXLinkState(link) != XLINK_UP) {
         mvLog(MVLOG_WARN, "Link is down, close connection to device without reset");
         XLinkPlatformCloseRemote(&link->deviceHandle);
-        return X_LINK_COMMUNICATION_NOT_OPEN;
+        return XLINK_COMMUNICATION_NOT_OPEN;
     }
 
     // Add event to reset device. After sending it, dispatcher will close fd link
@@ -319,17 +319,17 @@ XLinkError_t XLinkResetRemote(linkId_t id)
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
     DispatcherAddEvent(EVENT_LOCAL, &event);
     XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
-        X_LINK_TIMEOUT);
+        XLINK_TIMEOUT);
 
     int rc;
     while(((rc = XLink_sem_wait(&link->dispatcherClosedSem)) == -1) && errno == EINTR)
         continue;
     if(rc) {
         mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
@@ -340,7 +340,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     if (getXLinkState(link) != XLINK_UP) {
         mvLog(MVLOG_WARN, "Link is down, close connection to device without reset");
         XLinkPlatformCloseRemote(&link->deviceHandle);
-        return X_LINK_COMMUNICATION_NOT_OPEN;
+        return XLINK_COMMUNICATION_NOT_OPEN;
     }
 
     // Add event to reset device. After sending it, dispatcher will close fd link
@@ -364,12 +364,12 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
             TypeToStr(event.header.type), event.header.id, event.header.streamName);
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
     XLinkError_t ret = DispatcherWaitEventCompleteTimeout(&link->deviceHandle, absTimeout);
 
-    if(ret != X_LINK_SUCCESS){
+    if(ret != XLINK_SUCCESS){
         // Closing device link unblocks any blocked events
         // Afterwards the dispatcher can properly cleanup in its own thread
         DispatcherDeviceFdDown(&link->deviceHandle);
@@ -378,7 +378,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     // Wait for dispatcher to be closed
     if(XLink_sem_wait(&link->dispatcherClosedSem)) {
         mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
-        return X_LINK_ERROR;
+        return XLINK_ERROR;
     }
 
     return ret;
@@ -388,7 +388,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
 XLinkError_t XLinkResetAll()
 {
     int i;
-    for (i = 0; i < MAX_LINKS; i++) {
+    for (i = 0; i < MAXLINKS; i++) {
         if (availableXLinks[i].id != INVALID_LINK_ID) {
             xLinkDesc_t* link = &availableXLinks[i];
             int stream;
@@ -398,17 +398,17 @@ XLinkError_t XLinkResetAll()
                     mvLog(MVLOG_DEBUG,"%s() Closing stream (stream = %d) %d on link %d\n",
                           __func__, stream, (int) streamId, (int) link->id);
                     COMBINE_IDS(streamId, link->id);
-                    if (XLinkCloseStream(streamId) != X_LINK_SUCCESS) {
+                    if (XLinkCloseStream(streamId) != XLINK_SUCCESS) {
                         mvLog(MVLOG_WARN,"Failed to close stream");
                     }
                 }
             }
-            if (XLinkResetRemote(link->id) != X_LINK_SUCCESS) {
+            if (XLinkResetRemote(link->id) != XLINK_SUCCESS) {
                 mvLog(MVLOG_WARN,"Failed to reset");
             }
         }
     }
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkProfStart()
@@ -421,13 +421,13 @@ XLinkError_t XLinkProfStart()
     glHandler->profilingData.totalBootCount = 0;
     glHandler->profilingData.totalBootTime = 0;
 
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkProfStop()
 {
     glHandler->profEnable = 0;
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 XLinkError_t XLinkProfPrint()
@@ -455,7 +455,7 @@ XLinkError_t XLinkProfPrint()
                glHandler->profilingData.totalBootTime /
                glHandler->profilingData.totalBootCount);
     }
-    return X_LINK_SUCCESS;
+    return XLINK_SUCCESS;
 }
 
 UsbSpeed_t XLinkGetUSBSpeed(linkId_t id){
@@ -484,13 +484,13 @@ linkId_t getNextAvailableLinkUniqueId()
     do
     {
         int i;
-        for (i = 0; i < MAX_LINKS; i++)
+        for (i = 0; i < MAXLINKS; i++)
         {
             if (availableXLinks[i].id != INVALID_LINK_ID &&
                 availableXLinks[i].id == nextUniqueLinkId)
                 break;
         }
-        if (i >= MAX_LINKS)
+        if (i >= MAXLINKS)
         {
             return nextUniqueLinkId;
         }
@@ -515,13 +515,13 @@ xLinkDesc_t* getNextAvailableLink() {
     }
 
     int i;
-    for (i = 0; i < MAX_LINKS; i++) {
+    for (i = 0; i < MAXLINKS; i++) {
         if (availableXLinks[i].id == INVALID_LINK_ID) {
             break;
         }
     }
 
-    if(i >= MAX_LINKS) {
+    if(i >= MAXLINKS) {
         mvLog(MVLOG_ERROR,"%s():- no next available link!\n", __func__);
         XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
         return NULL;
@@ -559,26 +559,26 @@ void freeGivenLink(xLinkDesc_t* link) {
 
 XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
     switch (rc) {
-        case X_LINK_PLATFORM_SUCCESS:
-            return X_LINK_SUCCESS;
-        case X_LINK_PLATFORM_DEVICE_NOT_FOUND:
-            return X_LINK_DEVICE_NOT_FOUND;
-        case X_LINK_PLATFORM_TIMEOUT:
-            return X_LINK_TIMEOUT;
-        case X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS:
-            return X_LINK_INSUFFICIENT_PERMISSIONS;
-        case X_LINK_PLATFORM_DEVICE_BUSY:
-            return X_LINK_DEVICE_ALREADY_IN_USE;
-        case X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED:
-            return X_LINK_INIT_USB_ERROR;
-        case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED:
-            return X_LINK_INIT_TCP_IP_ERROR;
-        case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED:
-            return X_LINK_INIT_PCIE_ERROR;
-        case X_LINK_PLATFORM_ERROR:
-        case X_LINK_PLATFORM_INVALID_PARAMETERS:
+        case XLINK_PLATFORM_SUCCESS:
+            return XLINK_SUCCESS;
+        case XLINK_PLATFORM_DEVICE_NOT_FOUND:
+            return XLINK_DEVICE_NOT_FOUND;
+        case XLINK_PLATFORM_TIMEOUT:
+            return XLINK_TIMEOUT;
+        case XLINK_PLATFORM_INSUFFICIENT_PERMISSIONS:
+            return XLINK_INSUFFICIENT_PERMISSIONS;
+        case XLINK_PLATFORM_DEVICE_BUSY:
+            return XLINK_DEVICE_ALREADY_IN_USE;
+        case XLINK_PLATFORM_USB_DRIVER_NOT_LOADED:
+            return XLINK_INIT_USB_ERROR;
+        case XLINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED:
+            return XLINK_INIT_TCP_IP_ERROR;
+        case XLINK_PLATFORM_PCIE_DRIVER_NOT_LOADED:
+            return XLINK_INIT_PCIE_ERROR;
+        case XLINK_PLATFORM_ERROR:
+        case XLINK_PLATFORM_INVALID_PARAMETERS:
         default:
-            return X_LINK_ERROR;
+            return XLINK_ERROR;
     }
 }
 
@@ -588,21 +588,21 @@ XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
  */
 const char* XLinkErrorToStr(XLinkError_t val) {
     switch (val) {
-        case X_LINK_SUCCESS: return "X_LINK_SUCCESS";
-        case X_LINK_ALREADY_OPEN: return "X_LINK_ALREADY_OPEN";
-        case X_LINK_COMMUNICATION_NOT_OPEN: return "X_LINK_COMMUNICATION_NOT_OPEN";
-        case X_LINK_COMMUNICATION_FAIL: return "X_LINK_COMMUNICATION_FAIL";
-        case X_LINK_COMMUNICATION_UNKNOWN_ERROR: return "X_LINK_COMMUNICATION_UNKNOWN_ERROR";
-        case X_LINK_DEVICE_NOT_FOUND: return "X_LINK_DEVICE_NOT_FOUND";
-        case X_LINK_TIMEOUT: return "X_LINK_TIMEOUT";
-        case X_LINK_ERROR: return "X_LINK_ERROR";
-        case X_LINK_OUT_OF_MEMORY: return "X_LINK_OUT_OF_MEMORY";
-        case X_LINK_INSUFFICIENT_PERMISSIONS: return "X_LINK_INSUFFICIENT_PERMISSIONS";
-        case X_LINK_DEVICE_ALREADY_IN_USE: return "X_LINK_DEVICE_ALREADY_IN_USE";
-        case X_LINK_NOT_IMPLEMENTED: return "X_LINK_NOT_IMPLEMENTED";
-        case X_LINK_INIT_USB_ERROR: return "X_LINK_INIT_USB_ERROR";
-        case X_LINK_INIT_TCP_IP_ERROR: return "X_LINK_INIT_TCP_IP_ERROR";
-        case X_LINK_INIT_PCIE_ERROR: return "X_LINK_INIT_PCIE_ERROR";
+        case XLINK_SUCCESS: return "XLINK_SUCCESS";
+        case XLINK_ALREADY_OPEN: return "XLINK_ALREADY_OPEN";
+        case XLINK_COMMUNICATION_NOT_OPEN: return "XLINK_COMMUNICATION_NOT_OPEN";
+        case XLINK_COMMUNICATION_FAIL: return "XLINK_COMMUNICATION_FAIL";
+        case XLINK_COMMUNICATION_UNKNOWN_ERROR: return "XLINK_COMMUNICATION_UNKNOWN_ERROR";
+        case XLINK_DEVICE_NOT_FOUND: return "XLINK_DEVICE_NOT_FOUND";
+        case XLINK_TIMEOUT: return "XLINK_TIMEOUT";
+        case XLINK_ERROR: return "XLINK_ERROR";
+        case XLINK_OUT_OF_MEMORY: return "XLINK_OUT_OF_MEMORY";
+        case XLINK_INSUFFICIENT_PERMISSIONS: return "XLINK_INSUFFICIENT_PERMISSIONS";
+        case XLINK_DEVICE_ALREADY_IN_USE: return "XLINK_DEVICE_ALREADY_IN_USE";
+        case XLINK_NOT_IMPLEMENTED: return "XLINK_NOT_IMPLEMENTED";
+        case XLINK_INIT_USB_ERROR: return "XLINK_INIT_USB_ERROR";
+        case XLINK_INIT_TCP_IP_ERROR: return "XLINK_INIT_TCP_IP_ERROR";
+        case XLINK_INIT_PCIE_ERROR: return "XLINK_INIT_PCIE_ERROR";
         default:
             return "INVALID_ENUM_VALUE";
             break;
@@ -615,13 +615,13 @@ const char* XLinkErrorToStr(XLinkError_t val) {
  */
 const char* XLinkProtocolToStr(XLinkProtocol_t val) {
     switch (val) {
-        case X_LINK_USB_VSC: return "X_LINK_USB_VSC";
-        case X_LINK_USB_CDC: return "X_LINK_USB_CDC";
-        case X_LINK_PCIE: return "X_LINK_PCIE";
-        case X_LINK_IPC: return "X_LINK_IPC";
-        case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
-        case X_LINK_NMB_OF_PROTOCOLS: return "X_LINK_NMB_OF_PROTOCOLS";
-        case X_LINK_ANY_PROTOCOL: return "X_LINK_ANY_PROTOCOL";
+        case XLINK_USB_VSC: return "XLINK_USB_VSC";
+        case XLINK_USB_CDC: return "XLINK_USB_CDC";
+        case XLINK_PCIE: return "XLINK_PCIE";
+        case XLINK_IPC: return "XLINK_IPC";
+        case XLINK_TCP_IP: return "XLINK_TCP_IP";
+        case XLINK_NMB_OF_PROTOCOLS: return "XLINK_NMB_OF_PROTOCOLS";
+        case XLINK_ANY_PROTOCOL: return "XLINK_ANY_PROTOCOL";
         default:
             return "INVALID_ENUM_VALUE";
             break;
@@ -634,10 +634,10 @@ const char* XLinkProtocolToStr(XLinkProtocol_t val) {
  */
 const char* XLinkPlatformToStr(XLinkPlatform_t val) {
     switch (val) {
-        case X_LINK_ANY_PLATFORM: return "X_LINK_ANY_PLATFORM";
-        case X_LINK_MYRIAD_2: return "X_LINK_MYRIAD_2";
-        case X_LINK_MYRIAD_X: return "X_LINK_MYRIAD_X";
-        case X_LINK_KEEMBAY: return "X_LINK_KEEMBAY";
+        case XLINK_ANY_PLATFORM: return "XLINK_ANY_PLATFORM";
+        case XLINK_MYRIAD_2: return "XLINK_MYRIAD_2";
+        case XLINK_MYRIAD_X: return "XLINK_MYRIAD_X";
+        case XLINK_KEEMBAY: return "XLINK_KEEMBAY";
         default:
             return "INVALID_ENUM_VALUE";
             break;
@@ -650,12 +650,12 @@ const char* XLinkPlatformToStr(XLinkPlatform_t val) {
  */
 const char* XLinkDeviceStateToStr(XLinkDeviceState_t val) {
     switch (val) {
-        case X_LINK_ANY_STATE: return "X_LINK_ANY_STATE";
-        case X_LINK_BOOTED: return "X_LINK_BOOTED";
-        case X_LINK_UNBOOTED: return "X_LINK_UNBOOTED";
-        case X_LINK_BOOTLOADER: return "X_LINK_BOOTLOADER";
-        case X_LINK_FLASH_BOOTED: return "X_LINK_FLASH_BOOTED";
-        case X_LINK_GATE: return "X_LINK_GATE";
+        case XLINK_ANY_STATE: return "XLINK_ANY_STATE";
+        case XLINK_BOOTED: return "XLINK_BOOTED";
+        case XLINK_UNBOOTED: return "XLINK_UNBOOTED";
+        case XLINK_BOOTLOADER: return "XLINK_BOOTLOADER";
+        case XLINK_FLASH_BOOTED: return "XLINK_FLASH_BOOTED";
+        case XLINK_GATE: return "XLINK_GATE";
         default:
             return "INVALID_ENUM_VALUE";
             break;
@@ -669,9 +669,9 @@ const char* XLinkDeviceStateToStr(XLinkDeviceState_t val) {
  */
 const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val) {
     switch (val) {
-        case X_LINK_PCIE_UNKNOWN_BOOTLOADER: return "X_LINK_PCIE_UNKNOWN_BOOTLOADER";
-        case X_LINK_PCIE_SIMPLIFIED_BOOTLOADER: return "X_LINK_PCIE_SIMPLIFIED_BOOTLOADER";
-        case X_LINK_PCIE_UNIFIED_BOOTLOADER: return "X_LINK_PCIE_UNIFIED_BOOTLOADER";
+        case XLINK_PCIE_UNKNOWN_BOOTLOADER: return "XLINK_PCIE_UNKNOWN_BOOTLOADER";
+        case XLINK_PCIE_SIMPLIFIED_BOOTLOADER: return "XLINK_PCIE_SIMPLIFIED_BOOTLOADER";
+        case XLINK_PCIE_UNIFIED_BOOTLOADER: return "XLINK_PCIE_UNIFIED_BOOTLOADER";
     }
     return "INVALID_ENUM_VALUE";
 }
