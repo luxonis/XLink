@@ -145,15 +145,15 @@ int XLinkPlatformIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLi
 
 char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode) {
     switch (errorCode) {
-        case X_LINK_PLATFORM_SUCCESS: return "X_LINK_PLATFORM_SUCCESS";
-        case X_LINK_PLATFORM_DEVICE_NOT_FOUND: return "X_LINK_PLATFORM_DEVICE_NOT_FOUND";
-        case X_LINK_PLATFORM_ERROR: return "X_LINK_PLATFORM_ERROR";
-        case X_LINK_PLATFORM_TIMEOUT: return "X_LINK_PLATFORM_TIMEOUT";
-        case X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED";
-        case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED";
-        case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED";
-        case X_LINK_PLATFORM_INVALID_PARAMETERS: return "X_LINK_PLATFORM_INVALID_PARAMETERS";
-        default: return "";
+        case X_LINK_PLATFORM_SUCCESS: return (char*)"X_LINK_PLATFORM_SUCCESS";
+        case X_LINK_PLATFORM_DEVICE_NOT_FOUND: return (char*)"X_LINK_PLATFORM_DEVICE_NOT_FOUND";
+        case X_LINK_PLATFORM_ERROR: return (char*)"X_LINK_PLATFORM_ERROR";
+        case X_LINK_PLATFORM_TIMEOUT: return (char*)"X_LINK_PLATFORM_TIMEOUT";
+        case X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED: return (char*)"X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED";
+        case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED: return (char*)"X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED";
+        case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED: return (char*)"X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED";
+        case X_LINK_PLATFORM_INVALID_PARAMETERS: return (char*)"X_LINK_PLATFORM_INVALID_PARAMETERS";
+        default: return (char*)"";
     }
 }
 

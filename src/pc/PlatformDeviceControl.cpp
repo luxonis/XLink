@@ -465,7 +465,7 @@ static char* pciePlatformStateToStr(const pciePlatformState_t platformState) {
         case PCIE_PLATFORM_ANY_STATE: return (char*)"PCIE_PLATFORM_ANY_STATE";
         case PCIE_PLATFORM_BOOTED: return (char*)"PCIE_PLATFORM_BOOTED";
         case PCIE_PLATFORM_UNBOOTED: return (char*)"PCIE_PLATFORM_UNBOOTED";
-        default: return "";
+        default: return (char*)"";
     }
 }
 int pciePlatformClose(void *f)
