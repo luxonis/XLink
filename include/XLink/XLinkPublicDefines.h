@@ -14,7 +14,7 @@
 #include <stdbool.h>
 #ifdef __cplusplus
 
-// namespace dai {
+namespace xlink {
 
 extern "C"
 {
@@ -160,7 +160,7 @@ typedef enum{
 #ifdef __cplusplus
 }
 
-// }  // namespace dai
+}  // namespace xlink
 #endif
 
 #endif

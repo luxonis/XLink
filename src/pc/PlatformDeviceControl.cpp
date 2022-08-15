@@ -54,6 +54,7 @@ static const int statuswaittimeout = 5;
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <stdlib.h>
 #endif
 
 #endif /* USE_TCP_IP */
@@ -318,7 +319,7 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
 
     int reuse_addr = 1;
     int sc;
-    sc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(int));
+    sc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuse_addr, sizeof(int));
     if(sc < 0)
     {
         perror("setsockopt");
@@ -328,7 +329,7 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     // Disable sigpipe reception on send
     #if defined(SO_NOSIGPIPE)
         const int set = 1;
-        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, (const char *)&set, sizeof(set));
     #endif
 
     struct sockaddr_in serv_addr = {}, client = {};
@@ -348,7 +349,7 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
         close(sock);
     }
 
-    unsigned len = sizeof(client);
+    int len = sizeof(client);
     int connfd = accept(sock, (struct sockaddr*) &client, &len);
     if(connfd < 0)
     {
@@ -391,7 +392,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     // Disable sigpipe reception on send
     #if defined(SO_NOSIGPIPE)
         const int set = 1;
-        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, (const char *)&set, sizeof(set));
     #endif
 
     struct sockaddr_in serv_addr = { 0 };
@@ -421,7 +422,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     }
 
     int on = 1;
-    if(setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
+    if(setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (const char *)&on, sizeof(on)) < 0)
     {
         perror("setsockopt TCP_NODELAY");
         tcpip_close_socket(sock);
