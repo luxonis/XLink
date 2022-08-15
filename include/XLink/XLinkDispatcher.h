@@ -13,6 +13,7 @@
 #include "XLinkPrivateDefines.h"
 #include "time.h"
 #include "stdbool.h"
+using namespace xlink;
 
 #ifdef __cplusplus
 extern "C"

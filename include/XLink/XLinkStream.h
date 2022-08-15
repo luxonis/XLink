@@ -7,6 +7,7 @@
 
 #include "XLinkPublicDefines.h"
 #include "XLinkSemaphore.h"
+using namespace xlink;
 
 /**
  * @brief Streams opened to device

@@ -6,6 +6,7 @@
 #define _XLINKPRIVATEFIELDS_H
 
 #include "XLinkDispatcher.h"
+using namespace xlink;
 
 #define LINK_ID_MASK 0xFF
 #define LINK_ID_SHIFT ((sizeof(uint32_t) - sizeof(uint8_t)) * 8)

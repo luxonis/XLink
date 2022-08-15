@@ -7,6 +7,7 @@
 
 #include "XLinkPrivateDefines.h"
 #include <stdbool.h>
+using namespace xlink;
 
 int dispatcherEventSend (xLinkEvent_t*);
 int dispatcherEventReceive (xLinkEvent_t*);

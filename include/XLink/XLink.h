@@ -15,6 +15,7 @@
 extern "C"
 {
 #endif
+using namespace xlink;
 
 // ------------------------------------
 // Device management. Begin.

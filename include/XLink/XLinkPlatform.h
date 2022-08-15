@@ -11,6 +11,7 @@
 
 #include "XLinkPrivateDefines.h"
 #include <stdint.h>
+using namespace xlink;
 
 #ifdef __cplusplus
 extern "C"

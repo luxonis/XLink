@@ -7,6 +7,7 @@
 #include "XLink/XLink.h"
 #include "XLink/XLinkPublicDefines.h"
 #include "XLink/XLinkLog.h"
+using namespace xlink;
 
 XLinkGlobalHandler_t xlinkGlobalHandler = {};
 

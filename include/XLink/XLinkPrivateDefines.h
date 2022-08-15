@@ -12,6 +12,7 @@
 
 #include "XLinkStream.h"
 #include "XLinkPublicDefines.h"
+using namespace xlink;
 
 #if !defined(XLINK_ALIGN_TO_BOUNDARY)
 # if defined(_WIN32) && !defined(__GNUC__)

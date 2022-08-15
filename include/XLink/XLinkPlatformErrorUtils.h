@@ -9,6 +9,7 @@
 extern "C"
 {
 #endif
+using namespace xlink;
 
 #if 1  // Release configuration
 

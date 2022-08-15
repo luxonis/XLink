@@ -349,7 +349,7 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
         close(sock);
     }
 
-    int len = sizeof(client);
+    socklen_t len = sizeof(client);
     int connfd = accept(sock, (struct sockaddr*) &client, &len);
     if(connfd < 0)
     {
