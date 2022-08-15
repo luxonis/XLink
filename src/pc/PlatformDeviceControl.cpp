@@ -12,6 +12,7 @@
 #include "tcpip_host.h"
 #include "XLinkStringUtils.h"
 #include "PlatformDeviceFd.h"
+#include <unistd.h>
 
 #define MVLOG_UNIT_NAME PlatformDeviceControl
 #include "XLinkLog.h"
