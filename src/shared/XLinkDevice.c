@@ -143,9 +143,11 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
 
 XLinkError_t XLinkServer(XLinkHandler_t* handler, XLinkDeviceState_t state, XLinkPlatform_t platform)
 {
+    #ifndef _WIN32
     // Start discovery if not already
     extern void startDeviceDiscoveryService(XLinkDeviceState_t);
     startDeviceDiscoveryService(state);
+    #endif
 
     XLINK_RET_IF(handler == NULL);
     if (strnlen(handler->devicePath, MAX_PATH_LENGTH) < 2) {

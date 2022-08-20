@@ -64,7 +64,8 @@ int writeEventMultipart(xLinkDeviceHandle_t* deviceHandle, void* data, int total
     // restriction on the output data size
     // mitigates kernel crash on RPI when USB is used
     const int xlinkPacketSizeMultiply = deviceHandle->protocol == X_LINK_USB_VSC ? 1024 : 1; //for usb3, usb2 is 512
-    uint8_t swapSpaceScratchBuffer[xlinkPacketSizeMultiply + 64];
+    // uint8_t swapSpaceScratchBuffer[xlinkPacketSizeMultiply + 64];
+    uint8_t* swapSpaceScratchBuffer = malloc(xlinkPacketSizeMultiply + 64);
     uint8_t *swapSpace = swapSpaceScratchBuffer + ALIGN_UP((((uintptr_t)swapSpaceScratchBuffer) % 64), 64);
 
     // the amount of bytes written from split transfer for "next" packet
@@ -136,6 +137,7 @@ int writeEventMultipart(xLinkDeviceHandle_t* deviceHandle, void* data, int total
     }
 
 function_epilogue:
+    free(swapSpaceScratchBuffer);
     if (errorCode) return errorCode;
     return writtenByteCount;
 }

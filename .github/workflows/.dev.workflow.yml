@@ -27,16 +27,16 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - name: Install dependencies
-      if: matrix.os == 'macos-latest'
-      run: |
-        brew install libusb
+    # - name: Install dependencies
+    #   if: matrix.os == 'macos-latest'
+    #   run: |
+    #     brew install libusb
 
-    - name: Install dependencies
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get install libusb-1.0-0-dev
-        sudo apt-get install libusb-1.0-0
+    # - name: Install dependencies
+    #   if: matrix.os == 'ubuntu-latest'
+    #   run: |
+    #     sudo apt-get install libusb-1.0-0-dev
+    #     sudo apt-get install libusb-1.0-0
 
     - name: Setup MinGW compiler
       if: matrix.compiler == 'mingw'
@@ -53,4 +53,7 @@ jobs:
       run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -G"MinGW Makefiles"
 
     - name: build
-      run: cmake --build build --parallel
+      run: cmake --build build --parallel --config Debug
+
+    - name: test
+      run: ctest --test-dir build -C Debug

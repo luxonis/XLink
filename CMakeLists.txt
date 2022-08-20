@@ -180,6 +180,10 @@ if(XLINK_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
+# Testing infrastructure
+include(CTest)
+enable_testing()
+
 # Tests
 if(XLINK_BUILD_TESTS)
     add_subdirectory(tests)
