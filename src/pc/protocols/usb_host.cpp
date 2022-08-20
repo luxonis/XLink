@@ -356,6 +356,8 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 }
 
 
+                // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
+                libusb_set_auto_detach_kernel_driver(handle, 1);
                 // Claim interface (as we'll be doing IO on endpoints)
                 if ((libusb_rc = libusb_claim_interface(handle, 0)) < 0) {
                     if(libusb_rc != LIBUSB_ERROR_BUSY){
@@ -513,6 +515,8 @@ static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libus
         }
     }
 
+    // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
+    libusb_set_auto_detach_kernel_driver(h, 1);
     if((res = libusb_claim_interface(h, 0)) < 0)
     {
         mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
