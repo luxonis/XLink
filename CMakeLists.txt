@@ -27,6 +27,7 @@ endif()
 
 include(cmake/XLink.cmake)
 include(cmake/Flags.cmake)
+include(cmake/BuildModes.cmake)
 
 # Build examples
 option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)

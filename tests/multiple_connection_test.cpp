@@ -27,11 +27,11 @@ int main(int argc, char** argv) {
     int numConnections = argc - 1;
     std::vector<std::thread> connections;
     std::atomic<bool> allSuccess{true};
-    for(int i = 0; i < numConnections; i++) {
-        connections.push_back(std::thread([i, &allSuccess, argv](){
+    for(int connection = 0; connection < numConnections; connection++) {
+        connections.push_back(std::thread([connection, &allSuccess, argv](){
 
             deviceDesc_t deviceDesc;
-            strcpy(deviceDesc.name, argv[i+1]);
+            strcpy(deviceDesc.name, argv[connection+1]);
             deviceDesc.protocol = X_LINK_TCP_IP;
 
             printf("Device name: %s\n", deviceDesc.name);
@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
                     if(s == INVALID_STREAM_ID){
                         printf("Open stream failed...\n");
                     } else {
-                        printf("Open stream OK - name %s, id: 0x%08X\n", name.c_str(), s);
+                        printf("Open stream OK - conn: %d, name: %s, id: 0x%08X\n", connection, name.c_str(), s);
                     }
                     streams[i] = s;
                 });
@@ -71,19 +71,22 @@ int main(int argc, char** argv) {
             // Optionally, print stream names and ids here
             std::atomic<bool> success{true};
             for(auto i : randomized){
-                threads[i] = std::thread([i, &streams, &success](){
+                threads[i] = std::thread([connection, i, &streams, &success](){
                     std::string name = "test_" + std::to_string(i);
                     auto s = streams[i];
 
                     streamPacketDesc_t* p;
                     XLinkError_t err = XLinkReadData(s, &p);
 
-                    if(err == X_LINK_SUCCESS && p && p->data && s == *((streamId_t*) p->data)) {
+                    if(err == X_LINK_SUCCESS && p && p->data && ((s & 0xFFFFFF) == *((streamId_t*) p->data))) {
                         // OK
                     } else {
-                        streamId_t id;
-                        // memcpy(&id, p->data, sizeof(id));
-                        printf("DESYNC error - name %s, id: 0x%08X, response id: 0x%08X\n", name.c_str(), s, id);
+                        streamId_t id = 0;
+                        if(p != nullptr) {
+                            memcpy(&id, p->data, sizeof(id));
+                        }
+
+                        printf("DESYNC error - err: %s, conn: %d, name: %s, id: 0x%08X, response id: 0x%08X\n", XLinkErrorToStr(err), connection, name.c_str(), s, id);
                         success = false;
                     }
 

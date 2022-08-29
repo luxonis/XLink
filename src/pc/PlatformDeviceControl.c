@@ -335,7 +335,7 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     char ip[INET_ADDRSTRLEN + 16];
     strncpy(ip, "0.0.0.0", sizeof(ip) - 1); // ANY by default
     int port = TCPIP_LINK_SOCKET_PORT;
-    sscanf(devPathWrite, "%99[^:]:%99d", ip, &port);
+    sscanf(devPathWrite, "%16[^:]:%15d", ip, &port);
 
     struct sockaddr_in serv_addr = {0}, client = {0};
     memset(&serv_addr, 0, sizeof(serv_addr));
