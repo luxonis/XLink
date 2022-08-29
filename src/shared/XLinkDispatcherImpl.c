@@ -306,12 +306,9 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response,
                                                                 INVALID_STREAM_ID);
                 mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - stream has been just opened with id %ld\n",
                     event->header.streamId);
-
-                printf("called on 'client' side\n");
             } else {
                 mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - do nothing. Stream will be "
                     "opened with forced id accordingly to response from the host\n");
-                printf("called on 'server' side\n");
             }
             break;
         }
@@ -620,6 +617,11 @@ void dispatcherCloseLink(void* fd, int fullClose)
         return;
     }
 
+    if(pthread_mutex_lock(&availableXLinksMutex) != 0) {
+        mvLog(MVLOG_FATAL, "Cannot lock availableXLinksMutex\n");
+        return;
+    }
+
     link->id = INVALID_LINK_ID;
     link->deviceHandle.xLinkFD = NULL;
     link->peerState = XLINK_NOT_INIT;
@@ -642,6 +644,10 @@ void dispatcherCloseLink(void* fd, int fullClose)
 
     if(XLink_sem_destroy(&link->dispatcherClosedSem)) {
         mvLog(MVLOG_DEBUG, "Cannot destroy dispatcherClosedSem\n");
+    }
+
+    if(pthread_mutex_unlock(&availableXLinksMutex) != 0) {
+        mvLog(MVLOG_DEBUG, "Cannot lock availableXLinksMutex\n");
     }
 }
 

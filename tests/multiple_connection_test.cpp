@@ -39,7 +39,8 @@ int main(int argc, char** argv) {
             XLinkHandler_t handler;
             handler.devicePath = deviceDesc.name;
             handler.protocol = deviceDesc.protocol;
-            XLinkConnect(&handler);
+            auto connRet = XLinkConnect(&handler);
+            printf("Connection %d returned: %s\n", connection, XLinkErrorToStr(connRet));
 
             // loop randomly over streams
             constexpr static auto NUM_STREAMS = 16;
@@ -112,6 +113,7 @@ int main(int argc, char** argv) {
         conn.join();
     }
 
+    // std::this_thread::sleep_for(std::chrono::seconds(10));
 }
 
 #endif

@@ -230,11 +230,15 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
 
     pthread_attr_t attr;
     int eventIdx;
+
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&num_schedulers_mutex) != 0, X_LINK_ERROR);
     if (numSchedulers >= MAX_SCHEDULERS)
     {
         mvLog(MVLOG_ERROR,"Max number Schedulers reached!\n");
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, X_LINK_ERROR);
         return -1;
     }
+
     int idx = findAvailableScheduler();
     if (idx == -1) {
         mvLog(MVLOG_ERROR,"Max number Schedulers reached!\n");
@@ -329,6 +333,8 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     }
 
     sem_post(&addSchedulerSem);
+
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, X_LINK_ERROR);
 
     return 0;
 }
@@ -1028,6 +1034,7 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
     dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
 
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&num_schedulers_mutex) != 0, 1);
     curr->schedulerId = -1;
     curr->resetXLink = 1;
     XLink_sem_destroy(&curr->addEventSem);
@@ -1040,6 +1047,8 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
         temp++;
     }
     numSchedulers--;
+
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, 1);
 
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
 
