@@ -49,6 +49,7 @@ message(STATUS "  XLINK_LIBUSB_SYSTEM: ${XLINK_LIBUSB_SYSTEM}")
 
 # Create library target
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
+add_default_flags(${TARGET_NAME})
 add_flag_source(src/shared/XLinkDevice.c "-Werror=switch-enum")
 get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
 if(is_multi_config)

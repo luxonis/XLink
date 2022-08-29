@@ -416,14 +416,21 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
         // This is a temporary solution. TODO: replace this with something more efficient.
         while (timeoutMs--) {
             rc = XLink_sem_trywait(id);
-            if (!rc) {
+            int tmpErrno = errno;
+            if (rc == 0) {
+                // Success
                 break;
             } else {
+                if(tmpErrno == ETIMEDOUT) {
 #if (defined(_WIN32) || defined(_WIN64) )
-                Sleep(1);
+                    Sleep(1);
 #else
-                usleep(1000);
+                    usleep(1000);
 #endif
+                } else {
+                    // error, exit
+                    break;
+                }
             }
         }
     } else {
@@ -442,43 +449,11 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
         while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
             continue;
         if (id == NULL || rc) {
-        // Calling non-thread safe dispatcherReset from external thread
-        // TODO - investigate further and resolve
+            // // graceful link shutdown instead
+            // dispatcherDeviceFdDown(curr);
+            // Calling non-thread safe dispatcherReset from external thread
+            // TODO - investigate further and resolve
             dispatcherReset(curr);
-        }
-    }
-
-    return rc;
-}
-
-int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct timespec abstime)
-{
-    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
-    ASSERT_XLINK(curr != NULL);
-
-    XLink_sem_t* id = getSem(pthread_self(), curr);
-    if (id == NULL) {
-        return -1;
-    }
-
-    int rc = XLink_sem_timedwait(id, &abstime);
-    int err = errno;
-
-    if (curr->server && rc) {
-        if(err == ETIMEDOUT){
-            return X_LINK_TIMEOUT;
-        } else {
-            xLinkEvent_t event = {0};
-            event.header.type = XLINK_RESET_REQ;
-            event.deviceHandle = *deviceHandle;
-            mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
-            DispatcherAddEvent(EVENT_LOCAL, &event);
-            id = getSem(pthread_self(), curr);
-            if (id == NULL || XLink_sem_wait(id)) {
-                // Calling non-thread safe dispatcherReset from external thread
-                // TODO - investigate further and resolve
-                dispatcherReset(curr);
-            }
         }
     }
 
