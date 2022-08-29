@@ -40,3 +40,9 @@ endmacro()
 xlink_add_client_server_test(multiple_open_stream_test 10)
 # Multithreading search
 xlink_add_test(multithreading_search_test multithreading_search_test.cpp)
+
+# multiple_connection_test search
+xlink_add_test(multiple_connection_test_server multiple_connection_test.cpp)
+target_compile_definitions(multiple_connection_test_server PRIVATE XLINK_TEST_SERVER)
+xlink_add_test(multiple_connection_test_client multiple_connection_test.cpp)
+target_compile_definitions(multiple_connection_test_client PRIVATE XLINK_TEST_CLIENT)
