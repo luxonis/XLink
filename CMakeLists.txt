@@ -19,11 +19,10 @@ if(NOT WIN32)
             ${LIBUSB_LIBRARY})
 endif()
 
-target_include_directories(${TARGET_NAME}
-        PUBLIC
-        ${XLINK_INCLUDE}
-        PRIVATE
-        ${XLINK_PLATFORM_INCLUDE})
+target_include_directories(${TARGET_NAME} PRIVATE ${XLINK_PLATFORM_INCLUDE})
+foreach(dir IN LISTS XLINK_INCLUDE)
+    target_include_directories(${TARGET_NAME} PUBLIC $<BUILD_INTERFACE:${dir}>)
+endforeach()
 
 target_compile_definitions(${TARGET_NAME}
         PRIVATE
