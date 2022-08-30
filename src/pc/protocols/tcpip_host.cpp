@@ -41,6 +41,8 @@
 
 #include <chrono>
 
+#include "TCPServer.h"
+
 /* **************************************************************************/
 /*      Private Macro Definitions                                            */
 /* **************************************************************************/
@@ -474,4 +476,68 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     tcpip_close_socket(sock);
 
     return X_LINK_PLATFORM_SUCCESS;
+}
+
+// TODO add IPv6 to tcpipPlatformConnect()
+int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
+{
+    auto LogPrinter = [](const std::string& strLogMsg) { std::cout << strLogMsg << std::endl;  }
+    CTCPServer TCPServer(LogPrinter, "12345"); // creates a TCP server to listen on port 12345
+
+/*
+    TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0)
+    {
+        perror("socket");
+        close(sock);
+    }
+
+    int reuse_addr = 1;
+    int sc;
+    sc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(int));
+    if(sc < 0)
+    {
+        perror("setsockopt");
+        close(sock);
+    }
+
+    // Disable sigpipe reception on send
+    #if defined(SO_NOSIGPIPE)
+        const int set = 1;
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+    #endif
+
+    struct sockaddr_in serv_addr = {}, client = {};
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_port = htons(TCPIP_LINK_SOCKET_PORT);
+    if(bind(sock, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0)
+    {
+        perror("bind");
+        close(sock);
+    }
+
+    if(listen(sock, 1) < 0)
+    {
+        perror("listen");
+        close(sock);
+    }
+
+    unsigned len = sizeof(client);
+    int connfd = accept(sock, (struct sockaddr*) &client, &len);
+    if(connfd < 0)
+    {
+        perror("accept");
+    }
+
+    // Store the socket and create a "unique" key instead
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
+    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) connfd);
+
+#else
+    assert(0 && "Selected incompatible option, compile with USE_TCP_IP set");
+#endif
+*/
+    return 0;
 }

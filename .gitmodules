@@ -1,0 +1,3 @@
+[submodule "external/socket-cpp"]
+	path = external/socket-cpp
+	url = https://github.com/embeddedmz/socket-cpp.git

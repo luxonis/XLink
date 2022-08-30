@@ -81,6 +81,11 @@ else()
     endif()
 endif()
 
+# Add socket-cpp library
+# Disable TLS for now
+set(SOCKET_CPP_BUILD_WITHOUT_SECURE_CLASSES ON)
+add_subdirectory(external/socket-cpp)
+
 if(WIN32)
     target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
 else()
