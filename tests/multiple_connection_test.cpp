@@ -114,6 +114,15 @@ int main(int argc, char** argv) {
     }
 
     // std::this_thread::sleep_for(std::chrono::seconds(10));
+
+    if(allSuccess) {
+        std::cout << "Success!\n";
+        return 0;
+    } else {
+        std::cout << "RIP!\n";
+        return -1;
+    }
+
 }
 
 #endif
