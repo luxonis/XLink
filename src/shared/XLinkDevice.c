@@ -266,7 +266,7 @@ XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int
     event.deviceHandle = link->deviceHandle;
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
-    if (DispatcherWaitEventComplete(&link->deviceHandle, msTimeout)) {
+    if (DispatcherWaitEventComplete(link->deviceHandle, msTimeout)) {
         DispatcherClean(&link->deviceHandle);
         // TODO(themarpe) - cleaner exit in case of timeout...
         // DispatcherDeviceFdDown(&link->deviceHandle);
@@ -330,10 +330,13 @@ XLinkError_t XLinkResetRemoteTimeout(const linkId_t id, const unsigned int msTim
     // event.deviceHandle = deviceHandle;
     event.deviceHandle = link->deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
-    DispatcherAddEvent(EVENT_LOCAL, &event);
-    // XLinkError_t ret = DispatcherWaitEventComplete(&deviceHandle, msTimeout);
-    XLinkError_t ret = DispatcherWaitEventComplete(&link->deviceHandle, msTimeout);
-
+    xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);
+    if(ev == NULL) {
+        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
+            TypeToStr(event.header.type), event.header.id, event.header.streamName);
+        return X_LINK_ERROR;
+    }
+    XLinkError_t ret = DispatcherWaitEventComplete(link->deviceHandle, msTimeout);
 
     if(ret != X_LINK_SUCCESS){
         // Closing device link unblocks any blocked events

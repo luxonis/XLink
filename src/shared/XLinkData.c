@@ -61,7 +61,7 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
 
         DispatcherAddEvent(EVENT_LOCAL, &event);
         XLINK_RET_ERR_IF(
-            DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
+            DispatcherWaitEventComplete(link->deviceHandle, XLINK_NO_RW_TIMEOUT),
             INVALID_STREAM_ID);
 
         XLinkError_t eventStatus = checkEventHeader(event.header);
@@ -201,7 +201,6 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t*
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_REQ,
         size,(void*)buffer, deviceHandle);
 
-    mvLog(MVLOG_WARN,"XLinkWriteDataWithTimeout is not fully supported yet. The XLinkWriteData method is called instead. Desired timeout = %d\n", timeoutMs);
     XLINK_RET_IF_FAIL(addEventWithPerf(&event, &opTime, timeoutMs));
 
     if( glHandler->profEnable) {
@@ -403,6 +402,7 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
 {
     ASSERT_XLINK(event);
 
+    event->header.flags.bitField.canNotBeServed = 0;
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, event);
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
@@ -411,32 +411,43 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
     }
 
     if (timeoutMs != XLINK_NO_RW_TIMEOUT) {
-        ASSERT_XLINK(event->header.type == XLINK_READ_REQ);
-        xLinkDesc_t* link;
-        getLinkByStreamId(event->header.streamId, &link);
+        xLinkDesc_t* link = NULL;
+        XLINK_RET_IF(getLinkByStreamId(event->header.streamId, &link));
 
-        if (DispatcherWaitEventComplete(&event->deviceHandle, timeoutMs))  // timeout reached
+        if (DispatcherWaitEventComplete(event->deviceHandle, timeoutMs))  // timeout reached
         {
             streamDesc_t* stream = getStreamById(event->deviceHandle.xLinkFD,
                                                  event->header.streamId);
+            ASSERT_XLINK(stream);
+            event->header.flags.bitField.dropped = 1;
             if (event->header.type == XLINK_READ_REQ)
             {
-                // XLINK_READ_REQ is a local event. It is safe to serve it.
-                // Limitations.
-                // Possible vulnerability in this mechanism:
-                //      If we reach timeout with DispatcherWaitEventComplete and before
-                //      we call DispatcherServeEvent, the event actually comes,
-                //      and gets served by XLink stack and event semaphore is posted.
-                DispatcherServeEvent(event->header.id, XLINK_READ_REQ, stream->id, event->deviceHandle.xLinkFD);
+                event->header.flags.bitField.canNotBeServed = 1;
+                XLINK_RET_IF(DispatcherServeOrDropEvent(event->header.id, XLINK_READ_REQ, stream->id, event->deviceHandle.xLinkFD));
+            }
+            else if (event->header.type == XLINK_WRITE_REQ)
+            {
+                event->header.flags.bitField.canNotBeServed = 1;
+                XLINK_RET_IF(DispatcherServeOrDropEvent(event->header.id, XLINK_WRITE_REQ, stream->id, event->deviceHandle.xLinkFD));
             }
             releaseStream(stream);
+            if (event->header.type == XLINK_WRITE_REQ && event->header.flags.bitField.dropped)
+            {
+                mvLog(MVLOG_ERROR,"event is dropped\n");
+                xLinkEvent_t dropEvent = {0};
+                dropEvent.header.streamId = EXTRACT_STREAM_ID(event->header.streamId);
+                XLINK_INIT_EVENT(dropEvent, event->header.streamId, XLINK_DROP_REQ,
+                                 0, NULL, link->deviceHandle);
+                DispatcherAddEvent(EVENT_LOCAL, &dropEvent);
+                XLINK_RET_ERR_IF(DispatcherWaitEventComplete(link->deviceHandle, XLINK_NO_RW_TIMEOUT), dropEvent.header.streamId);
+            }
 
             return X_LINK_TIMEOUT;
         }
     }
     else  // No timeout
     {
-        if (DispatcherWaitEventComplete(&event->deviceHandle, timeoutMs))
+        if (DispatcherWaitEventComplete(event->deviceHandle, timeoutMs))
         {
             return X_LINK_TIMEOUT;
         }

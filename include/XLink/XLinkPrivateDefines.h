@@ -109,6 +109,8 @@ typedef enum
     IPC_CLOSE_STREAM_RESP,
     XLINK_READ_REL_SPEC_REQ,
     XLINK_READ_REL_SPEC_RESP,
+    XLINK_DROP_REQ,
+    XLINK_DROP_RESP,
 } xLinkEventType_t;
 
 typedef enum
@@ -142,6 +144,8 @@ typedef struct xLinkEventHeader_t{
             uint32_t sizeTooBig : 1;
             uint32_t noSuchStream : 1;
             uint32_t moveSemantic : 1;
+            uint32_t dropped : 1;
+            uint32_t canNotBeServed : 1;
         }bitField;
     }flags;
 }xLinkEventHeader_t;
@@ -158,6 +162,8 @@ typedef struct xLinkEvent_t {
     (event).header.streamId = (in_streamId); \
     (event).header.type = (in_type); \
     (event).header.size = (in_size); \
+    (event).header.flags.bitField.dropped = 0; \
+    (event).header.flags.bitField.canNotBeServed = 0; \
     (event).data = (in_data); \
     (event).deviceHandle = (in_deviceHandle); \
 } while(0)
