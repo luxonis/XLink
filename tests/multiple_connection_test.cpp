@@ -41,6 +41,10 @@ int main(int argc, char** argv) {
             handler.protocol = deviceDesc.protocol;
             auto connRet = XLinkConnect(&handler);
             printf("Connection %d returned: %s\n", connection, XLinkErrorToStr(connRet));
+            if(connRet != X_LINK_SUCCESS) {
+                allSuccess = false;
+                return;
+            }
 
             // loop randomly over streams
             constexpr static auto NUM_STREAMS = 16;
@@ -83,8 +87,10 @@ int main(int argc, char** argv) {
                         // OK
                     } else {
                         streamId_t id = 0;
-                        if(p != nullptr) {
-                            memcpy(&id, p->data, sizeof(id));
+                        if(err == X_LINK_SUCCESS) {
+                            if(p != nullptr) {
+                                memcpy(&id, p->data, sizeof(id));
+                            }
                         }
 
                         printf("DESYNC error - err: %s, conn: %d, name: %s, id: 0x%08X, response id: 0x%08X\n", XLinkErrorToStr(err), connection, name.c_str(), s, id);
