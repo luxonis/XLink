@@ -316,7 +316,12 @@ XLinkError_t XLinkResetRemote(linkId_t id)
     event.header.type = XLINK_RESET_REQ;
     event.deviceHandle = link->deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
-    DispatcherAddEvent(EVENT_LOCAL, &event);
+    xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);
+    if(ev == NULL) {
+        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
+            TypeToStr(event.header.type), event.header.id, event.header.streamName);
+        return X_LINK_ERROR;
+    }
     XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
         X_LINK_TIMEOUT);
 
@@ -348,17 +353,6 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     event.deviceHandle = link->deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
 
-    struct timespec start;
-    clock_gettime(CLOCK_REALTIME, &start);
-
-    struct timespec absTimeout = start;
-    int64_t sec = timeoutMs / 1000;
-    absTimeout.tv_sec += sec;
-    absTimeout.tv_nsec += (long)((timeoutMs - (sec * 1000)) * 1000000);
-    int64_t secOver = absTimeout.tv_nsec / 1000000000;
-    absTimeout.tv_nsec -= (long)(secOver * 1000000000);
-    absTimeout.tv_sec += secOver;
-
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
@@ -366,7 +360,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
         return X_LINK_ERROR;
     }
 
-    XLinkError_t ret = DispatcherWaitEventCompleteTimeout(&link->deviceHandle, absTimeout);
+    XLinkError_t ret = DispatcherWaitEventComplete(&link->deviceHandle, timeoutMs);
 
     if(ret != X_LINK_SUCCESS){
         // Closing device link unblocks any blocked events
@@ -375,7 +369,10 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     }
 
     // Wait for dispatcher to be closed
-    if(XLink_sem_wait(&link->dispatcherClosedSem)) {
+    int rc;
+    while(((rc = XLink_sem_wait(&link->dispatcherClosedSem)) == -1) && errno == EINTR)
+        continue;
+    if(rc) {
         mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
         return X_LINK_ERROR;
     }
