@@ -158,8 +158,10 @@ int main(int argc, const char** argv){
         thread.join();
     }
 
-    // std::this_thread::sleep_for(std::chrono::seconds(1));
     std::cout << "All threads joined\n";
+
+    std::cout << "Staying online for 1 more second\n";
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     return 0;
 }
