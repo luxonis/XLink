@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
                     }
                     streams[i] = s;
                 });
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                // std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
             for(auto i : randomized){
                 threads[i].join();
@@ -158,7 +158,7 @@ int main(int argc, const char** argv){
         thread.join();
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    // std::this_thread::sleep_for(std::chrono::seconds(1));
     std::cout << "All threads joined\n";
 
     return 0;
