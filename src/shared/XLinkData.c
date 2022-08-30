@@ -403,6 +403,7 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
     ASSERT_XLINK(event);
 
     event->header.flags.bitField.canNotBeServed = 0;
+    xLinkDeviceHandle_t deviceHandle = event->deviceHandle;
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, event);
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
@@ -411,12 +412,9 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
     }
 
     if (timeoutMs != XLINK_NO_RW_TIMEOUT) {
-        xLinkDesc_t* link = NULL;
-        XLINK_RET_IF(getLinkByStreamId(event->header.streamId, &link));
-
-        if (DispatcherWaitEventComplete(event->deviceHandle, timeoutMs))  // timeout reached
+        if (DispatcherWaitEventComplete(deviceHandle, timeoutMs))  // timeout reached
         {
-            streamDesc_t* stream = getStreamById(event->deviceHandle.xLinkFD,
+            streamDesc_t* stream = getStreamById(deviceHandle.xLinkFD,
                                                  event->header.streamId);
             ASSERT_XLINK(stream);
             event->header.flags.bitField.dropped = 1;
@@ -437,9 +435,9 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
                 xLinkEvent_t dropEvent = {0};
                 dropEvent.header.streamId = EXTRACT_STREAM_ID(event->header.streamId);
                 XLINK_INIT_EVENT(dropEvent, event->header.streamId, XLINK_DROP_REQ,
-                                 0, NULL, link->deviceHandle);
+                                 0, NULL, deviceHandle);
                 DispatcherAddEvent(EVENT_LOCAL, &dropEvent);
-                XLINK_RET_ERR_IF(DispatcherWaitEventComplete(link->deviceHandle, XLINK_NO_RW_TIMEOUT), dropEvent.header.streamId);
+                XLINK_RET_ERR_IF(DispatcherWaitEventComplete(deviceHandle, XLINK_NO_RW_TIMEOUT), dropEvent.header.streamId);
             }
 
             return X_LINK_TIMEOUT;
@@ -447,7 +445,7 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
     }
     else  // No timeout
     {
-        if (DispatcherWaitEventComplete(event->deviceHandle, timeoutMs))
+        if (DispatcherWaitEventComplete(deviceHandle, timeoutMs))
         {
             return X_LINK_TIMEOUT;
         }
