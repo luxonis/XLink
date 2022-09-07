@@ -445,24 +445,24 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t deviceHandle, unsigned int t
             continue;
     }
 
-    if (!curr->server && rc) {
-        xLinkEvent_t event = {0};
-        event.header.type = XLINK_RESET_REQ;
-        event.deviceHandle = deviceHandle;
-        mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
-        DispatcherAddEvent(EVENT_LOCAL, &event);
-        id = getSem(pthread_self(), curr);
-        int rc;
-        while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
-            continue;
-        if (id == NULL || rc) {
-            // // graceful link shutdown instead
-            // dispatcherDeviceFdDown(curr);
-            // Calling non-thread safe dispatcherReset from external thread
-            // TODO - investigate further and resolve
-            dispatcherReset(curr);
-        }
-    }
+    // if (!curr->server && rc) {
+    //     xLinkEvent_t event = {0};
+    //     event.header.type = XLINK_RESET_REQ;
+    //     event.deviceHandle = deviceHandle;
+    //     mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
+    //     DispatcherAddEvent(EVENT_LOCAL, &event);
+    //     id = getSem(pthread_self(), curr);
+    //     int rc;
+    //     while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
+    //         continue;
+    //     if (id == NULL || rc) {
+    //         // // graceful link shutdown instead
+    //         // dispatcherDeviceFdDown(curr);
+    //         // Calling non-thread safe dispatcherReset from external thread
+    //         // TODO - investigate further and resolve
+    //         dispatcherReset(curr);
+    //     }
+    // }
 
     return rc;
 }
