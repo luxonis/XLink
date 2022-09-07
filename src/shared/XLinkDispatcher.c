@@ -326,7 +326,7 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     }
 #endif
 
-    pthread_detach(schedulerState[idx].xLinkThreadId);
+    // pthread_detach(schedulerState[idx].xLinkThreadId);
 
     numSchedulers++;
     if (pthread_attr_destroy(&attr) != 0) {
@@ -339,6 +339,16 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
 
     return 0;
 }
+
+int DispatcherJoin(xLinkDeviceHandle_t *deviceHandle) {
+    XLINK_RET_IF(deviceHandle == NULL);
+
+    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+    XLINK_RET_IF(curr == NULL);
+    void* ret;
+    return pthread_join(curr->xLinkThreadId, &ret);
+}
+
 
 int DispatcherClean(xLinkDeviceHandle_t *deviceHandle) {
     XLINK_RET_IF(deviceHandle == NULL);

@@ -353,6 +353,8 @@ XLinkError_t XLinkResetRemoteTimeout(const linkId_t id, const unsigned int msTim
         return X_LINK_ERROR;
     }
 
+    DispatcherJoin(&link->deviceHandle);
+
     return ret;
 }
 
