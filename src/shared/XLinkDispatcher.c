@@ -87,10 +87,11 @@ typedef struct {
     int queueProcPriority;
 
     pthread_mutex_t queueMutex;
+    pthread_mutex_t stateMutex;
 
     XLink_sem_t addEventSem;
     XLink_sem_t notifyDispatcherSem;
-    volatile uint32_t resetXLink;
+    _Atomic(uint32_t) resetXLink;
     uint32_t semaphores;
     pthread_t xLinkThreadId;
 
@@ -101,6 +102,7 @@ typedef struct {
     uint32_t dispatcherLinkDown;
     uint32_t dispatcherDeviceFdDown;
     uint32_t server;
+    uint32_t dispatcherClean;
 } xLinkSchedulerState_t;
 
 
@@ -138,6 +140,7 @@ static pthread_mutex_t num_schedulers_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int pthread_t_compare(pthread_t a, pthread_t b);
 
 static XLink_sem_t* createSem(xLinkSchedulerState_t* curr);
+static XLink_sem_t* getSemEx(pthread_t threadId, xLinkSchedulerState_t *curr, bool lock);
 static XLink_sem_t* getSem(pthread_t threadId, xLinkSchedulerState_t *curr);
 
 #if (defined(_WIN32) || defined(_WIN64))
@@ -254,6 +257,7 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     schedulerState[idx].resetXLink = 0;
     schedulerState[idx].dispatcherLinkDown = 0;
     schedulerState[idx].dispatcherDeviceFdDown = 0;
+    schedulerState[idx].dispatcherClean = 0;
     schedulerState[idx].server = server;
 
     schedulerState[idx].deviceHandle = link->deviceHandle;
@@ -280,6 +284,10 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
         return -1;
     }
     if (pthread_mutex_init(&(schedulerState[idx].queueMutex), NULL) != 0) {
+        perror("pthread_mutex_init error");
+        return -1;
+    }
+    if (pthread_mutex_init(&(schedulerState[idx].stateMutex), NULL) != 0) {
         perror("pthread_mutex_init error");
         return -1;
     }
@@ -326,7 +334,8 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     }
 #endif
 
-    pthread_detach(schedulerState[idx].xLinkThreadId);
+    // Do not detach the thread
+    // pthread_detach(schedulerState[idx].xLinkThreadId);
 
     numSchedulers++;
     if (pthread_attr_destroy(&attr) != 0) {
@@ -339,6 +348,22 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
 
     return 0;
 }
+
+int DispatcherJoin(xLinkDeviceHandle_t *deviceHandle) {
+    XLINK_RET_IF(deviceHandle == NULL);
+
+    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+    XLINK_RET_IF(curr == NULL);
+    void* ret;
+    pthread_join(curr->xLinkThreadId, &ret);
+
+    if (dispatcherReset(curr) != 0) {
+        mvLog(MVLOG_WARN, "Failed to reset or was already reset");
+    }
+
+    return 0;
+}
+
 
 int DispatcherClean(xLinkDeviceHandle_t *deviceHandle) {
     XLINK_RET_IF(deviceHandle == NULL);
@@ -443,25 +468,6 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t deviceHandle, unsigned int t
     } else {
         while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
             continue;
-    }
-
-    if (!curr->server && rc) {
-        xLinkEvent_t event = {0};
-        event.header.type = XLINK_RESET_REQ;
-        event.deviceHandle = deviceHandle;
-        mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
-        DispatcherAddEvent(EVENT_LOCAL, &event);
-        id = getSem(pthread_self(), curr);
-        int rc;
-        while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
-            continue;
-        if (id == NULL || rc) {
-            // // graceful link shutdown instead
-            // dispatcherDeviceFdDown(curr);
-            // Calling non-thread safe dispatcherReset from external thread
-            // TODO - investigate further and resolve
-            dispatcherReset(curr);
-        }
     }
 
     return rc;
@@ -614,9 +620,11 @@ int pthread_t_compare(pthread_t a, pthread_t b)
 static XLink_sem_t* createSem(xLinkSchedulerState_t* curr)
 {
     XLINK_RET_ERR_IF(curr == NULL, NULL);
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->stateMutex) != 0, NULL);
 
-    XLink_sem_t* sem = getSem(pthread_self(), curr);
+    XLink_sem_t* sem = getSemEx(pthread_self(), curr, false);
     if (sem) {// it already exists, error
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->stateMutex) != 0, NULL);
         return NULL;
     }
 
@@ -652,30 +660,39 @@ static XLink_sem_t* createSem(xLinkSchedulerState_t* curr)
             temp++;
         }
         if (!sem) {
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->stateMutex) != 0, NULL);
             return NULL; //shouldn't happen
         }
     }
     else {
         mvLog(MVLOG_ERROR, "Error: cached semaphores %d exceeds the MAXIMUM_SEMAPHORES %d", curr->semaphores, MAXIMUM_SEMAPHORES);
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->stateMutex) != 0, NULL);
         return NULL;
     }
 
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->stateMutex) != 0, NULL);
     return sem;
 }
-
-static XLink_sem_t* getSem(pthread_t threadId, xLinkSchedulerState_t *curr)
+static XLink_sem_t* getSem(pthread_t threadId, xLinkSchedulerState_t *curr) {
+    return getSemEx(threadId, curr, true);
+}
+static XLink_sem_t* getSemEx(pthread_t threadId, xLinkSchedulerState_t *curr, bool lock)
 {
     XLINK_RET_ERR_IF(curr == NULL, NULL);
+
+    if(lock) XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->stateMutex) != 0, NULL);
 
     localSem_t* temp = curr->eventSemaphores;
     while (temp < curr->eventSemaphores + MAXIMUM_SEMAPHORES) {
         int refs = 0;
         XLINK_RET_ERR_IF(XLink_sem_get_refs(&temp->sem, &refs), NULL);
         if (pthread_t_compare(temp->threadId, threadId) && refs >= 0) {
+            if(lock) XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->stateMutex) != 0, NULL);
             return &temp->sem;
         }
         temp++;
     }
+    if(lock) XLINK_RET_ERR_IF(pthread_mutex_unlock(&curr->stateMutex) != 0, NULL);
     return NULL;
 }
 
@@ -789,7 +806,8 @@ static void* eventSchedulerRun(void* ctx)
         mvLog(MVLOG_WARN, "Thread attr destroy failed");
     }
 
-    if (dispatcherReset(curr) != 0) {
+    // Just reset, to unblock any streams
+    if (dispatcherClean(curr) != 0) {
         mvLog(MVLOG_WARN, "Failed to reset or was already reset");
     }
 
@@ -1057,8 +1075,8 @@ static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr)
 static int dispatcherClean(xLinkSchedulerState_t* curr)
 {
     XLINK_RET_ERR_IF(pthread_mutex_lock(&clean_mutex), 1);
-    if (curr->schedulerId == -1) {
-        mvLog(MVLOG_WARN,"Scheduler has already been reset or cleaned");
+    if (curr->dispatcherClean == 1) {
+        mvLog(MVLOG_WARN,"Scheduler has already been cleaned");
         if (pthread_mutex_unlock(&clean_mutex) != 0) {
             mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex");
         }
@@ -1100,8 +1118,8 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
 
     XLINK_RET_ERR_IF(pthread_mutex_lock(&num_schedulers_mutex) != 0, 1);
-    curr->schedulerId = -1;
     curr->resetXLink = 1;
+    curr->dispatcherClean = 1;
     XLink_sem_destroy(&curr->addEventSem);
     XLink_sem_destroy(&curr->notifyDispatcherSem);
     localSem_t* temp = curr->eventSemaphores;
@@ -1187,6 +1205,8 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
     // Set dispatcher link state "down", to disallow resetting again
     curr->dispatcherLinkDown = 1;
     mvLog(MVLOG_DEBUG,"Reset Successfully\n");
+
+    pthread_mutex_destroy(&(curr->stateMutex));
 
     if(pthread_mutex_unlock(&reset_mutex) != 0) {
         mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");

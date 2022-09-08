@@ -16,6 +16,10 @@
 #include "XLink/XLinkPublicDefines.h"
 #include "XLink/XLinkLog.h"
 
+// Common constants
+constexpr static auto NUM_STREAMS = 16;
+constexpr static auto NUM_PACKETS = 120;
+const uint8_t DUMMY_DATA[1024*128] = {};
 
 #ifdef XLINK_TEST_CLIENT
 // Client
@@ -24,7 +28,14 @@ int main(int argc, char** argv) {
     XLinkGlobalHandler_t gHandler;
     XLinkInitialize(&gHandler);
 
-    int numConnections = argc - 1;
+    int numConnections = 1;
+    std::string localhost = "127.0.0.1";
+    char* tmp[] = {nullptr, &localhost[0], nullptr};
+    if(argc > 1) {
+        numConnections = argc - 1;
+    } else {
+        argv = tmp;
+    }
     std::vector<std::thread> connections;
     std::atomic<bool> allSuccess{true};
     for(int connection = 0; connection < numConnections; connection++) {
@@ -47,7 +58,6 @@ int main(int argc, char** argv) {
             }
 
             // loop randomly over streams
-            constexpr static auto NUM_STREAMS = 16;
             std::vector<int> randomized;
             for(int i = 0; i < NUM_STREAMS; i++){
                 randomized.push_back(i);
@@ -59,7 +69,7 @@ int main(int argc, char** argv) {
             for(auto i : randomized){
                 threads[i] = std::thread([&, i](){
                     std::string name = "test_" + std::to_string(i);
-                    auto s = XLinkOpenStream(handler.linkId, name.c_str(), 1024);
+                    auto s = XLinkOpenStream(handler.linkId, name.c_str(), sizeof(DUMMY_DATA));
                     if(s == INVALID_STREAM_ID){
                         printf("Open stream failed...\n");
                     } else {
@@ -80,22 +90,40 @@ int main(int argc, char** argv) {
                     std::string name = "test_" + std::to_string(i);
                     auto s = streams[i];
 
-                    streamPacketDesc_t* p;
-                    XLinkError_t err = XLinkReadData(s, &p);
+                    // Perform writes first
+                    for(int packet = 0; packet < NUM_PACKETS; packet++){
+                        // assert(XLinkWriteData(s, (uint8_t*) &s, sizeof(s)) == X_LINK_SUCCESS);
+                        assert(XLinkWriteData(s, DUMMY_DATA, sizeof(DUMMY_DATA)) == X_LINK_SUCCESS);
+                    }
 
-                    if(err == X_LINK_SUCCESS && p && p->data && ((s & 0xFFFFFF) == *((streamId_t*) p->data))) {
-                        // OK
-                    } else {
-                        streamId_t id = 0;
-                        if(err == X_LINK_SUCCESS) {
-                            if(p != nullptr) {
-                                memcpy(&id, p->data, sizeof(id));
+                    for(int packet = 0; packet < NUM_PACKETS; packet++){
+                        streamPacketDesc_t* p;
+                        XLinkError_t err = XLinkReadData(s, &p);
+
+                        if(err == X_LINK_SUCCESS && p && p->data && ((s & 0xFFFFFF) == *((streamId_t*) p->data))) {
+                            // OK
+                            // printf("Packet index %d arrived OK\n", packet);
+                        } else {
+                            streamId_t id = 0;
+                            if(err == X_LINK_SUCCESS) {
+                                if(p != nullptr) {
+                                    memcpy(&id, p->data, sizeof(id));
+                                }
                             }
+
+                            printf("DESYNC error - err: %s, conn: %d, name: %s, id: 0x%08X, response id: 0x%08X\n", XLinkErrorToStr(err), connection, name.c_str(), s, id);
+                            success = false;
                         }
 
-                        printf("DESYNC error - err: %s, conn: %d, name: %s, id: 0x%08X, response id: 0x%08X\n", XLinkErrorToStr(err), connection, name.c_str(), s, id);
-                        success = false;
+                        assert(XLinkReleaseData(s) == X_LINK_SUCCESS);
                     }
+
+                    assert(XLinkCloseStream(streams[i]) == X_LINK_SUCCESS);
+
+                    if(success) {
+                        printf("All %d packets arrived\n", NUM_PACKETS);
+                    }
+
 
                 });
             }
@@ -158,25 +186,43 @@ int main(int argc, const char** argv){
     XLinkServer(&handler, X_LINK_BOOTED, X_LINK_MYRIAD_X);
 
     // loop through streams
-    constexpr static auto NUM_STREAMS = 16;
-    std::array<std::thread, NUM_STREAMS> threads;
+    std::array<std::thread, NUM_STREAMS> threadsWrite;
+    std::array<std::thread, NUM_STREAMS> threadsRead;
+    std::array<streamId_t, NUM_STREAMS> streams;
     for(int i = 0; i < NUM_STREAMS; i++){
-        threads[i] = std::thread([i](){
-            std::string name = "test_";
-            auto s = XLinkOpenStream(0, (name + std::to_string(i)).c_str(), 1024);
-            assert(s != INVALID_STREAM_ID);
-            auto w = XLinkWriteData2(s, (uint8_t*) &s, sizeof(s/2), ((uint8_t*) &s) + sizeof(s/2), sizeof(s) - sizeof(s/2));
-            assert(w == X_LINK_SUCCESS);
+        std::string name = "test_";
+        auto s = XLinkOpenStream(0, (name + std::to_string(i)).c_str(), sizeof(DUMMY_DATA));
+        assert(s != INVALID_STREAM_ID);
+        streams[i] = s;
+
+        threadsWrite[i] = std::thread([i, s](){
+            for(int packet = 0; packet < NUM_PACKETS; packet++){
+                auto w = XLinkWriteData2(s, (uint8_t*) &s, sizeof(s/2), ((uint8_t*) &s) + sizeof(s/2), sizeof(s) - sizeof(s/2));
+                assert(w == X_LINK_SUCCESS);
+            }
+        });
+        threadsRead[i] = std::thread([i, s](){
+            for(int packet = 0; packet < NUM_PACKETS; packet++){
+                streamPacketDesc_t p;
+                auto w = XLinkReadMoveData(s, &p);
+                assert(w == X_LINK_SUCCESS);
+            }
         });
     }
-    for(auto& thread : threads){
+    for(auto& thread : threadsWrite){
         thread.join();
+    }
+    for(auto& thread : threadsRead){
+        thread.join();
+    }
+    for(int i = 0; i < NUM_STREAMS; i++){
+        // assert(XLinkCloseStream(streams[i]) == X_LINK_SUCCESS);
+        // XLinkCloseStream(streams[i]);
     }
 
     std::cout << "All threads joined\n";
 
-    std::cout << "Staying online for 1 more second\n";
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    XLinkWaitLink(handler.linkId);
 
     return 0;
 }

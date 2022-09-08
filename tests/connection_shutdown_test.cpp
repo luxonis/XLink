@@ -25,7 +25,14 @@ int main(int argc, char** argv) {
     XLinkGlobalHandler_t gHandler;
     XLinkInitialize(&gHandler);
 
-    int numConnections = argc - 1;
+    int numConnections = 1;
+    std::string localhost = "127.0.0.1";
+    char* tmp[] = {nullptr, &localhost[0], nullptr};
+    if(argc > 1) {
+        numConnections = argc - 1;
+    } else {
+        argv = tmp;
+    }
     std::vector<std::thread> connections;
     std::atomic<bool> allSuccess{true};
     for(int connection = 0; connection < numConnections; connection++) {
@@ -133,19 +140,21 @@ int main(int argc, const char** argv){
         return -1;
     }
 
-    {
-        std::unique_lock<std::mutex> l(shutdownMtx);
-        bool success = shutdownCv.wait_for(l, std::chrono::seconds(3), []() {
-            return shutdown;
-        });
+    // {
+    //     std::unique_lock<std::mutex> l(shutdownMtx);
+    //     bool success = shutdownCv.wait_for(l, std::chrono::seconds(3), []() {
+    //         return shutdown;
+    //     });
 
-        XLinkResetRemote(handler.linkId);
+    //     XLinkResetRemote(handler.linkId);
 
-        if(!success) {
-            printf("timeout waiting for shutdown event...\n");
-            return -1;
-        }
-    }
+    //     if(!success) {
+    //         printf("timeout waiting for shutdown event...\n");
+    //         return -1;
+    //     }
+    // }
+    XLinkWaitLink(handler.linkId);
+
 
     std::this_thread::sleep_for(std::chrono::seconds(3));
 

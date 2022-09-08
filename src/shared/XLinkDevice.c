@@ -319,16 +319,13 @@ XLinkError_t XLinkResetRemote(const linkId_t id)
 XLinkError_t XLinkResetRemoteTimeout(const linkId_t id, const unsigned int msTimeout)
 {
     // TODO(themarpe)
-    // xLinkDeviceHandle_t deviceHandle;
-    // XLINK_RET_IF(getLinkUpDeviceHandleByLinkId(id, &deviceHandle));
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByLinkId(id, &deviceHandle));
 
-    xLinkDesc_t* link = getLinkById(id);
-    XLINK_RET_IF(link == NULL);
     // Add event to reset device. After sending it, dispatcher will close fd link
     xLinkEvent_t event = {0};
     event.header.type = XLINK_RESET_REQ;
-    // event.deviceHandle = deviceHandle;
-    event.deviceHandle = link->deviceHandle;
+    event.deviceHandle = deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);
     if(ev == NULL) {
@@ -336,24 +333,22 @@ XLinkError_t XLinkResetRemoteTimeout(const linkId_t id, const unsigned int msTim
             TypeToStr(event.header.type), event.header.id, event.header.streamName);
         return X_LINK_ERROR;
     }
-    XLinkError_t ret = DispatcherWaitEventComplete(link->deviceHandle, msTimeout);
+    XLinkError_t ret = DispatcherWaitEventComplete(deviceHandle, msTimeout);
 
     if(ret != X_LINK_SUCCESS){
         // Closing device link unblocks any blocked events
         // Afterwards the dispatcher can properly cleanup in its own thread
         // DispatcherDeviceFdDown(&deviceHandle);
-        DispatcherDeviceFdDown(&link->deviceHandle);
+        DispatcherDeviceFdDown(&deviceHandle);
     }
 
-    int rc;
-    while(((rc = XLink_sem_wait(&link->dispatcherClosedSem)) == -1) && errno == EINTR)
-        continue;
-    if(rc) {
-        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
-        return X_LINK_ERROR;
-    }
+    return DispatcherJoin(&deviceHandle);
+}
 
-    return ret;
+XLinkError_t XLinkWaitLink(const linkId_t id) {
+    xLinkDesc_t* link = getLinkById(id);
+    XLINK_RET_IF(link == NULL);
+    return DispatcherJoin(&link->deviceHandle);
 }
 
 XLinkError_t XLinkResetAll()

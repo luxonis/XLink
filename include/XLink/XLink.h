@@ -148,7 +148,6 @@ XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmw
  * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-
 XLinkError_t XLinkResetRemote(const linkId_t id);
 
 /**
@@ -158,8 +157,15 @@ XLinkError_t XLinkResetRemote(const linkId_t id);
  * @param[in] msTimeout – time in milliseconds after which operation times out
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-
 XLinkError_t XLinkResetRemoteTimeout(const linkId_t id, const unsigned int msTimeout);
+
+/**
+ * @brief Waits till device connection is over
+ * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
+ * @param[in] msTimeout – time in milliseconds after which operation times out
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkWaitLink(const linkId_t id);
 
 /**
  * @brief Retrieves USB speed of certain connected device
