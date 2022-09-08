@@ -33,7 +33,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler);
  * @param globalHandler[in] XLink global communication parameters
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkServer(XLinkHandler_t* handler, XLinkDeviceState_t state, XLinkPlatform_t platform);
+XLinkError_t XLinkServer(XLinkHandler_t* handler, const char* serial, XLinkDeviceState_t state, XLinkPlatform_t platform);
 
 /**
  * @brief Adds a callback for link down events

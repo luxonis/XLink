@@ -126,7 +126,7 @@ int main(int argc, const char** argv){
     }
     handler.devicePath = &serverIp[0];
     handler.protocol = X_LINK_TCP_IP;
-    XLinkServer(&handler, X_LINK_BOOTED, X_LINK_MYRIAD_X);
+    XLinkServer(&handler, "test", X_LINK_BOOTED, X_LINK_MYRIAD_X);
 
     auto s = XLinkOpenStream(handler.linkId, "tmp", 1024);
     if(s != INVALID_STREAM_ID) {

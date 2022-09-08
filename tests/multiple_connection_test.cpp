@@ -186,7 +186,7 @@ int main(int argc, const char** argv){
     }
     handler.devicePath = &serverIp[0];
     handler.protocol = X_LINK_TCP_IP;
-    XLinkServer(&handler, X_LINK_BOOTED, X_LINK_MYRIAD_X);
+    XLinkServer(&handler, serverIp.c_str(), X_LINK_BOOTED, X_LINK_MYRIAD_X);
 
     // loop through streams
     std::array<std::thread, NUM_STREAMS> threadsWrite;

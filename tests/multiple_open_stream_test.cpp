@@ -130,7 +130,7 @@ int main(int argc, const char** argv){
     std::string serverIp{"127.0.0.1"};
     handler.devicePath = &serverIp[0];
     handler.protocol = X_LINK_TCP_IP;
-    XLinkServer(&handler, X_LINK_BOOTED, X_LINK_MYRIAD_X);
+    XLinkServer(&handler, "test", X_LINK_BOOTED, X_LINK_MYRIAD_X);
 
     // loop through streams
     constexpr static auto NUM_STREAMS = 16;
