@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
             for(auto i : randomized){
                 threads[i] = std::thread([&, i](){
                     std::string name = "test_" + std::to_string(i);
-                    auto s = XLinkOpenStream(handler.linkId, name.c_str(), sizeof(DUMMY_DATA));
+                    auto s = XLinkOpenStream(handler.linkId, name.c_str(), sizeof(DUMMY_DATA) * 2);
                     if(s == INVALID_STREAM_ID){
                         printf("Open stream failed...\n");
                     } else {
@@ -97,17 +97,19 @@ int main(int argc, char** argv) {
                     }
 
                     for(int packet = 0; packet < NUM_PACKETS; packet++){
-                        streamPacketDesc_t* p;
-                        XLinkError_t err = XLinkReadData(s, &p);
+                        streamPacketDesc_t p;
+                        // XLinkError_t err = XLinkReadData(s, &p);
+                        XLinkError_t err = XLinkReadMoveData(s, &p);
 
-                        if(err == X_LINK_SUCCESS && p && p->data && ((s & 0xFFFFFF) == *((streamId_t*) p->data))) {
+
+                        if(err == X_LINK_SUCCESS && p.data && ((s & 0xFFFFFF) == *((streamId_t*) p.data))) {
                             // OK
                             // printf("Packet index %d arrived OK\n", packet);
                         } else {
                             streamId_t id = 0;
                             if(err == X_LINK_SUCCESS) {
-                                if(p != nullptr) {
-                                    memcpy(&id, p->data, sizeof(id));
+                                if(p.data != nullptr) {
+                                    memcpy(&id, p.data, sizeof(id));
                                 }
                             }
 
@@ -115,7 +117,8 @@ int main(int argc, char** argv) {
                             success = false;
                         }
 
-                        assert(XLinkReleaseData(s) == X_LINK_SUCCESS);
+                        XLinkDeallocateMoveData(p.data, p.length);
+                        // assert(XLinkReleaseData(s) == X_LINK_SUCCESS);
                     }
 
                     assert(XLinkCloseStream(streams[i]) == X_LINK_SUCCESS);
@@ -191,7 +194,7 @@ int main(int argc, const char** argv){
     std::array<streamId_t, NUM_STREAMS> streams;
     for(int i = 0; i < NUM_STREAMS; i++){
         std::string name = "test_";
-        auto s = XLinkOpenStream(0, (name + std::to_string(i)).c_str(), sizeof(DUMMY_DATA));
+        auto s = XLinkOpenStream(0, (name + std::to_string(i)).c_str(), sizeof(DUMMY_DATA) * 2);
         assert(s != INVALID_STREAM_ID);
         streams[i] = s;
 
@@ -206,6 +209,7 @@ int main(int argc, const char** argv){
                 streamPacketDesc_t p;
                 auto w = XLinkReadMoveData(s, &p);
                 assert(w == X_LINK_SUCCESS);
+                XLinkDeallocateMoveData(p.data, p.length);
             }
         });
     }
