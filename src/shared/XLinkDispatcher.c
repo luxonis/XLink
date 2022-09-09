@@ -91,7 +91,7 @@ typedef struct {
 
     XLink_sem_t addEventSem;
     XLink_sem_t notifyDispatcherSem;
-    _Atomic(uint32_t) resetXLink;
+    volatile uint32_t resetXLink;
     uint32_t semaphores;
     pthread_t xLinkThreadId;
 
