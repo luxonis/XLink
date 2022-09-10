@@ -80,6 +80,7 @@ typedef enum{
     X_LINK_BOOTLOADER,
     X_LINK_FLASH_BOOTED,
     X_LINK_GATE,
+    X_LINK_GATE_BOOTED,
 } XLinkDeviceState_t;
 
 typedef enum{
