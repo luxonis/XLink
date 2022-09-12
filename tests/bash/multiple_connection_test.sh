@@ -1,14 +1,23 @@
-./tests/multiple_connection_test_server 127.0.0.1:11481 &
-./tests/multiple_connection_test_server 127.0.0.1:11482 &
-./tests/multiple_connection_test_server 127.0.0.1:11483 &
-./tests/multiple_connection_test_server 127.0.0.1:11484 &
-./tests/multiple_connection_test_server 127.0.0.1:11485 &
-./tests/multiple_connection_test_server 127.0.0.1:11486 &
-./tests/multiple_connection_test_server 127.0.0.1:11487 &
-./tests/multiple_connection_test_server 127.0.0.1:11488 &
+NUM=$1
+if [[ "$#" != 1 ]]; then
+    echo "Usage $0 [num concurrent connections]"
+    exit 1
+fi
+
+IP="127.0.0.1"
+START_PORT="11490"
+
+CONNECTION_IPS=""
+for (( i=0; i < $NUM; i++ )); do
+    PORT=$(($START_PORT + $i))
+    URL=$IP:$PORT
+    ./tests/multiple_connection_test_server $URL &
+    CONNECTION_IPS="$CONNECTION_IPS $URL"
+done
+
+echo "$CONNECTION_IPS"
 sleep 1
-./tests/multiple_connection_test_client 127.0.0.1:11481 127.0.0.1:11482 127.0.0.1:11483 127.0.0.1:11484 127.0.0.1:11485 127.0.0.1:11486 127.0.0.1:11487 127.0.0.1:11488
-sleep 3
+./tests/multiple_connection_test_client $CONNECTION_IPS
 RET=$?
 kill $(jobs -p) 2> /dev/null
 exit $RET
