@@ -1155,7 +1155,7 @@ static int dispatcherDeviceFdDown(xLinkSchedulerState_t* curr){
 
     if (curr->dispatcherDeviceFdDown == 0) {
 
-        glControlFunc->closeDeviceFd(&curr->deviceHandle);
+        glControlFunc->closeDeviceFd(curr->deviceHandle);
         // Specify device FD was already closed
         curr->dispatcherDeviceFdDown = 1;
 
@@ -1186,7 +1186,7 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
     }
 
     if(!curr->dispatcherDeviceFdDown){
-        glControlFunc->closeDeviceFd(&curr->deviceHandle);
+        glControlFunc->closeDeviceFd(curr->deviceHandle);
         // Specify device FD was already closed
         curr->dispatcherDeviceFdDown = 1;
     }
@@ -1200,7 +1200,7 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
         mvLog(MVLOG_DEBUG,"can't post dispatcherClosedSem\n");
     }
 
-    glControlFunc->closeLink(curr->deviceHandle.xLinkFD, 1);
+    glControlFunc->closeLink(curr->deviceHandle);
 
     // Set dispatcher link state "down", to disallow resetting again
     curr->dispatcherLinkDown = 1;

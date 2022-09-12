@@ -24,8 +24,8 @@ typedef struct {
     int (*eventReceive) (xLinkEvent_t*);
     getRespFunction localGetResponse;
     getRespFunction remoteGetResponse;
-    void (*closeLink) (void* fd, int fullClose);
-    void (*closeDeviceFd) (xLinkDeviceHandle_t* deviceHandle);
+    void (*closeLink) (xLinkDeviceHandle_t deviceHandle);
+    void (*closeDeviceFd) (xLinkDeviceHandle_t deviceHandle);
 } DispatcherControlFunctions;
 
 XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc);

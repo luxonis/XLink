@@ -629,9 +629,11 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
     return 0;
 }
 
-void dispatcherCloseLink(void* fd, int fullClose)
+void dispatcherCloseLink(xLinkDeviceHandle_t deviceHandle)
 {
-    xLinkDesc_t* link = getLink(fd);
+    XLinkPlatformCloseRemote(deviceHandle);
+
+    xLinkDesc_t* link = getLink(deviceHandle.xLinkFD);
 
     if (!link) {
         mvLog(MVLOG_WARN, "Dispatcher link is null");
@@ -647,10 +649,6 @@ void dispatcherCloseLink(void* fd, int fullClose)
     // after the app's thread did the "is xlink valid" test. This leads to the app's thread
     // creating an `xLinkEvent_t` with outdated xlink info. When that event gets to the
     // event processing loop, the validity of the xlink state will be checked again and be handled
-    if (!fullClose) {
-        link->peerState = XLINK_DOWN;
-        return;
-    }
 
     if(pthread_mutex_lock(&availableXLinksMutex) != 0) {
         mvLog(MVLOG_FATAL, "Cannot lock availableXLinksMutex\n");
@@ -686,9 +684,9 @@ void dispatcherCloseLink(void* fd, int fullClose)
     }
 }
 
-void dispatcherCloseDeviceFd(xLinkDeviceHandle_t* deviceHandle)
+void dispatcherCloseDeviceFd(xLinkDeviceHandle_t deviceHandle)
 {
-    XLinkPlatformCloseRemote(deviceHandle);
+    XLinkPlatformDeviceFdDown(deviceHandle);
 }
 
 // ------------------------------------

@@ -70,7 +70,9 @@ static xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name);
 static int pciePlatformBootBootloader(const char *name);
 static xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name);
 
+static int pciePlatformDeviceFdDown(void *f);
 static int pciePlatformClose(void *f);
+static int tcpipPlatformDeviceFdDown(void *fd);
 static int tcpipPlatformClose(void *fd);
 
 static int pciePlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
@@ -228,27 +230,54 @@ xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProt
     }
 }
 
-xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle)
+xLinkPlatformErrorCode_t XLinkPlatformDeviceFdDown(xLinkDeviceHandle_t deviceHandle)
 {
-    if(deviceHandle->protocol == X_LINK_ANY_PROTOCOL ||
-       deviceHandle->protocol == X_LINK_NMB_OF_PROTOCOLS) {
+    if(deviceHandle.protocol == X_LINK_ANY_PROTOCOL ||
+       deviceHandle.protocol == X_LINK_NMB_OF_PROTOCOLS) {
         return X_LINK_PLATFORM_ERROR;
     }
 
-    if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+    if(!XLinkIsProtocolInitialized(deviceHandle.protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle.protocol;
     }
 
-    switch (deviceHandle->protocol) {
+    switch (deviceHandle.protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformClose(deviceHandle->xLinkFD);
+            return usbPlatformDeviceFdDown(deviceHandle.xLinkFD);
 
         case X_LINK_PCIE:
-            return pciePlatformClose(deviceHandle->xLinkFD);
+            return pciePlatformDeviceFdDown(deviceHandle.xLinkFD);
 
         case X_LINK_TCP_IP:
-            return tcpipPlatformClose(deviceHandle->xLinkFD);
+            return tcpipPlatformDeviceFdDown(deviceHandle.xLinkFD);
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+}
+
+xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t deviceHandle)
+{
+    if(deviceHandle.protocol == X_LINK_ANY_PROTOCOL ||
+       deviceHandle.protocol == X_LINK_NMB_OF_PROTOCOLS) {
+        return X_LINK_PLATFORM_ERROR;
+    }
+
+    if(!XLinkIsProtocolInitialized(deviceHandle.protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle.protocol;
+    }
+
+    switch (deviceHandle.protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+            return usbPlatformClose(deviceHandle.xLinkFD);
+
+        case X_LINK_PCIE:
+            return pciePlatformClose(deviceHandle.xLinkFD);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformClose(deviceHandle.xLinkFD);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -479,6 +508,13 @@ static char* pciePlatformStateToStr(const pciePlatformState_t platformState) {
         default: return "";
     }
 }
+
+int pciePlatformDeviceFdDown(void *f)
+{
+    // TODO(themarpe) - could unblock blocked R/W
+    return 0;
+}
+
 int pciePlatformClose(void *f)
 {
     int rc;
@@ -502,7 +538,7 @@ int pciePlatformClose(void *f)
     return rc;
 }
 
-int tcpipPlatformClose(void *fdKey)
+int tcpipPlatformDeviceFdDown(void *fdKey)
 {
 #if defined(USE_TCP_IP)
 
@@ -517,12 +553,38 @@ int tcpipPlatformClose(void *fdKey)
 
 #ifdef _WIN32
     status = shutdown(sock, SD_BOTH);
-    if (status == 0) { status = closesocket(sock); }
 #else
     if(sock != -1)
     {
         status = shutdown(sock, SHUT_RDWR);
-        if (status == 0) { status = close(sock); }
+    }
+#endif
+
+    return status;
+
+#endif
+    return -1;
+}
+
+int tcpipPlatformClose(void *fdKey)
+{
+#if defined(USE_TCP_IP)
+
+    int status = 0;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key");
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
+
+#ifdef _WIN32
+    status = closesocket(sock);
+#else
+    if(sock != -1)
+    {
+        status = close(sock);
     }
 #endif
 

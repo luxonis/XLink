@@ -70,7 +70,8 @@ UsbSpeed_t get_usb_speed();
 const char* get_mx_serial();
 #endif // __DEVICE__
 
-xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle);
+xLinkPlatformErrorCode_t XLinkPlatformDeviceFdDown(xLinkDeviceHandle_t deviceHandle);
+xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t deviceHandle);
 
 // ------------------------------------
 // Device management. End.

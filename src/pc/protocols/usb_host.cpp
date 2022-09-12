@@ -856,6 +856,11 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 }
 
+int usbPlatformDeviceFdDown(void *fdKey)
+{
+    // TODO(themarpe) - could unblock blocked R/W
+    return 0;
+}
 
 int usbPlatformClose(void *fdKey)
 {

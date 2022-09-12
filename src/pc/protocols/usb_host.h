@@ -43,6 +43,7 @@ int get_pid_by_name(const char* name);
 
 xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* path);
 int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
+int usbPlatformDeviceFdDown(void *fd);
 int usbPlatformClose(void *fd);
 int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 
