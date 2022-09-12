@@ -349,7 +349,7 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     return 0;
 }
 
-int DispatcherJoin(xLinkDeviceHandle_t *deviceHandle) {
+int DispatcherJoinAndReset(xLinkDeviceHandle_t *deviceHandle) {
     XLINK_RET_IF(deviceHandle == NULL);
 
     xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
@@ -358,7 +358,7 @@ int DispatcherJoin(xLinkDeviceHandle_t *deviceHandle) {
     pthread_join(curr->xLinkThreadId, &ret);
 
     if (dispatcherReset(curr) != 0) {
-        mvLog(MVLOG_WARN, "Failed to reset or was already reset");
+        mvLog(MVLOG_ERROR, "Failed to reset or was already reset");
     }
 
     return 0;
@@ -717,7 +717,9 @@ static void* eventReader(void* ctx)
         mvLog(MVLOG_DEBUG,"Reading %s (scheduler %d, fd %p, event id %d, event stream_id %u, event size %u)\n",
               TypeToStr(event.header.type), curr->schedulerId, event.deviceHandle.xLinkFD, event.header.id, event.header.streamId, event.header.size);
 
-        if (sc) {
+        if(sc == -42) {
+            curr->resetXLink = 1;
+        } else if(sc) {
             mvLog(MVLOG_DEBUG,"Failed to receive event (err %d)", sc);
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
             dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
@@ -732,6 +734,7 @@ static void* eventReader(void* ctx)
             // Stop receiving events when receive confirmation that the device acknowledged the reset request
             if (event.header.type == XLINK_RESET_RESP) {
                 mvLog(MVLOG_DEBUG,"Read XLINK_RESET_RESP, stopping eventReader thread.");
+                curr->resetXLink = 1;
                 break;
             }
         } else {
@@ -1104,6 +1107,10 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
             return 1;
         }
         event = dispatcherGetNextEvent(curr);
+    }
+    // to allow us to get a NULL event in scheduler thread
+    if (XLink_sem_post(&curr->notifyDispatcherSem)) {
+        mvLog(MVLOG_ERROR,"can't post semaphore\n");
     }
 
     if (pthread_mutex_lock(&(curr->queueMutex)) != 0) {

@@ -52,3 +52,6 @@ xlink_add_test(connection_shutdown_test_server connection_shutdown_test.cpp)
 target_compile_definitions(connection_shutdown_test_server PRIVATE XLINK_TEST_SERVER)
 xlink_add_test(connection_shutdown_test_client connection_shutdown_test.cpp)
 target_compile_definitions(connection_shutdown_test_client PRIVATE XLINK_TEST_CLIENT)
+
+# connect timeout test
+xlink_add_test(connect_timeout_test connect_timeout_test.cpp)

@@ -32,7 +32,7 @@ XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc);
 XLinkError_t DispatcherStart(xLinkDesc_t *deviceHandle);
 XLinkError_t DispatcherStartServer(xLinkDesc_t *deviceHandle);
 XLinkError_t DispatcherStartImpl(xLinkDesc_t *deviceHandle, bool server);
-int DispatcherJoin(xLinkDeviceHandle_t *deviceHandle);
+int DispatcherJoinAndReset(xLinkDeviceHandle_t *deviceHandle);
 int DispatcherClean(xLinkDeviceHandle_t *deviceHandle);
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle);
 

@@ -106,8 +106,8 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler);
  * @param[in,out] handler - XLink communication parameters (file path name for underlying layer)
  * @param[in] msTimeout – time in milliseconds after which operation times out
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
 XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int msTimeout);
-*/
 
 /**
  * @brief Puts device into bootloader mode

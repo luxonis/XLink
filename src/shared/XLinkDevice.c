@@ -184,7 +184,6 @@ XLinkError_t XLinkServer(XLinkHandler_t* handler, const char* serial, XLinkDevic
         continue;
 
     link->peerState = XLINK_UP;
-    link->hostClosedFD = 0;
     handler->linkId = link->id;
     return X_LINK_SUCCESS;
 }
@@ -267,14 +266,15 @@ XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
     if (DispatcherWaitEventComplete(link->deviceHandle, msTimeout)) {
+        link->peerState = XLINK_UP;
+        // Close down the fd to unblock and then join
+        DispatcherDeviceFdDown(&link->deviceHandle);
         DispatcherClean(&link->deviceHandle);
-        // TODO(themarpe) - cleaner exit in case of timeout...
-        // DispatcherDeviceFdDown(&link->deviceHandle);
+        DispatcherJoinAndReset(&link->deviceHandle);
         return X_LINK_TIMEOUT;
     }
 
     link->peerState = XLINK_UP;
-    link->hostClosedFD = 0;
     handler->linkId = link->id;
     return X_LINK_SUCCESS;
 }
@@ -338,17 +338,17 @@ XLinkError_t XLinkResetRemoteTimeout(const linkId_t id, const unsigned int msTim
     if(ret != X_LINK_SUCCESS){
         // Closing device link unblocks any blocked events
         // Afterwards the dispatcher can properly cleanup in its own thread
-        // DispatcherDeviceFdDown(&deviceHandle);
         DispatcherDeviceFdDown(&deviceHandle);
+        DispatcherClean(&deviceHandle);
     }
 
-    return DispatcherJoin(&deviceHandle);
+    return DispatcherJoinAndReset(&deviceHandle);
 }
 
 XLinkError_t XLinkWaitLink(const linkId_t id) {
     xLinkDesc_t* link = getLinkById(id);
     XLINK_RET_IF(link == NULL);
-    return DispatcherJoin(&link->deviceHandle);
+    return DispatcherJoinAndReset(&link->deviceHandle);
 }
 
 XLinkError_t XLinkResetAll()

@@ -65,11 +65,6 @@ typedef struct xLinkDesc_t {
     XLink_sem_t dispatcherClosedSem;
     UsbSpeed_t usbConnSpeed;
     char mxSerialId[XLINK_MAX_MX_ID_SIZE];
-
-    //Deprecated fields. Begin.
-    int hostClosedFD;
-    //Deprecated fields. End.
-
 } xLinkDesc_t;
 
 streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,
@@ -120,7 +115,6 @@ typedef enum
 } xLinkEventOrigin_t;
 
 #define MAX_LINKS 32
-#define MAX_LINK_DOWN_CBS 32
 
 #define MAX_EVENTS 64
 #define MAX_SCHEDULERS MAX_LINKS
