@@ -168,18 +168,6 @@ XLinkError_t XLinkResetRemoteTimeout(const linkId_t id, const unsigned int msTim
 XLinkError_t XLinkWaitLink(const linkId_t id);
 
 /**
- * @brief Retrieves USB speed of certain connected device
- * @return UsbSpeed_t enum describing the usb connection speed
- */
-UsbSpeed_t XLinkGetUSBSpeed(linkId_t id);
-
-/**
- * @brief Returns mx serial of current connected device
- * @return pointer to mx serial string
- */
-const char* XLinkGetMxSerial(linkId_t id);
-
-/**
  * @brief Returns enum string value
  * @return Pointer to null terminated string
  */

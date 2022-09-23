@@ -7,12 +7,12 @@
 /*      Include Files                                                       */
 /* **************************************************************************/
 #include <string.h>
-#include <time.h>
-#include <stdbool.h>
-#include <stdio.h>
+#include <ctime>
+#include <cstdio>
+#include <cstdlib>
 
 #include "tcpip_host.h"
-
+#include "../PlatformDeviceFd.h"
 
 #if (defined(_WIN32) || defined(_WIN64))
 #ifndef _WIN32_WINNT
@@ -37,9 +37,13 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <ifaddrs.h>
+#include <netinet/tcp.h>
 #endif
 
 #include <chrono>
+
+#define MVLOG_UNIT_NAME tcpip_host
+#include <XLinkLog.h>
 
 /* **************************************************************************/
 /*      Private Macro Definitions                                            */
@@ -525,3 +529,294 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
 
     return X_LINK_PLATFORM_SUCCESS;
 }
+
+
+int tcpipPlatformRead(void *fdKey, void *data, int size)
+{
+#if defined(USE_TCP_IP)
+    int nread = 0;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
+
+    while(nread < size)
+    {
+        int rc = recv(sock, &((char*)data)[nread], size - nread, 0);
+        if(rc <= 0)
+        {
+            return -1;
+        }
+        else
+        {
+            nread += rc;
+        }
+    }
+#endif
+    return 0;
+}
+
+int tcpipPlatformWrite(void *fdKey, void *data, int size)
+{
+#if defined(USE_TCP_IP)
+    int byteCount = 0;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
+
+    while(byteCount < size)
+    {
+        // Use send instead of write and ignore SIGPIPE
+        //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
+
+        int flags = 0;
+        #if defined(MSG_NOSIGNAL)
+            // Use flag NOSIGNAL on send call
+            flags = MSG_NOSIGNAL;
+        #endif
+
+        int rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
+        if(rc <= 0)
+        {
+            return -1;
+        }
+        else
+        {
+            byteCount += rc;
+        }
+    }
+#endif
+    return 0;
+}
+
+
+// TODO add IPv6 to tcpipPlatformConnect()
+int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
+{
+#if defined(USE_TCP_IP)
+
+    TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(sock < 0)
+    {
+        perror("socket");
+        close(sock);
+    }
+
+    int reuse_addr = 1;
+    int sc;
+    sc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(int));
+    if(sc < 0)
+    {
+        perror("setsockopt");
+        close(sock);
+    }
+
+    // Disable sigpipe reception on send
+    #if defined(SO_NOSIGPIPE)
+        const int set = 1;
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+    #endif
+
+    // parse IP + :port
+    char ip[INET_ADDRSTRLEN + 16];
+    strncpy(ip, "0.0.0.0", sizeof(ip) - 1); // ANY by default
+    int port = TCPIP_LINK_SOCKET_PORT;
+    sscanf(devPathWrite, "%16[^:]:%15d", ip, &port);
+
+    struct sockaddr_in serv_addr = {0}, client = {0};
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    // Convert address to binary
+    #if (defined(_WIN32) || defined(__USE_W32_SOCKETS)) && (_WIN32_WINNT <= 0x0501)
+        serv_addr.sin_addr.s_addr = inet_addr(ip);  // for XP
+    #else
+        inet_pton(AF_INET, ip, &serv_addr.sin_addr.s_addr);
+    #endif
+    serv_addr.sin_port = htons(port);
+    if(bind(sock, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0)
+    {
+        perror("bind");
+        close(sock);
+    }
+
+    if(listen(sock, 1) < 0)
+    {
+        perror("listen");
+        close(sock);
+    }
+
+    unsigned len = sizeof(client);
+    int connfd = accept(sock, (struct sockaddr*) &client, &len);
+    if(connfd < 0)
+    {
+        perror("accept");
+    }
+
+    // Store the socket and create a "unique" key instead
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
+    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) connfd);
+
+#else
+    assert(0 && "Selected incompatible option, compile with USE_TCP_IP set");
+#endif
+
+    return 0;
+}
+
+// TODO add IPv6 to tcpipPlatformConnect()
+int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
+{
+#if defined(USE_TCP_IP)
+    if (!devPathWrite || !fd) {
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+
+    TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+
+#if (defined(_WIN32) || defined(_WIN64) )
+    if(sock == INVALID_SOCKET)
+    {
+        return TCPIP_HOST_ERROR;
+    }
+#else
+    if(sock < 0)
+    {
+        return TCPIP_HOST_ERROR;
+    }
+#endif
+
+    // Disable sigpipe reception on send
+    #if defined(SO_NOSIGPIPE)
+        const int set = 1;
+        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
+    #endif
+
+    struct sockaddr_in serv_addr = { 0 };
+
+    const size_t maxlen = 255;
+    size_t len = strnlen(devPathWrite, maxlen + 1);
+    if (len == 0 || len >= maxlen + 1)
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    char *const serv_ip = (char *)malloc(len + 1);
+    if (!serv_ip)
+        return X_LINK_PLATFORM_ERROR;
+    serv_ip[0] = 0;
+    // Parse port if specified, or use default
+    int port = TCPIP_LINK_SOCKET_PORT;
+    sscanf(devPathWrite, "%[^:]:%d", serv_ip, &port);
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+
+    int ret = inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr);
+    free(serv_ip);
+
+    if(ret <= 0)
+    {
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    int on = 1;
+    if(setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
+    {
+        perror("setsockopt TCP_NODELAY");
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    if(connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
+    {
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    // Store the socket and create a "unique" key instead
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
+    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) sock);
+
+#endif
+    return 0;
+}
+
+
+xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name)
+{
+    return tcpip_boot_bootloader(name);
+}
+
+
+int tcpipPlatformDeviceFdDown(void *fdKey)
+{
+#if defined(USE_TCP_IP)
+
+    int status = 0;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key");
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
+
+#ifdef _WIN32
+    status = shutdown(sock, SD_BOTH);
+#else
+    if(sock != -1)
+    {
+        status = shutdown(sock, SHUT_RDWR);
+    }
+#endif
+
+    return status;
+
+#endif
+    return -1;
+}
+
+int tcpipPlatformClose(void *fdKey)
+{
+#if defined(USE_TCP_IP)
+
+    int status = 0;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key");
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
+
+#ifdef _WIN32
+    status = closesocket(sock);
+#else
+    if(sock != -1)
+    {
+        status = close(sock);
+    }
+#endif
+
+    if(destroyPlatformDeviceFdKey(fdKey)){
+        mvLog(MVLOG_FATAL, "Cannot destroy file descriptor key");
+        return -1;
+    }
+
+    return status;
+
+#endif
+    return -1;
+}
+
+
+int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length){
+    // TCPIP doesn't support a boot mechanism
+    return -1;
+}
+

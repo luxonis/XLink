@@ -49,6 +49,7 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 
 int usbPlatformRead(void *fd, void *data, int size);
 int usbPlatformWrite(void *fd, void *data, int size);
+xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name);
 
 #ifdef __cplusplus
 }

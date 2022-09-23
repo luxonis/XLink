@@ -140,6 +140,14 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 */
 xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name);
 
+int tcpipPlatformRead(void *fd, void *data, int size);
+int tcpipPlatformWrite(void *fd, void *data, int size);
+int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
+int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd);
+xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name);
+int tcpipPlatformDeviceFdDown(void *fd);
+int tcpipPlatformClose(void *fd);
+int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 
 #ifdef __cplusplus
 }

@@ -424,16 +424,6 @@ XLinkError_t XLinkProfPrint()
     return X_LINK_SUCCESS;
 }
 
-UsbSpeed_t XLinkGetUSBSpeed(linkId_t id){
-    xLinkDesc_t* link = getLinkById(id);
-    return link->usbConnSpeed;
-}
-
-const char* XLinkGetMxSerial(linkId_t id){
-    xLinkDesc_t* link = getLinkById(id);
-    return link->mxSerialId;
-}
-
 // ------------------------------------
 // API implementation. End.
 // ------------------------------------

@@ -39,6 +39,7 @@ static constexpr int USB_ENDPOINT_OUT = 0x01;
 
 static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
 
+static constexpr int USB_LINK_SOCKET_PORT = 5678;
 static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int initialized;
@@ -1052,4 +1053,9 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
     rc = usb_write(usbHandle, data, size);
 #endif  /*USE_USB_VSC*/
     return rc;
+}
+
+xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name)
+{
+    return usbLinkBootBootloader(name);
 }
