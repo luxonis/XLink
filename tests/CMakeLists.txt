@@ -12,7 +12,7 @@ macro(xlink_add_test test_name test_src)
 endmacro()
 
 # Helper 'xlink_add_client_server_test'
-macro(xlink_add_client_server_test test_name num_iterations)
+macro(xlink_add_client_server_test test_name num_iterations timeout)
     # Add client
     add_executable(${test_name}_client ${test_name}.cpp)
     target_compile_definitions(${test_name}_client PRIVATE XLINK_TEST_CLIENT)
@@ -23,13 +23,23 @@ macro(xlink_add_client_server_test test_name num_iterations)
     target_compile_definitions(${test_name}_server PRIVATE XLINK_TEST_SERVER)
     target_link_libraries(${test_name}_server ${TARGET_NAME})
 
-    # Add to test suite
+    # # Add to test suite (cmake)
+    # add_test(NAME ${test_name} COMMAND
+    #     ${CMAKE_COMMAND}
+    #     "-D CLIENT_EXECUTABLE=$<TARGET_FILE:${test_name}_client>"
+    #     "-D SERVER_EXECUTABLE=$<TARGET_FILE:${test_name}_server>"
+    #     "-D NUM_ITERATIONS=${num_iterations}"
+    #     "-P ${CMAKE_CURRENT_LIST_DIR}/cmake/test_client_server.cmake"
+    #     COMMAND_EXPAND_LISTS
+    # )
+
+    # Add to test suite (bash)
     add_test(NAME ${test_name} COMMAND
-        ${CMAKE_COMMAND}
-        "-D CLIENT_EXECUTABLE=$<TARGET_FILE:${test_name}_client>"
-        "-D SERVER_EXECUTABLE=$<TARGET_FILE:${test_name}_server>"
-        "-D NUM_ITERATIONS=${num_iterations}"
-        "-P ${CMAKE_CURRENT_LIST_DIR}/cmake/test_client_server.cmake"
+        bash "${CMAKE_CURRENT_LIST_DIR}/bash/test_client_server.sh"
+        "$<TARGET_FILE:${test_name}_server>"
+        "$<TARGET_FILE:${test_name}_client>"
+        "${num_iterations}"
+        "${timeout}"
         COMMAND_EXPAND_LISTS
     )
 endmacro()
@@ -37,7 +47,7 @@ endmacro()
 # Tests
 
 # Multiple stream open (10 iterations)
-xlink_add_client_server_test(multiple_open_stream_test 10)
+xlink_add_client_server_test(multiple_open_stream_test 10 10)
 # Multithreading search
 xlink_add_test(multithreading_search_test multithreading_search_test.cpp)
 

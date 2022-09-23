@@ -57,4 +57,5 @@ jobs:
       run: cmake --build build --parallel --config Debug
 
     - name: test
+      shell: bash
       run: ctest --test-dir build -C Debug --output-on-failure

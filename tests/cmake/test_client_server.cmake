@@ -1,5 +1,5 @@
 set(TIMEOUT 10)
-message("Server: ${SERVER_EXECUTABLE}, Client: ${CLIENT_EXECUTABLE}, Iterations: ${NUM_ITERATIONS}, Timeout: {TIMEOUT}")
+message("Server: ${SERVER_EXECUTABLE}, Client: ${CLIENT_EXECUTABLE}, Iterations: ${NUM_ITERATIONS}, Timeout: ${TIMEOUT}")
 
 foreach(iteration RANGE ${NUM_ITERATIONS})
     message(STATUS "Iteration ${iteration}...")
