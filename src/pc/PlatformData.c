@@ -279,7 +279,7 @@ static int tcpipPlatformRead(void *fdKey, void *data, int size)
         int rc = recv(sock, &((char*)data)[nread], size - nread, 0);
         if(rc <= 0)
         {
-            return -42;
+            return -1;
         }
         else
         {

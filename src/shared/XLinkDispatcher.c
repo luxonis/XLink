@@ -717,14 +717,13 @@ static void* eventReader(void* ctx)
         mvLog(MVLOG_DEBUG,"Reading %s (scheduler %d, fd %p, event id %d, event stream_id %u, event size %u)\n",
               TypeToStr(event.header.type), curr->schedulerId, event.deviceHandle.xLinkFD, event.header.id, event.header.streamId, event.header.size);
 
-        if(sc == -42) {
-            curr->resetXLink = 1;
-        } else if(sc) {
+        if(sc) {
             mvLog(MVLOG_DEBUG,"Failed to receive event (err %d)", sc);
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
             dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
             dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
             XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, NULL);
+            curr->resetXLink = 1;
             continue;
         }
 
