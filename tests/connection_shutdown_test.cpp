@@ -93,10 +93,10 @@ int main(int argc, char** argv) {
 
 #ifdef XLINK_TEST_SERVER
 
-// Add shutdown
-bool shutdown = false;
-std::mutex shutdownMtx;
-std::condition_variable shutdownCv;
+// Add shutdownBool
+bool shutdownBool = false;
+std::mutex shutdownBoolMtx;
+std::condition_variable shutdownBoolCv;
 
 // Server
 XLinkGlobalHandler_t xlinkGlobalHandler = {};
@@ -113,10 +113,10 @@ int main(int argc, const char** argv){
 
     XLinkAddLinkDownCb([](linkId_t linkId) {
         {
-            std::unique_lock<std::mutex> l(shutdownMtx);
-            shutdown = true;
+            std::unique_lock<std::mutex> l(shutdownBoolMtx);
+            shutdownBool = true;
         }
-        shutdownCv.notify_all();
+        shutdownBoolCv.notify_all();
     });
 
     XLinkHandler_t handler;
@@ -141,15 +141,15 @@ int main(int argc, const char** argv){
     }
 
     // {
-    //     std::unique_lock<std::mutex> l(shutdownMtx);
-    //     bool success = shutdownCv.wait_for(l, std::chrono::seconds(3), []() {
-    //         return shutdown;
+    //     std::unique_lock<std::mutex> l(shutdownBoolMtx);
+    //     bool success = shutdownBoolCv.wait_for(l, std::chrono::seconds(3), []() {
+    //         return shutdownBool;
     //     });
 
     //     XLinkResetRemote(handler.linkId);
 
     //     if(!success) {
-    //         printf("timeout waiting for shutdown event...\n");
+    //         printf("timeout waiting for shutdownBool event...\n");
     //         return -1;
     //     }
     // }

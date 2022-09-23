@@ -1,11 +1,12 @@
-message("Server: ${SERVER_EXECUTABLE}, Client: ${CLIENT_EXECUTABLE}, Iterations: ${NUM_ITERATIONS}")
+set(TIMEOUT 10)
+message("Server: ${SERVER_EXECUTABLE}, Client: ${CLIENT_EXECUTABLE}, Iterations: ${NUM_ITERATIONS}, Timeout: {TIMEOUT}")
 
 foreach(iteration RANGE ${NUM_ITERATIONS})
     message(STATUS "Iteration ${iteration}...")
     execute_process(
         COMMAND "${SERVER_EXECUTABLE}"
         COMMAND "${CLIENT_EXECUTABLE}"
-        # TIMEOUT 10
+        TIMEOUT "${TIMEOUT}"
         RESULT_VARIABLE err
     )
     message(STATUS "Iteration ${iteration} error: ${err}")
