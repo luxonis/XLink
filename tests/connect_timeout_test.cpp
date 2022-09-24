@@ -17,6 +17,8 @@
 #include "XLink/XLinkPublicDefines.h"
 #include "XLink/XLinkLog.h"
 
+#ifdef XLINK_TEST_CLIENT
+
 // Client
 int main(int argc, char** argv) {
 
@@ -64,3 +66,28 @@ int main(int argc, char** argv) {
     }
 }
 
+#endif
+
+
+#ifdef XLINK_TEST_SERVER
+
+
+extern "C" int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd);
+// Client
+int main(int argc, char** argv) {
+
+    std::string serverIp{"127.0.0.1"};
+    if(argc > 1) {
+        serverIp = std::string(argv[1]);
+    }
+
+    // Call server open internal function, but don't communicate over it
+    void* fd;
+    tcpipPlatformServer(serverIp.c_str(), serverIp.c_str(), &fd);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
+    return 0;
+}
+
+#endif
