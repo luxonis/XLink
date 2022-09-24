@@ -28,5 +28,5 @@ echo "$CONNECTION_IPS"
 sleep 1
 "$SOURCE_DIR/timeout.sh" -t $TIMEOUT -d 3 "$CLIENT_EXECUTABLE" $CONNECTION_IPS
 RET=$?
-kill $(jobs -p) 2> /dev/null
+wait $(jobs -p)
 exit $RET

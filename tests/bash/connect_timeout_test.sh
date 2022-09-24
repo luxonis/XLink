@@ -19,14 +19,17 @@ START_PORT="11490"
 CONNECTION_IPS=""
 for (( i=0; i < $NUM_CONNECTIONS; i++ )); do
     PORT=$(($START_PORT + $i))
-    nc -l -p $PORT &
+    if [[ $OSTYPE == 'darwin'* ]]; then
+        nc -l localhost $PORT &
+    else
+        nc -l -p $PORT &
+    fi
     CONNECTION_IPS="$CONNECTION_IPS $IP:$PORT"
 done
 
 echo "$CONNECTION_IPS"
-# sleep 1
-sleep 5
+sleep 1
 "$SOURCE_DIR/timeout.sh" -t $TIMEOUT -d 3 "$CLIENT_EXECUTABLE" $CONNECTION_IPS
 RET=$?
-kill $(jobs -p) 2> /dev/null
+kill $(jobs -p) 2> /dev/null || true
 exit $RET

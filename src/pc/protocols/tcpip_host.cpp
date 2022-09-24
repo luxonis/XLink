@@ -596,6 +596,13 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
     return 0;
 }
 
+static int tcpip_setsockopt(int __fd, int __level, int __optname, const void *__optval, socklen_t __optlen) {
+#if (defined(_WIN32) || defined(_WIN64) )
+    return setsockopt(__fd, __level, __optname, (const char*) __optval, __optlen);
+#else
+    return setsockopt(__fd, __level, __optname, __optval, __optlen);
+#endif
+}
 
 // TODO add IPv6 to tcpipPlatformConnect()
 int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
@@ -605,17 +612,17 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0)
     {
-        perror("socket");
-        close(sock);
+        mvLog(MVLOG_FATAL, "Couldn't open socket for server");
+        tcpip_close_socket(sock);
     }
 
     int reuse_addr = 1;
     int sc;
-    sc = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(int));
+    sc = tcpip_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse_addr, sizeof(int));
     if(sc < 0)
     {
-        perror("setsockopt");
-        close(sock);
+        mvLog(MVLOG_FATAL, "Couldn't set server socket options");
+        tcpip_close_socket(sock);
     }
 
     // Disable sigpipe reception on send
@@ -642,21 +649,28 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     serv_addr.sin_port = htons(port);
     if(bind(sock, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0)
     {
+        mvLog(MVLOG_FATAL, "Couldn't bind to server socket");
         perror("bind");
-        close(sock);
+        tcpip_close_socket(sock);
     }
 
     if(listen(sock, 1) < 0)
     {
-        perror("listen");
-        close(sock);
+        mvLog(MVLOG_FATAL, "Couldn't listen to server socket");
+        tcpip_close_socket(sock);
     }
 
-    unsigned len = sizeof(client);
+#if (defined(_WIN32) || defined(_WIN64) )
+    using socklen_portable = int;
+#else
+    using socklen_portable = socklen_t;
+#endif
+
+    socklen_portable len = (socklen_portable) sizeof(client);
     int connfd = accept(sock, (struct sockaddr*) &client, &len);
     if(connfd < 0)
     {
-        perror("accept");
+        mvLog(MVLOG_FATAL, "Couldn't accept a connection to server socket");
     }
 
     // Store the socket and create a "unique" key instead
@@ -725,7 +739,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     }
 
     int on = 1;
-    if(setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
+    if(tcpip_setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
     {
         perror("setsockopt TCP_NODELAY");
         tcpip_close_socket(sock);
