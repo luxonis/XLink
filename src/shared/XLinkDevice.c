@@ -256,26 +256,28 @@ XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int
         return parsePlatformError(connectStatus);
     }
 
+    xLinkDeviceHandle_t deviceHandle = link->deviceHandle;
+    linkId_t linkId = link->id;
+
     XLINK_RET_ERR_IF(
         DispatcherStart(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
 
     xLinkEvent_t event = {0};
-
     event.header.type = XLINK_PING_REQ;
-    event.deviceHandle = link->deviceHandle;
+    event.deviceHandle = deviceHandle;
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
-    if (DispatcherWaitEventComplete(link->deviceHandle, msTimeout)) {
+    if (DispatcherWaitEventComplete(deviceHandle, msTimeout)) {
         link->peerState = XLINK_UP;
         // Close down the fd to unblock and then join
-        DispatcherDeviceFdDown(&link->deviceHandle);
-        DispatcherClean(&link->deviceHandle);
-        DispatcherJoinAndReset(&link->deviceHandle);
+        DispatcherDeviceFdDown(&deviceHandle);
+        DispatcherClean(&deviceHandle);
+        DispatcherJoinAndReset(&deviceHandle);
         return X_LINK_TIMEOUT;
     }
 
     link->peerState = XLINK_UP;
-    handler->linkId = link->id;
+    handler->linkId = linkId;
     return X_LINK_SUCCESS;
 }
 

@@ -852,9 +852,9 @@ static void* eventSchedulerRun(void* ctx)
         mvLog(MVLOG_WARN, "Thread attr destroy failed");
     }
 
-    // Just reset, to unblock any streams
+    // Just clear, to unblock any streams
     if (dispatcherClean(curr) != 0) {
-        mvLog(MVLOG_WARN, "Failed to reset or was already reset");
+        mvLog(MVLOG_WARN, "Failed to clean or was already cleaned");
     }
 
     if (curr->resetXLink != 1) {

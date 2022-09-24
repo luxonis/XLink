@@ -133,19 +133,19 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, size_t buffer1Size, const uint8_t* buffer2, size_t buffer2Size)
+XLinkError_t XLinkWriteData2(streamId_t const streamId, const uint8_t* buffer1, size_t buffer1Size, const uint8_t* buffer2, size_t buffer2Size)
 {
     ASSERT_XLINK(buffer1);
     ASSERT_XLINK(buffer2);
 
     float opTime = 0;
-    xLinkDesc_t* link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
-    streamId = EXTRACT_STREAM_ID(streamId);
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
+    const streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
 
     int totalSize = buffer1Size + buffer2Size;
     xLinkEvent_t event = {0};
-    XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_REQ, totalSize,(void*)buffer1, link->deviceHandle);
+    XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_REQ, totalSize,(void*)buffer1, deviceHandle);
     event.data2 = (void*)buffer2;
     event.data2Size = buffer2Size;
 
@@ -345,13 +345,13 @@ XLinkError_t XLinkReleaseData(streamId_t const streamId)
 
 XLinkError_t XLinkReleaseSpecificData(streamId_t streamId, streamPacketDesc_t* packetDesc)
 {
-    xLinkDesc_t* link = NULL;
-    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    xLinkDeviceHandle_t deviceHandle;
+    XLINK_RET_IF(getLinkUpDeviceHandleByStreamId(streamId, &deviceHandle));
     streamId = EXTRACT_STREAM_ID(streamId);
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamId, XLINK_READ_REL_SPEC_REQ,
-        0, (void*)packetDesc->data, link->deviceHandle);
+        0, (void*)packetDesc->data, deviceHandle);
 
     XLINK_RET_IF(addEvent(&event, XLINK_NO_RW_TIMEOUT));
 
