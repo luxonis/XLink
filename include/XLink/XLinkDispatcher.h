@@ -39,7 +39,7 @@ int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle);
 xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event);
 int DispatcherWaitEventComplete(xLinkDeviceHandle_t deviceHandle, unsigned int timeoutMs);
 
-char* TypeToStr(int type);
+const char* TypeToStr(int type);
 int DispatcherUnblockEvent(eventId_t id,
                             xLinkEventType_t type,
                             streamId_t stream,

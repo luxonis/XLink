@@ -21,6 +21,12 @@
 // Global fields declaration. Begin.
 // ------------------------------------
 
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 extern XLinkGlobalHandler_t* glHandler; //TODO need to either protect this with semaphor
                                         //or make profiling data per device
 
@@ -51,6 +57,11 @@ streamDesc_t* getStreamById(void* fd, streamId_t id);
 streamDesc_t* getStreamByName(xLinkDesc_t* link, const char* name);
 
 void releaseStream(streamDesc_t* stream);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 // ------------------------------------
 // Helpers declaration. End.

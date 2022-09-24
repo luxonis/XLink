@@ -23,19 +23,16 @@ macro(xlink_add_client_server_test test_name num_iterations timeout)
     target_compile_definitions(${test_name}_server PRIVATE XLINK_TEST_SERVER)
     target_link_libraries(${test_name}_server ${TARGET_NAME})
 
-    # # Add to test suite (cmake)
-    # add_test(NAME ${test_name} COMMAND
-    #     ${CMAKE_COMMAND}
-    #     "-D CLIENT_EXECUTABLE=$<TARGET_FILE:${test_name}_client>"
-    #     "-D SERVER_EXECUTABLE=$<TARGET_FILE:${test_name}_server>"
-    #     "-D NUM_ITERATIONS=${num_iterations}"
-    #     "-P ${CMAKE_CURRENT_LIST_DIR}/cmake/test_client_server.cmake"
-    #     COMMAND_EXPAND_LISTS
-    # )
+    # Specify test script
+    if("${ARGV3}" STREQUAL "")
+        set(test_script "${CMAKE_CURRENT_LIST_DIR}/bash/test_client_server.sh")
+    else()
+        set(test_script "${CMAKE_CURRENT_LIST_DIR}/bash/${ARGV3}")
+    endif()
 
-    # Add to test suite (bash)
+    # Add to test suite
     add_test(NAME ${test_name} COMMAND
-        bash "${CMAKE_CURRENT_LIST_DIR}/bash/test_client_server.sh"
+        bash "${test_script}"
         "$<TARGET_FILE:${test_name}_server>"
         "$<TARGET_FILE:${test_name}_client>"
         "${num_iterations}"
@@ -48,20 +45,15 @@ endmacro()
 
 # Multiple stream open (10 iterations)
 xlink_add_client_server_test(multiple_open_stream_test 10 10)
+
 # Multithreading search
 xlink_add_test(multithreading_search_test multithreading_search_test.cpp)
 
-# multiple_connection_test search
-xlink_add_test(multiple_connection_test_server multiple_connection_test.cpp)
-target_compile_definitions(multiple_connection_test_server PRIVATE XLINK_TEST_SERVER)
-xlink_add_test(multiple_connection_test_client multiple_connection_test.cpp)
-target_compile_definitions(multiple_connection_test_client PRIVATE XLINK_TEST_CLIENT)
+# multiple_connection_test
+xlink_add_client_server_test(multiple_connection_test 16 10 multiple_connection_test.sh)
 
-# connection shutdown
-xlink_add_test(connection_shutdown_test_server connection_shutdown_test.cpp)
-target_compile_definitions(connection_shutdown_test_server PRIVATE XLINK_TEST_SERVER)
-xlink_add_test(connection_shutdown_test_client connection_shutdown_test.cpp)
-target_compile_definitions(connection_shutdown_test_client PRIVATE XLINK_TEST_CLIENT)
+# connection shutdown test
+xlink_add_client_server_test(connection_shutdown_test 8 10)
 
 # connect timeout test
-xlink_add_test(connect_timeout_test connect_timeout_test.cpp)
+xlink_add_client_server_test(connect_timeout_test 16 10 connect_timeout_test.sh)
