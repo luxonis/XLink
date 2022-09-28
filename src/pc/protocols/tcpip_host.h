@@ -69,6 +69,7 @@ typedef enum
     TCPIP_HOST_STATE_BOOTLOADER = 3,
     TCPIP_HOST_STATE_FLASH_BOOTED = 4,
     TCPIP_HOST_STATE_GATE = 5,
+    TCPIP_HOST_STATE_GATE_BOOTED = 6,
 } tcpipHostDeviceState_t;
 
 /* Device protocol */

@@ -650,12 +650,13 @@ const char* XLinkPlatformToStr(XLinkPlatform_t val) {
  */
 const char* XLinkDeviceStateToStr(XLinkDeviceState_t val) {
     switch (val) {
-        case XLINK_ANY_STATE: return "XLINK_ANY_STATE";
-        case XLINK_BOOTED: return "XLINK_BOOTED";
-        case XLINK_UNBOOTED: return "XLINK_UNBOOTED";
-        case XLINK_BOOTLOADER: return "XLINK_BOOTLOADER";
-        case XLINK_FLASH_BOOTED: return "XLINK_FLASH_BOOTED";
-        case XLINK_GATE: return "XLINK_GATE";
+        case XLINK_ANY_STATE: return "X_LINK_ANY_STATE";
+        case XLINK_BOOTED: return "X_LINK_BOOTED";
+        case XLINK_UNBOOTED: return "X_LINK_UNBOOTED";
+        case XLINK_BOOTLOADER: return "X_LINK_BOOTLOADER";
+        case XLINK_FLASH_BOOTED: return "X_LINK_FLASH_BOOTED";
+        case XLINK_GATE: return "X_LINK_GATE";
+        case XLINK_GATE_BOOTED: return "X_LINK_GATE_BOOTED";
         default:
             return "INVALID_ENUM_VALUE";
             break;
