@@ -90,7 +90,7 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     }
     else if(state == TCPIP_HOST_STATE_GATE_BOOTED)
     {
-        return X_LINK_GATE_BOOTED;
+        return XLINK_GATE_BOOTED;
     }
     else
     {
