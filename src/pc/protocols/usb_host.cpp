@@ -436,7 +436,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
             } else {
 
                 if( (libusb_rc = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, ((uint8_t*) mxId), sizeof(mxId))) < 0){
-                    mvLog(MVLOG_WARN, "Failed to get string descriptor");
+                    mvLog(MVLOG_WARN, "Failed to get string descriptor: %s", xlink_libusb_strerror(libusb_rc));
 
                     // retry
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
