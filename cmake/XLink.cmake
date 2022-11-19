@@ -19,8 +19,6 @@ if(WIN32)
     file(GLOB XLINK_PLATFORM_SRC "${XLINK_ROOT_DIR}/src/pc/Win/src/*.c")
     file(GLOB XLINK_PLATFORM_SRC_CPP "${XLINK_ROOT_DIR}/src/pc/Win/src/*.cpp")
     list(APPEND XLINK_SOURCES ${XLINK_PLATFORM_SRC} ${XLINK_PLATFORM_SRC_CPP})
-else()
-    list(APPEND XLINK_SOURCES "${XLINK_ROOT_DIR}/src/server/DeviceDiscovery.cpp")
 endif()
 
 if(APPLE)
