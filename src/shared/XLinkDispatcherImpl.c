@@ -308,12 +308,9 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response,
                                                                 INVALID_STREAM_ID);
                 mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - stream has been just opened with id %ld\n",
                     event->header.streamId);
-
-                printf("called on 'client' side\n");
             } else {
                 mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - do nothing. Stream will be "
                     "opened with forced id accordingly to response from the host\n");
-                printf("called on 'server' side\n");
             }
             break;
         }

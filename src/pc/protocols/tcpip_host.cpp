@@ -778,7 +778,7 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
 
                 default: {
 
-                    printf("Received invalid request, sending back no_command\n");
+                    mvLog(MVLOG_DEBUG, "Received invalid request, sending back no_command");
 
                     // send back device information response
                     tcpipHostCommand_t resp = TCPIP_HOST_CMD_NO_COMMAND;
