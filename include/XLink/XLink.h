@@ -29,11 +29,49 @@ extern "C"
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler);
 
 /**
- * @brief Initializes XLink Server
+ * @brief Initializes XLink Server and detached discovery service
  * @param globalHandler[in] XLink global communication parameters
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkServer(XLinkHandler_t* handler, const char* serial, XLinkDeviceState_t state, XLinkPlatform_t platform);
+XLinkError_t XLinkServer(XLinkHandler_t* handler, const char* deviceId, XLinkDeviceState_t state, XLinkPlatform_t platform);
+
+/**
+ * @brief Initializes only XLink Server and not discovery service
+ * @param globalHandler[in] XLink global communication parameters
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkServerOnly(XLinkHandler_t* handler);
+
+/**
+ * @brief Starts discovery service with given description of itself
+ * @param deviceId[in] Id to respond with
+ * @param state[in] State to respond with
+ * @param platform[in] Platform to respond with
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkDiscoveryServiceStart(const char* deviceId, XLinkDeviceState_t state, XLinkPlatform_t platform);
+
+/**
+ * @brief Sets a callback when discovery services receives a reset request
+ * @param cb[in] Callback
+ */
+void XLinkDiscoveryServiceSetCallbackReset(void (*cb)());
+
+/**
+ * @brief Checks whether or not a service is running
+ * @return True if service is running, false otherwise
+ */
+bool XLinkDiscoveryServiceIsRunning();
+
+/**
+ * @brief Stops discovery service. Blocking operation for max 500ms
+ */
+void XLinkDiscoveryServiceStop();
+
+/**
+ * @brief Detaches discovery service thread. Use when not intending to stop it manually
+ */
+void XLinkDiscoveryServiceDetach();
 
 /**
  * @brief Adds a callback for link down events

@@ -28,6 +28,8 @@
 #include "win_time.h"
 #endif
 
+#include "tcpip_host.h"
+
 // ------------------------------------
 // Global fields. Begin.
 // ------------------------------------
@@ -140,15 +142,38 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     return X_LINK_SUCCESS;
 }
 
+void XLinkDiscoveryServiceSetCallbackReset(void (*cb)()) {
+    tcpip_set_discovery_service_reset_callback(cb);
+}
+XLinkError_t XLinkDiscoveryServiceStart(const char* deviceId, XLinkDeviceState_t state, XLinkPlatform_t platform) {
+    parsePlatformError(tcpip_start_discovery_service(deviceId, state, platform));
+}
+bool XLinkDiscoveryServiceIsRunning() {
+    return tcpip_is_running_discovery_service();
+}
+void XLinkDiscoveryServiceStop() {
+    tcpip_stop_discovery_service();
+}
+void XLinkDiscoveryServiceDetach() {
+    tcpip_detach_discovery_service();
+}
 
-XLinkError_t XLinkServer(XLinkHandler_t* handler, const char* serial, XLinkDeviceState_t state, XLinkPlatform_t platform)
+XLinkError_t XLinkServer(XLinkHandler_t* handler, const char* deviceId, XLinkDeviceState_t state, XLinkPlatform_t platform) {
+    // Start discovery
+    XLinkError_t ret = XLinkDiscoveryServiceStart(deviceId, state, platform);
+    if(ret != X_LINK_SUCCESS)  {
+        return ret;
+    }
+
+    // Detach discovery
+    XLinkDiscoveryServiceDetach();
+
+    // Start server and return
+    return XLinkServerOnly(handler);
+}
+
+XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
 {
-    #ifndef _WIN32
-    // Start discovery if not already
-    extern void startDeviceDiscoveryService(const char*, XLinkDeviceState_t);
-    startDeviceDiscoveryService(serial, state);
-    #endif
-
     XLINK_RET_IF(handler == NULL);
     if (strnlen(handler->devicePath, MAX_PATH_LENGTH) < 2) {
         mvLog(MVLOG_ERROR, "Device path is incorrect");
@@ -614,6 +639,7 @@ const char* XLinkDeviceStateToStr(XLinkDeviceState_t val) {
         case X_LINK_BOOTLOADER: return "X_LINK_BOOTLOADER";
         case X_LINK_FLASH_BOOTED: return "X_LINK_FLASH_BOOTED";
         case X_LINK_GATE: return "X_LINK_GATE";
+        case X_LINK_GATE_BOOTED: return "X_LINK_GATE_BOOTED";
         default:
             return "INVALID_ENUM_VALUE";
             break;

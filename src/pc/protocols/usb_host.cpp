@@ -99,8 +99,9 @@ static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceS
 static std::string getLibusbDevicePath(libusb_device *dev);
 static libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev, std::string& outMxId);
 static const char* xlink_libusb_strerror(int x);
-
-
+#ifdef _WIN32
+std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev);
+#endif
 
 extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
@@ -113,7 +114,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
     static libusb_device **devs = NULL;
     auto numDevices = libusb_get_device_list(context, &devs);
     if(numDevices < 0) {
-        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
+        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(static_cast<int>(numDevices)));
         return X_LINK_PLATFORM_ERROR;
     }
 
@@ -226,7 +227,7 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libu
     static libusb_device **devs = NULL;
     auto numDevices = libusb_get_device_list(context, &devs);
     if(numDevices < 0) {
-        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
+        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(static_cast<int>(numDevices)));
         return X_LINK_PLATFORM_ERROR;
     }
 
@@ -324,6 +325,18 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 if (libusb_rc < 0){
                     // Some kind of error, either NO_MEM, ACCESS, NO_DEVICE or other
                     mvLog(MVLOG_DEBUG, "libusb_open: %s", xlink_libusb_strerror(libusb_rc));
+
+                    // If WIN32, access error and state == BOOTED
+                    #ifdef _WIN32
+                    if(libusb_rc == LIBUSB_ERROR_ACCESS && state == X_LINK_BOOTED) {
+                        auto winMxId = getWinUsbMxId({pDesc->idVendor, pDesc->idProduct}, dev);
+                        if(winMxId != "") {
+                            strncpy(mxId, winMxId.c_str(), sizeof(mxId) - 1);
+                            libusb_rc = 0;
+                            break;
+                        }
+                    }
+                    #endif
 
                     // retry
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -1059,3 +1072,91 @@ xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name)
 {
     return usbLinkBootBootloader(name);
 }
+
+#ifdef _WIN32
+#include <initguid.h>
+#include <usbiodef.h>
+#pragma comment(lib, "setupapi.lib")
+#include <setupapi.h>
+std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
+    if (dev == NULL) return {};
+
+    constexpr int MAX_NUM_DEVICES = 128;
+    struct WinUsbDevList2 {
+        HDEVINFO devInfo;
+        SP_DEVINFO_DATA infos[MAX_NUM_DEVICES];
+    };
+    WinUsbDevList2 devList;
+    WinUsbDevList2* pDevList = &devList;
+
+    std::string deviceId = "";
+
+    pDevList->devInfo = SetupDiGetClassDevs(&GUID_DEVINTERFACE_USB_DEVICE, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (pDevList->devInfo == INVALID_HANDLE_VALUE) {
+        return {};
+    }
+
+    // create list
+    for(int i = 0; i < MAX_NUM_DEVICES; i++) {
+        pDevList->infos[i].cbSize = sizeof(SP_DEVINFO_DATA);
+    }
+
+    for(int i = 0; SetupDiEnumDeviceInfo(pDevList->devInfo, i, pDevList->infos + i) && i < MAX_NUM_DEVICES; i++) {
+        char instance_id[128] = {};
+        if(!SetupDiGetDeviceInstanceIdA(pDevList->devInfo, pDevList->infos + i, (PSTR) instance_id, sizeof(instance_id), NULL)) {
+            continue;
+        }
+        char serial_id[128] = {};
+        int vid = 0, pid = 0;
+        if(sscanf(instance_id, "USB\\VID_%x&PID_%x\\%s", &vid, &pid, serial_id) != 3) {
+            continue;
+        }
+
+        char location_paths[1024] = {};
+        if (!SetupDiGetDeviceRegistryProperty(pDevList->devInfo, pDevList->infos + i, SPDRP_LOCATION_PATHS, NULL, (PBYTE)&location_paths, sizeof(location_paths), NULL)) {
+            continue;
+        }
+
+        char* full_path = location_paths;
+        while (*full_path) {
+
+            std::string holder(full_path);
+            holder.resize(holder.size() + 32);
+
+            size_t pos = 0;
+            std::string out = "";
+            if ((pos = std::string(holder.c_str()).find("#USBROOT")) != std::string::npos) {
+                int off = 0;
+                int port = 0;
+                if (sscanf(holder.c_str() + pos, "#USBROOT(%4d)%n", &port, &off) == 1) {
+                    pos += off;
+                    out += std::to_string(port + 1); // USBROOT+1 to match
+                    while (sscanf(holder.c_str() + pos, "#USB(%4d)%n", &port, &off) == 1) {
+                        pos += off;
+                        out += "." + std::to_string(port);
+                    }
+                }
+            }
+
+            if(vidpid.first == vid && vidpid.second == pid && out == getLibusbDevicePath(dev)) {
+                // compare
+                deviceId = serial_id;
+                break;
+            }
+
+            // Move to next string
+            full_path = full_path + strlen(full_path) + 1;
+        }
+
+        if(!deviceId.empty()) {
+            break;
+        }
+    }
+
+    // Free dev info
+    SetupDiDestroyDeviceInfoList(pDevList->devInfo);
+
+    // Return deviceId if found
+    return deviceId;
+}
+#endif
