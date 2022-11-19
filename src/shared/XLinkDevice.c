@@ -146,7 +146,7 @@ void XLinkDiscoveryServiceSetCallbackReset(void (*cb)()) {
     tcpip_set_discovery_service_reset_callback(cb);
 }
 XLinkError_t XLinkDiscoveryServiceStart(const char* deviceId, XLinkDeviceState_t state, XLinkPlatform_t platform) {
-    parsePlatformError(tcpip_start_discovery_service(deviceId, state, platform));
+    return parsePlatformError(tcpip_start_discovery_service(deviceId, state, platform));
 }
 bool XLinkDiscoveryServiceIsRunning() {
     return tcpip_is_running_discovery_service();

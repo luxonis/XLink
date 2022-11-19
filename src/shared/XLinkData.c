@@ -133,7 +133,7 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkWriteData2(streamId_t const streamId, const uint8_t* buffer1, size_t buffer1Size, const uint8_t* buffer2, size_t buffer2Size)
+XLinkError_t XLinkWriteData2(streamId_t const streamId, const uint8_t* buffer1, int buffer1Size, const uint8_t* buffer2, int buffer2Size)
 {
     ASSERT_XLINK(buffer1);
     ASSERT_XLINK(buffer2);

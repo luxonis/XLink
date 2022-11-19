@@ -12,20 +12,6 @@
 #include "XLinkPlatform.h"
 #include "XLinkPublicDefines.h"
 
-
-#if (defined(_WIN32) || defined(_WIN64))
-#include <winsock2.h>
-#include <Ws2tcpip.h>
-typedef SOCKET TCPIP_SOCKET;
-#else
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <unistd.h>
-typedef int TCPIP_SOCKET;
-#endif
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -55,14 +41,12 @@ typedef enum
 /*      Public Function Declarations                                        */
 /* **************************************************************************/
 
+#ifdef USE_TCP_IP
+
 /**
- * @brief       Close socket
- *
- * @param[in]   socket Socket
- * @retval      TCPIP_HOST_ERROR Failed to close socket
- * @retval      TCPIP_HOST_SUCCESS Success to close socket
+ * @brief Initializes TCP/IP protocol
 */
-tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET socket);
+tcpipHostError_t tcpip_initialize();
 
 /**
  * @brief       Broadcast message and get all devices responses with their IPs
@@ -99,6 +83,28 @@ void tcpip_stop_discovery_service();
 void tcpip_detach_discovery_service();
 void tcpip_set_discovery_service_reset_callback(void (*cb)());
 bool tcpip_is_running_discovery_service();
+
+#else
+
+tcpipHostError_t tcpip_initialize() { return TCPIP_HOST_ERROR; }
+xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count) { return X_LINK_PLATFORM_ERROR; }
+xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name) { return X_LINK_PLATFORM_ERROR; }
+int tcpipPlatformRead(void *fd, void *data, int size) { return -1; }
+int tcpipPlatformWrite(void *fd, void *data, int size) { return -1; }
+int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd) { return -1; }
+int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd) { return -1; }
+xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name) { return X_LINK_PLATFORM_ERROR; }
+int tcpipPlatformDeviceFdDown(void *fd) { return -1; }
+int tcpipPlatformClose(void *fd) { return -1; }
+int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) { return -1; }
+xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDeviceState_t state, XLinkPlatform_t platform) { return X_LINK_PLATFORM_ERROR; }
+void tcpip_stop_discovery_service() {}
+void tcpip_detach_discovery_service() {}
+void tcpip_set_discovery_service_reset_callback(void (*cb)()) {}
+bool tcpip_is_running_discovery_service() { return false; }
+
+#endif
+
 
 #ifdef __cplusplus
 }

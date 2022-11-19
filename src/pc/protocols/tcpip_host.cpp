@@ -34,24 +34,22 @@
 #include <Iphlpapi.h>
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
+using TCPIP_SOCKET = SOCKET;
 
 #else
 
 // *Unix specifics
-#include <sys/socket.h>
 #include <arpa/inet.h>
-#include <netdb.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <ifaddrs.h>
 #include <netinet/tcp.h>
+using TCPIP_SOCKET = int;
 
 #endif
 
@@ -66,7 +64,7 @@ typedef enum
 } tcpipHostCommand_t;
 
 /* Device state */
-typedef enum : uint32_t
+typedef enum
 {
     TCPIP_HOST_STATE_INVALID = 0,
     TCPIP_HOST_STATE_BOOTED = 1,
@@ -283,9 +281,25 @@ static tcpipHostError_t tcpip_create_socket(TCPIP_SOCKET* out_sock, bool broadca
 
 static tcpipHostError_t tcpip_create_socket_broadcast(TCPIP_SOCKET* out_sock, std::chrono::milliseconds timeout = std::chrono::milliseconds(0))
 {
-    return tcpip_create_socket(out_sock, true, timeout.count());
+    return tcpip_create_socket(out_sock, true, static_cast<int>(timeout.count()));
 }
 
+static tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET sock) {
+#if (defined(_WIN32) || defined(_WIN64) )
+    if(sock != INVALID_SOCKET)
+    {
+        closesocket(sock);
+        return TCPIP_HOST_SUCCESS;
+    }
+#else
+    if(sock != -1)
+    {
+        close(sock);
+        return TCPIP_HOST_SUCCESS;
+    }
+#endif
+    return TCPIP_HOST_ERROR;
+}
 
 
 static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
@@ -400,22 +414,18 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
 /* **************************************************************************/
 /*      Public Function Definitions                                         */
 /* **************************************************************************/
-tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET sock)
-{
-#if (defined(_WIN32) || defined(_WIN64) )
-    if(sock != INVALID_SOCKET)
-    {
-        closesocket(sock);
-        return TCPIP_HOST_SUCCESS;
-    }
-#else
-    if(sock != -1)
-    {
-        close(sock);
-        return TCPIP_HOST_SUCCESS;
+
+tcpipHostError_t tcpip_initialize() {
+#if (defined(_WIN32) || defined(_WIN64))
+    WSADATA wsa_data;
+    int ret = WSAStartup(MAKEWORD(2,2), &wsa_data);
+    if(ret != 0) {
+        mvLog(MVLOG_FATAL, "Couldn't initialize Winsock DLL using WSAStartup function. (Return value: %d)", ret);
+        return TCPIP_HOST_ERROR;
     }
 #endif
-    return TCPIP_HOST_ERROR;
+
+    return TCPIP_HOST_SUCCESS;
 }
 
 xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count)
@@ -638,7 +648,6 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
 
 int tcpipPlatformRead(void *fdKey, void *data, int size)
 {
-#if defined(USE_TCP_IP)
     int nread = 0;
 
     void* tmpsockfd = NULL;
@@ -660,13 +669,11 @@ int tcpipPlatformRead(void *fdKey, void *data, int size)
             nread += rc;
         }
     }
-#endif
     return 0;
 }
 
 int tcpipPlatformWrite(void *fdKey, void *data, int size)
 {
-#if defined(USE_TCP_IP)
     int byteCount = 0;
 
     void* tmpsockfd = NULL;
@@ -697,7 +704,7 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
             byteCount += rc;
         }
     }
-#endif
+
     return 0;
 }
 
@@ -712,8 +719,6 @@ static int tcpip_setsockopt(int __fd, int __level, int __optname, const void *__
 // TODO add IPv6 to tcpipPlatformConnect()
 int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
 {
-#if defined(USE_TCP_IP)
-
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0)
     {
@@ -782,17 +787,12 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) connfd);
 
-#else
-    assert(0 && "Selected incompatible option, compile with USE_TCP_IP set");
-#endif
-
     return 0;
 }
 
 // TODO add IPv6 to tcpipPlatformConnect()
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
-#if defined(USE_TCP_IP)
     if (!devPathWrite || !fd) {
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
@@ -861,7 +861,6 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) sock);
 
-#endif
     return 0;
 }
 
@@ -874,8 +873,6 @@ xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name)
 
 int tcpipPlatformDeviceFdDown(void *fdKey)
 {
-#if defined(USE_TCP_IP)
-
     int status = 0;
 
     void* tmpsockfd = NULL;
@@ -895,15 +892,10 @@ int tcpipPlatformDeviceFdDown(void *fdKey)
 #endif
 
     return status;
-
-#endif
-    return -1;
 }
 
 int tcpipPlatformClose(void *fdKey)
 {
-#if defined(USE_TCP_IP)
-
     int status = 0;
 
     void* tmpsockfd = NULL;
@@ -928,9 +920,6 @@ int tcpipPlatformClose(void *fdKey)
     }
 
     return status;
-
-#endif
-    return -1;
 }
 
 
@@ -938,7 +927,6 @@ int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmwa
     // TCPIP doesn't support a boot mechanism
     return -1;
 }
-
 
 
 // Discovery Service
@@ -1092,6 +1080,7 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
         }
     });
 
+    return X_LINK_PLATFORM_SUCCESS;
 }
 
 void tcpip_stop_discovery_service() {
