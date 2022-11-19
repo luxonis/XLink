@@ -331,7 +331,7 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
         setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
     #endif
 
-    struct sockaddr_in serv_addr = {}, client = {};
+    struct sockaddr_in serv_addr = { 0 }, client = { 0 };
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);

@@ -51,62 +51,6 @@ typedef enum
     TCPIP_INVALID_PARAMETERS = -5
 } tcpipHostError_t;
 
-/* Host-to-device command list */
-typedef enum
-{
-    TCPIP_HOST_CMD_NO_COMMAND = 0,
-    TCPIP_HOST_CMD_DEVICE_DISCOVER = 1,
-    TCPIP_HOST_CMD_DEVICE_INFO = 2,
-    TCPIP_HOST_CMD_RESET = 3,
-    TCPIP_HOST_CMD_DEVICE_DISCOVERY_EX = 4,
-} tcpipHostCommand_t;
-
-/* Device state */
-typedef enum
-{
-    TCPIP_HOST_STATE_BOOTED = 1,
-    TCPIP_HOST_STATE_UNBOOTED = 2,
-    TCPIP_HOST_STATE_BOOTLOADER = 3,
-    TCPIP_HOST_STATE_FLASH_BOOTED = 4,
-    TCPIP_HOST_STATE_GATE = 5,
-    TCPIP_HOST_STATE_GATE_BOOTED = 6,
-} tcpipHostDeviceState_t;
-
-/* Device protocol */
-typedef enum
-{
-    TCPIP_HOST_PROTOCOL_USB_VSC = 0,
-    TCPIP_HOST_PROTOCOL_USB_CDC = 1,
-    TCPIP_HOST_PROTOCOL_PCIE = 2,
-    TCPIP_HOST_PROTOCOL_IPC = 3,
-    TCPIP_HOST_PROTOCOL_TCP_IP = 4,
-} tcpipHostDeviceProtocol_t;
-
-/* Device platform */
-typedef enum
-{
-    TCPIP_HOST_PLATFORM_MYRIAD_X = 2,
-    TCPIP_HOST_PLATFORM_KEEMBAY = 3,
-} tcpipHostDevicePlatform_t;
-/* Device response payload */
-typedef struct
-{
-    tcpipHostCommand_t command;
-    char mxid[32];
-    uint32_t state;
-} tcpipHostDeviceDiscoveryResp_t;
-
-typedef struct
-{
-    tcpipHostCommand_t command;
-    char id[32];
-    uint32_t state;
-    uint32_t protocol;
-    uint32_t platform;
-    uint16_t portHttp;
-    uint16_t portHttps;
-} tcpipHostDeviceDiscoveryExResp_t;
-
 /* **************************************************************************/
 /*      Public Function Declarations                                        */
 /* **************************************************************************/
@@ -141,6 +85,11 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 */
 xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name);
 
+xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDeviceState_t state, XLinkPlatform_t platform);
+void tcpip_stop_discovery_service();
+void tcpip_detach_discovery_service();
+void tcpip_set_discovery_service_reset_callback(void (*cb)());
+bool tcpip_is_running_discovery_service();
 
 #ifdef __cplusplus
 }

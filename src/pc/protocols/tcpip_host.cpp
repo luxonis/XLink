@@ -3,17 +3,24 @@
  * @brief   TCP/IP helper definitions
 */
 
-/* **************************************************************************/
-/*      Include Files                                                       */
-/* **************************************************************************/
-#include <string.h>
-#include <time.h>
-#include <stdbool.h>
-#include <stdio.h>
-
 #include "tcpip_host.h"
 
+#include <cstring>
+#include <string>
+#include <ctime>
+#include <cstdio>
+#include <functional>
+#include <thread>
+#include <mutex>
+#include <cassert>
+#include <chrono>
+#include <cstddef>
 
+
+#define MVLOG_UNIT_NAME tcpip_host
+#include "XLinkLog.h"
+
+// Windows specifics
 #if (defined(_WIN32) || defined(_WIN64))
 #ifndef _WIN32_WINNT
 #define _WIN32_WINNT 0x0601  /* Windows 7. */
@@ -23,7 +30,10 @@
 #include <Iphlpapi.h>
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
+
 #else
+
+// *Unix specifics
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -37,9 +47,81 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <ifaddrs.h>
+
 #endif
 
-#include <chrono>
+/* Host-to-device command list */
+typedef enum
+{
+    TCPIP_HOST_CMD_NO_COMMAND = 0,
+    TCPIP_HOST_CMD_DEVICE_DISCOVER = 1,
+    TCPIP_HOST_CMD_DEVICE_INFO = 2,
+    TCPIP_HOST_CMD_RESET = 3,
+    TCPIP_HOST_CMD_DEVICE_DISCOVERY_EX = 4,
+} tcpipHostCommand_t;
+
+/* Device state */
+typedef enum : uint32_t
+{
+    TCPIP_HOST_STATE_INVALID = 0,
+    TCPIP_HOST_STATE_BOOTED = 1,
+    TCPIP_HOST_STATE_UNBOOTED = 2,
+    TCPIP_HOST_STATE_BOOTLOADER = 3,
+    TCPIP_HOST_STATE_FLASH_BOOTED = 4,
+    TCPIP_HOST_STATE_GATE = 5,
+    TCPIP_HOST_STATE_GATE_BOOTED = 6,
+} tcpipHostDeviceState_t;
+
+/* Device protocol */
+typedef enum
+{
+    TCPIP_HOST_PROTOCOL_USB_VSC = 0,
+    TCPIP_HOST_PROTOCOL_USB_CDC = 1,
+    TCPIP_HOST_PROTOCOL_PCIE = 2,
+    TCPIP_HOST_PROTOCOL_IPC = 3,
+    TCPIP_HOST_PROTOCOL_TCP_IP = 4,
+} tcpipHostDeviceProtocol_t;
+
+/* Device platform */
+typedef enum
+{
+    TCPIP_HOST_PLATFORM_INVALID = 0,
+    TCPIP_HOST_PLATFORM_MYRIAD_X = 2,
+    TCPIP_HOST_PLATFORM_KEEMBAY = 3,
+} tcpipHostDevicePlatform_t;
+/* Device response payload */
+typedef struct
+{
+    tcpipHostCommand_t command;
+    char mxid[32];
+    uint32_t state;
+} tcpipHostDeviceDiscoveryResp_t;
+
+typedef struct
+{
+    tcpipHostCommand_t command;
+    char mxid[32];
+    int32_t linkSpeed = 0;
+    int32_t linkFullDuplex = 0;
+    int32_t gpioBootMode = 0;
+} tcpipHostDeviceInformationResp_t;
+
+typedef struct
+{
+    tcpipHostCommand_t command;
+    char id[32];
+    uint32_t state;
+    uint32_t protocol;
+    uint32_t platform;
+    uint16_t portHttp;
+    uint16_t portHttps;
+} tcpipHostDeviceDiscoveryExResp_t;
+
+typedef struct
+{
+    tcpipHostCommand_t command;
+} tcpipHostDeviceDiscoveryReq_t;
+
 
 /* **************************************************************************/
 /*      Private Macro Definitions                                            */
@@ -49,14 +131,11 @@
 //#define HAS_DEBUG
 #undef HAS_DEBUG
 
-#define BROADCAST_UDP_PORT                  11491
+static constexpr const auto DEFAULT_DEVICE_DISCOVERY_PORT = 11491;
+static constexpr const auto DEFAULT_DEVICE_DISCOVERY_POOL_TIMEOUT = std::chrono::milliseconds{500};
 
-#define MAX_IFACE_CHAR                      64
-#define MAX_DEVICE_DISCOVERY_IFACE          10
-
-#define MSEC_TO_USEC(x)                     (x * 1000)
-#define DEVICE_RES_TIMEOUT_MSEC             20
-
+constexpr int MSEC_TO_USEC(int x) { return x * 1000; }
+static constexpr auto DEVICE_DISCOVERY_SOCKET_TIMEOUT = std::chrono::milliseconds{20};
 static constexpr auto DEVICE_DISCOVERY_RES_TIMEOUT = std::chrono::milliseconds{200};
 
 #ifdef HAS_DEBUG
@@ -65,6 +144,18 @@ static constexpr auto DEVICE_DISCOVERY_RES_TIMEOUT = std::chrono::milliseconds{2
 #define DEBUG(fmt, ...) do {} while(0)
 #endif
 
+
+static tcpipHostDeviceState_t tcpip_convert_device_state(XLinkDeviceState_t state) {
+    switch (state) {
+        case XLinkDeviceState_t::X_LINK_BOOTED: return TCPIP_HOST_STATE_BOOTED;
+        case XLinkDeviceState_t::X_LINK_UNBOOTED: return TCPIP_HOST_STATE_UNBOOTED;
+        case XLinkDeviceState_t::X_LINK_BOOTLOADER: return TCPIP_HOST_STATE_BOOTLOADER;
+        case XLinkDeviceState_t::X_LINK_FLASH_BOOTED: return TCPIP_HOST_STATE_FLASH_BOOTED;
+        case XLinkDeviceState_t::X_LINK_GATE: return TCPIP_HOST_STATE_GATE;
+        case XLinkDeviceState_t::X_LINK_GATE_BOOTED: return TCPIP_HOST_STATE_GATE_BOOTED;
+    }
+    return TCPIP_HOST_STATE_INVALID;
+}
 
 static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
 {
@@ -125,6 +216,14 @@ static XLinkPlatform_t tcpip_convert_device_platform(uint32_t platform)
     }
 }
 
+static tcpipHostDevicePlatform_t tcpip_convert_device_platform(XLinkPlatform_t platform) {
+    switch (platform) {
+        case X_LINK_MYRIAD_X: return TCPIP_HOST_PLATFORM_MYRIAD_X;
+        case X_LINK_KEEMBAY: return TCPIP_HOST_PLATFORM_KEEMBAY;
+    }
+    return TCPIP_HOST_PLATFORM_INVALID;
+}
+
 static tcpipHostError_t tcpip_create_socket(TCPIP_SOCKET* out_sock, bool broadcast, int timeout_ms)
 {
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -160,25 +259,27 @@ static tcpipHostError_t tcpip_create_socket(TCPIP_SOCKET* out_sock, bool broadca
 #endif
 
     // Specify timeout
+    if(timeout_ms != 0) {
 #if (defined(_WIN32) || defined(_WIN64) )
-    int read_timeout = timeout_ms;
+        int read_timeout = timeout_ms;
 #else
-    struct timeval read_timeout;
-    read_timeout.tv_sec = 0;
-    read_timeout.tv_usec = MSEC_TO_USEC(timeout_ms);
+        struct timeval read_timeout;
+        read_timeout.tv_sec = 0;
+        read_timeout.tv_usec = MSEC_TO_USEC(timeout_ms);
 #endif
-    if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &read_timeout, sizeof(read_timeout)) < 0)
-    {
-        return TCPIP_HOST_ERROR;
+        if(setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &read_timeout, sizeof(read_timeout)) < 0)
+        {
+            return TCPIP_HOST_ERROR;
+        }
     }
 
     *out_sock = sock;
     return TCPIP_HOST_SUCCESS;
 }
 
-static tcpipHostError_t tcpip_create_socket_broadcast(TCPIP_SOCKET* out_sock)
+static tcpipHostError_t tcpip_create_socket_broadcast(TCPIP_SOCKET* out_sock, std::chrono::milliseconds timeout = std::chrono::milliseconds(0))
 {
-    return tcpip_create_socket(out_sock, true, DEVICE_RES_TIMEOUT_MSEC);
+    return tcpip_create_socket(out_sock, true, timeout.count());
 }
 
 
@@ -208,7 +309,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
     struct sockaddr_in broadcast = { 0 };
     broadcast.sin_addr.s_addr = INADDR_BROADCAST;
     broadcast.sin_family = AF_INET;
-    broadcast.sin_port = htons(BROADCAST_UDP_PORT);
+    broadcast.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
     for (DWORD i = 0; i < ipaddrtable->dwNumEntries; ++i) {
 
         // Get broadcast IP
@@ -269,7 +370,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
                 struct sockaddr_in broadcast_addr;
                 broadcast_addr.sin_family = family;
                 broadcast_addr.sin_addr.s_addr = ip_broadcast.sin_addr.s_addr;
-                broadcast_addr.sin_port = htons(BROADCAST_UDP_PORT);
+                broadcast_addr.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
 
                 tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
                 if(sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr)) < 0)
@@ -338,7 +439,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     }
 
     // Create socket first (also capable of doing broadcasts)
-    if(tcpip_create_socket_broadcast(&sock) != TCPIP_HOST_SUCCESS){
+    if(tcpip_create_socket_broadcast(&sock, DEVICE_DISCOVERY_SOCKET_TIMEOUT) != TCPIP_HOST_SUCCESS){
         return X_LINK_PLATFORM_ERROR;
     }
 
@@ -348,7 +449,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
         // send unicast device discovery
         struct sockaddr_in device_address;
         device_address.sin_family = AF_INET;
-        device_address.sin_port = htons(BROADCAST_UDP_PORT);
+        device_address.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
 
         // Convert address to binary
         #if (defined(_WIN32) || defined(__USE_W32_SOCKETS)) && (_WIN32_WINNT <= 0x0501)
@@ -510,7 +611,7 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     // send unicast reboot to bootloader
     struct sockaddr_in device_address;
     device_address.sin_family = AF_INET;
-    device_address.sin_port = htons(BROADCAST_UDP_PORT);
+    device_address.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
 
     // Convert address to binary
     #if (defined(_WIN32) || defined(__USE_W32_SOCKETS)) && (_WIN32_WINNT <= 0x0501)
@@ -528,4 +629,173 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     tcpip_close_socket(sock);
 
     return X_LINK_PLATFORM_SUCCESS;
+}
+
+
+// Discovery Service
+static std::thread serviceThread;
+static std::mutex serviceMutex;
+static std::atomic<bool> serviceRunning{false};
+static std::function<void()> serviceCallback = nullptr;
+
+void tcpip_set_discovery_service_reset_callback(void (*cb)()) {
+    std::unique_lock<std::mutex> lock(serviceMutex);
+    serviceCallback = cb;
+}
+
+xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDeviceState_t state, XLinkPlatform_t platform) {
+    // Parse arguments first
+    auto deviceState = tcpip_convert_device_state(state);
+    auto devicePlatform = tcpip_convert_device_platform(platform);
+    if(deviceState == TCPIP_HOST_STATE_INVALID || devicePlatform == TCPIP_HOST_PLATFORM_INVALID) {
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+    if(id == nullptr) {
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+    std::string deviceId{id};
+    auto resetCb = serviceCallback;
+
+    // Lock and proceed to start the thread
+    std::unique_lock<std::mutex> lock(serviceMutex);
+
+    // The service must be stopped first
+    if(serviceRunning) {
+        return X_LINK_PLATFORM_ERROR;
+    }
+    if(serviceThread.joinable()) {
+        serviceThread.join();
+    }
+
+    // Start service
+    serviceRunning = true;
+    serviceThread = std::thread([deviceId, deviceState, devicePlatform, resetCb](){
+        // Historical artifact
+        int gpioBootMode = 0x3;
+
+        TCPIP_SOCKET sockfd;
+        if(tcpip_create_socket_broadcast(&sockfd, DEFAULT_DEVICE_DISCOVERY_POOL_TIMEOUT) < 0)
+        {
+            mvLog(MVLOG_FATAL, "Failure creating socket. Couldn't start device discovery service");
+            return;
+        }
+
+        struct sockaddr_in recv_addr;
+        recv_addr.sin_family = AF_INET;
+        recv_addr.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
+        recv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        if(bind(sockfd, (struct sockaddr*) &recv_addr, sizeof(recv_addr)) < 0)
+        {
+            mvLog(MVLOG_FATAL, "Failure binding. Couldn't start device discovery service");
+            tcpip_close_socket(sockfd);
+            return;
+        }
+
+        while(serviceRunning) {
+
+            // receive broadcast message from client
+            tcpipHostDeviceDiscoveryReq_t request;
+            struct sockaddr_in send_addr;
+            socklen_t socklen = sizeof(send_addr);
+
+            #if (defined(_WIN32) || defined(_WIN64) )
+                using PACKET_LEN = int;
+            #else
+                using PACKET_LEN = ssize_t;
+            #endif
+
+            PACKET_LEN packetlen = 0;
+            if(( packetlen = recvfrom(sockfd, reinterpret_cast<char*>(&request), sizeof(request), 0, (struct sockaddr*) &send_addr, &socklen)) < 0){
+                mvLog(MVLOG_ERROR, "Device discovery service - Error recvform...\n");
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                continue;
+            }
+
+            // Debug
+            #ifdef HAS_DEBUG
+                DEBUG("Received packet, length: %d data: ", packetlen);
+                for(ssize_t i = 0; i < packetlen; i++){
+                    DEBUG("%02X ", ((uint8_t*)&request)[i]);
+                }
+                DEBUG("\n");
+            #endif
+
+            // Parse Request
+            switch (request.command) {
+                case TCPIP_HOST_CMD_DEVICE_DISCOVER: {
+                    mvLog(MVLOG_DEBUG, "Received device discovery request, sending back - mxid: %s, state: %u\n", deviceId.c_str(), (uint32_t) deviceState);
+
+                    // send back device discovery response
+                    tcpipHostDeviceDiscoveryResp_t resp = {};
+                    strncpy(resp.mxid, deviceId.c_str(), sizeof(resp.mxid));
+                    resp.state = deviceState;
+
+                    if(sendto(sockfd, reinterpret_cast<char*>(&resp), sizeof(resp), 0, (struct sockaddr*) &send_addr, sizeof(send_addr)) < 0) {
+                        mvLog(MVLOG_ERROR, "Device discovery service - Error sendto...\n");
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                        continue;
+                    }
+
+                } break;
+
+                case TCPIP_HOST_CMD_DEVICE_INFO: {
+
+                    mvLog(MVLOG_DEBUG, "Received device information request, sending back - mxid: %s, speed %d?, full duplex: %d?, boot mode: 0x%02X\n", deviceId.c_str(), 0,0, gpioBootMode);
+
+                    // send back device information response
+                    tcpipHostDeviceInformationResp_t resp = {};
+                    strncpy(resp.mxid, deviceId.c_str(), sizeof(resp.mxid));
+                    // TODO(themarpe) - reimplement or drop this command
+                    resp.linkSpeed = 0;
+                    resp.linkFullDuplex = 0;
+                    resp.gpioBootMode = gpioBootMode;
+                    if(sendto(sockfd, reinterpret_cast<char*>(&resp), sizeof(resp), 0, (struct sockaddr*) &send_addr, sizeof(send_addr)) < 0) {
+                        mvLog(MVLOG_ERROR, "Device discovery service - Error sendto...\n");
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                        continue;
+                    }
+
+                } break;
+
+                case TCPIP_HOST_CMD_RESET: {
+                    if(resetCb) resetCb();
+                } break;
+
+                // TODO(themarpe) - handle
+                // case TCPIP_HOST_CMD_DEVICE_DISCOVERY_EX: {
+                // } break;
+
+                default: {
+
+                    printf("Received invalid request, sending back no_command\n");
+
+                    // send back device information response
+                    tcpipHostCommand_t resp = TCPIP_HOST_CMD_NO_COMMAND;
+                    if(sendto(sockfd, reinterpret_cast<char*>(&resp), sizeof(resp), 0, (struct sockaddr*) &send_addr, sizeof(send_addr)) < 0) {
+                        mvLog(MVLOG_ERROR, "Device discovery service - Error sendto...\n");
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                        continue;
+                    }
+
+                } break;
+
+            }
+        }
+    });
+
+}
+
+void tcpip_stop_discovery_service() {
+    std::unique_lock<std::mutex> lock(serviceMutex);
+    serviceRunning = false;
+    serviceThread.join();
+}
+
+void tcpip_detach_discovery_service() {
+    std::unique_lock<std::mutex> lock(serviceMutex);
+    serviceThread.detach();
+}
+
+bool tcpip_is_running_discovery_service() {
+    return serviceRunning;
 }

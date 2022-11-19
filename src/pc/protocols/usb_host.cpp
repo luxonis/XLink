@@ -113,7 +113,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
     static libusb_device **devs = NULL;
     auto numDevices = libusb_get_device_list(context, &devs);
     if(numDevices < 0) {
-        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
+        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(static_cast<int>(numDevices)));
         return X_LINK_PLATFORM_ERROR;
     }
 
@@ -226,7 +226,7 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libu
     static libusb_device **devs = NULL;
     auto numDevices = libusb_get_device_list(context, &devs);
     if(numDevices < 0) {
-        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
+        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(static_cast<int>(numDevices)));
         return X_LINK_PLATFORM_ERROR;
     }
 
@@ -1097,7 +1097,7 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
         }
         char serial_id[128] = {};
         int vid = 0, pid = 0;
-        if(sscanf(instance_id, "USB\\VID_%hx&PID_%hx\\%s", &vid, &pid, serial_id) != 3) {
+        if(sscanf(instance_id, "USB\\VID_%x&PID_%x\\%s", &vid, &pid, serial_id) != 3) {
             continue;
         }
 

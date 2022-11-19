@@ -25,11 +25,12 @@ int main(int argc, const char** argv){
         throw std::runtime_error("Couldn't initialize XLink");
     }
 
+    // Start server
     XLinkHandler_t handler;
     std::string serverIp{"127.0.0.1"};
     handler.devicePath = &serverIp[0];
     handler.protocol = X_LINK_TCP_IP;
-    XLinkServer(&handler, X_LINK_BOOTED, X_LINK_MYRIAD_X);
+    XLinkServer(&handler, "xlinkserver", X_LINK_BOOTED, X_LINK_MYRIAD_X);
 
     // loop through streams
     constexpr static auto NUM_STREAMS = 16;
