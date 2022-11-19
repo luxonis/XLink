@@ -2,6 +2,11 @@
 include(CTest)
 enable_testing()
 
+# Search for Bash executable
+find_program(BASH_EXECUTABLE name "bash"
+    HINTS "C:/Program Files/Git/bin" # Windows hint
+)
+
 # Helper 'xlink_add_test'
 macro(xlink_add_test test_name test_src)
     add_executable(${test_name} ${test_src})
@@ -47,7 +52,7 @@ macro(xlink_add_client_server_test test_name num_iterations timeout)
 
     # Add to test suite
     add_test(NAME ${test_name} COMMAND
-        bash "${test_script}"
+        ${BASH_EXECUTABLE} "${test_script}"
         "$<TARGET_FILE:${test_name}_server>"
         "$<TARGET_FILE:${test_name}_client>"
         "${num_iterations}"
