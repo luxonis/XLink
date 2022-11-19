@@ -99,12 +99,11 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler)
         xlinkSetProtocolInitialized(X_LINK_USB_VSC, 0);
     }
 
-    // TODO(themarpe) - move to tcpip_host
-    //tcpipInitialize();
-#if (defined(_WIN32) || defined(_WIN64)) && defined(USE_TCP_IP)
-    WSADATA wsa_data;
-    WSAStartup(MAKEWORD(2,2), &wsa_data);
-#endif
+    // Initialize tcpip protocol if necessary
+    if(tcpip_initialize() != TCPIP_HOST_SUCCESS) {
+        xlinkSetProtocolInitialized(X_LINK_TCP_IP, 0);
+    }
+
     return X_LINK_PLATFORM_SUCCESS;
 }
 

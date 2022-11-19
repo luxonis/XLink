@@ -94,7 +94,9 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             }
 
 
-            /* TODO(themarpe) - reenable PCIe
+            // TODO(themarpe) - reenable PCIe
+            (void) PCIe_rc;
+            /*
             if(XLinkIsProtocolInitialized(X_LINK_PCIE)) {
                 numFoundDevices = 0;
                 PCIe_rc = getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);

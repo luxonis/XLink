@@ -39,13 +39,9 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
 #include <net/if.h>
-#include <netdb.h>
 #include <ifaddrs.h>
 
 #endif
@@ -61,7 +57,7 @@ typedef enum
 } tcpipHostCommand_t;
 
 /* Device state */
-typedef enum : uint32_t
+typedef enum
 {
     TCPIP_HOST_STATE_INVALID = 0,
     TCPIP_HOST_STATE_BOOTED = 1,
@@ -279,7 +275,7 @@ static tcpipHostError_t tcpip_create_socket(TCPIP_SOCKET* out_sock, bool broadca
 
 static tcpipHostError_t tcpip_create_socket_broadcast(TCPIP_SOCKET* out_sock, std::chrono::milliseconds timeout = std::chrono::milliseconds(0))
 {
-    return tcpip_create_socket(out_sock, true, timeout.count());
+    return tcpip_create_socket(out_sock, true, static_cast<int>(timeout.count()));
 }
 
 
@@ -396,6 +392,20 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
 /* **************************************************************************/
 /*      Public Function Definitions                                         */
 /* **************************************************************************/
+
+tcpipHostError_t tcpip_initialize() {
+#if (defined(_WIN32) || defined(_WIN64))
+    WSADATA wsa_data;
+    int ret = WSAStartup(MAKEWORD(2,2), &wsa_data);
+    if(ret != 0) {
+        mvLog(MVLOG_FATAL, "Couldn't initialize Winsock DLL using WSAStartup function. (Return value: %d)", ret);
+        return TCPIP_HOST_ERROR;
+    }
+#endif
+
+    return TCPIP_HOST_SUCCESS;
+}
+
 tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET sock)
 {
 #if (defined(_WIN32) || defined(_WIN64) )
@@ -783,6 +793,7 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
         }
     });
 
+    return X_LINK_PLATFORM_SUCCESS;
 }
 
 void tcpip_stop_discovery_service() {

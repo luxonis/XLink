@@ -56,6 +56,11 @@ typedef enum
 /* **************************************************************************/
 
 /**
+ * @brief Initializes TCP/IP protocol
+*/
+tcpipHostError_t tcpip_initialize();
+
+/**
  * @brief       Close socket
  *
  * @param[in]   socket Socket

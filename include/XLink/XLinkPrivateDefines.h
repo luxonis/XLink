@@ -151,7 +151,7 @@ typedef struct xLinkEvent_t {
     xLinkDeviceHandle_t deviceHandle;
     void* data;
     void* data2;
-    size_t data2Size;
+    int data2Size;
 }xLinkEvent_t;
 
 #define XLINK_INIT_EVENT(event, in_streamId, in_type, in_size, in_data, in_deviceHandle) do { \
