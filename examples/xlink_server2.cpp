@@ -17,13 +17,11 @@ XLinkGlobalHandler_t xlinkGlobalHandler = {};
 int main(int argc, const char** argv){
     xlinkGlobalHandler.protocol = X_LINK_TCP_IP;
 
-
     printf("Initializing XLink...\n");
     auto status = XLinkInitialize(&xlinkGlobalHandler);
     if(X_LINK_SUCCESS != status) {
         return 0;
     }
-
 
     XLinkHandler_t handler;
     std::string serverIp{"127.0.0.1"};
@@ -33,8 +31,6 @@ int main(int argc, const char** argv){
     if(X_LINK_SUCCESS != status) {
         return 0;
     }
-
-    std::this_thread::sleep_for(std::chrono::seconds(1000));
 
     return 0;
 }

@@ -35,3 +35,6 @@ add_example(boot_firmware boot_firmware.cpp)
 
 # Server example
 add_example(xlink_server xlink_server.cpp)
+
+# Server example
+add_example(xlink_server2 xlink_server2.cpp)
