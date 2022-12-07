@@ -31,6 +31,8 @@
 #include <Iphlpapi.h>
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
+#define errno WSAGetLastError()
+#define ERRNO_EAGAIN WSAETIMEDOUT
 
 #else
 
@@ -44,6 +46,7 @@
 #include <netinet/in.h>
 #include <net/if.h>
 #include <ifaddrs.h>
+#define ERRNO_EAGAIN EAGAIN
 
 #endif
 
@@ -717,8 +720,10 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
 
             PACKET_LEN packetlen = 0;
             if(( packetlen = recvfrom(sockfd, reinterpret_cast<char*>(&request), sizeof(request), 0, (struct sockaddr*) &send_addr, &socklen)) < 0){
-                mvLog(MVLOG_ERROR, "Device discovery service - Error recvform...\n");
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                if(errno != ERRNO_EAGAIN) {
+                    mvLog(MVLOG_ERROR, "Device discovery service - Error recvform...\n");
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
                 continue;
             }
 
@@ -738,6 +743,7 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
 
                     // send back device discovery response
                     tcpipHostDeviceDiscoveryResp_t resp = {};
+                    resp.command = TCPIP_HOST_CMD_DEVICE_DISCOVER;
                     strncpy(resp.mxid, deviceId.c_str(), sizeof(resp.mxid));
                     resp.state = deviceState;
 
@@ -755,6 +761,7 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
 
                     // send back device information response
                     tcpipHostDeviceInformationResp_t resp = {};
+                    resp.command = TCPIP_HOST_CMD_DEVICE_INFO;
                     strncpy(resp.mxid, deviceId.c_str(), sizeof(resp.mxid));
                     // TODO(themarpe) - reimplement or drop this command
                     resp.linkSpeed = 0;
