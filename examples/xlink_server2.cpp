@@ -29,7 +29,7 @@ int main(int argc, const char** argv){
     std::string serverIp{"127.0.0.1"};
     handler.devicePath = &serverIp[0];
     handler.protocol = X_LINK_TCP_IP;
-    status = XLinkServer(&handler, "xlinkserver", X_LINK_BOOTED, X_LINK_KEEMBAY);
+    status = XLinkServer(&handler, "xlinkserver", X_LINK_BOOTED, X_LINK_RVC3);
     if(X_LINK_SUCCESS != status) {
         return 0;
     }
