@@ -721,7 +721,7 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
             PACKET_LEN packetlen = 0;
             if(( packetlen = recvfrom(sockfd, reinterpret_cast<char*>(&request), sizeof(request), 0, (struct sockaddr*) &send_addr, &socklen)) < 0){
                 if(errno != ERRNO_EAGAIN) {
-                    mvLog(MVLOG_ERROR, "Device discovery service - Error recvform...\n");
+                    mvLog(MVLOG_ERROR, "Device discovery service - Error recvform - %d\n", errno);
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
                 continue;
