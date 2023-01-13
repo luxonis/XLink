@@ -682,9 +682,8 @@ const char* XLinkDeviceStateToStr(XLinkDeviceState_t val) {
         case X_LINK_BOOTED: return "X_LINK_BOOTED";
         case X_LINK_UNBOOTED: return "X_LINK_UNBOOTED";
         case X_LINK_BOOTLOADER: return "X_LINK_BOOTLOADER";
-        case X_LINK_FLASH_BOOTED: return "X_LINK_FLASH_BOOTED";
+        case X_LINK_BOOTED_NON_EXCLUSIVE: return "X_LINK_BOOTED_NON_EXCLUSIVE";
         case X_LINK_GATE: return "X_LINK_GATE";
-        case X_LINK_GATE_BOOTED: return "X_LINK_GATE_BOOTED";
         default:
             return "INVALID_ENUM_VALUE";
             break;

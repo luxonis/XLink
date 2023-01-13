@@ -68,6 +68,7 @@ typedef enum
     TCPIP_HOST_STATE_UNBOOTED = 2,
     TCPIP_HOST_STATE_BOOTLOADER = 3,
     TCPIP_HOST_STATE_FLASH_BOOTED = 4,
+    TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE = TCPIP_HOST_STATE_FLASH_BOOTED,
     TCPIP_HOST_STATE_GATE = 5,
     TCPIP_HOST_STATE_GATE_BOOTED = 6,
 } tcpipHostDeviceState_t;
@@ -150,9 +151,8 @@ static tcpipHostDeviceState_t tcpip_convert_device_state(XLinkDeviceState_t stat
         case XLinkDeviceState_t::X_LINK_BOOTED: return TCPIP_HOST_STATE_BOOTED;
         case XLinkDeviceState_t::X_LINK_UNBOOTED: return TCPIP_HOST_STATE_UNBOOTED;
         case XLinkDeviceState_t::X_LINK_BOOTLOADER: return TCPIP_HOST_STATE_BOOTLOADER;
-        case XLinkDeviceState_t::X_LINK_FLASH_BOOTED: return TCPIP_HOST_STATE_FLASH_BOOTED;
+        case XLinkDeviceState_t::X_LINK_BOOTED_NON_EXCLUSIVE: return TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE;
         case XLinkDeviceState_t::X_LINK_GATE: return TCPIP_HOST_STATE_GATE;
-        case XLinkDeviceState_t::X_LINK_GATE_BOOTED: return TCPIP_HOST_STATE_GATE_BOOTED;
     }
     return TCPIP_HOST_STATE_INVALID;
 }
@@ -171,9 +171,9 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     {
         return X_LINK_BOOTLOADER;
     }
-    else if(state == TCPIP_HOST_STATE_FLASH_BOOTED)
+    else if(state == TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE)
     {
-        return X_LINK_FLASH_BOOTED;
+        return X_LINK_BOOTED_NON_EXCLUSIVE;
     }
     else if(state == TCPIP_HOST_STATE_GATE)
     {
@@ -181,7 +181,7 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     }
     else if(state == TCPIP_HOST_STATE_GATE_BOOTED)
     {
-        return X_LINK_GATE_BOOTED;
+        return X_LINK_BOOTED;
     }
     else
     {
