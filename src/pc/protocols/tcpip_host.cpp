@@ -153,6 +153,7 @@ static tcpipHostDeviceState_t tcpip_convert_device_state(XLinkDeviceState_t stat
         case XLinkDeviceState_t::X_LINK_BOOTLOADER: return TCPIP_HOST_STATE_BOOTLOADER;
         case XLinkDeviceState_t::X_LINK_BOOTED_NON_EXCLUSIVE: return TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE;
         case XLinkDeviceState_t::X_LINK_GATE: return TCPIP_HOST_STATE_GATE;
+        case XLinkDeviceState_t::X_LINK_GATE_BOOTED: return TCPIP_HOST_STATE_GATE_BOOTED;
     }
     return TCPIP_HOST_STATE_INVALID;
 }
@@ -181,7 +182,7 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     }
     else if(state == TCPIP_HOST_STATE_GATE_BOOTED)
     {
-        return X_LINK_BOOTED;
+        return X_LINK_GATE_BOOTED;
     }
     else
     {
