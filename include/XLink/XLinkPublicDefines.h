@@ -72,11 +72,29 @@ typedef enum{
 } XLinkPlatform_t;
 
 typedef enum{
+    /**
+     * Used only for searching devices. It means that the device state is not important.
+     */
     X_LINK_ANY_STATE = 0,
+    /**
+     * The device is booted (firmware is loaded) and the pipeline is running.
+     */
     X_LINK_BOOTED,
+    /**
+     * Device isn't booted, e.g. for USB devices with no bootloader flashed. In such case it's waiting for the USB boot.
+     */
     X_LINK_UNBOOTED,
+    /**
+     * The device is in bootloader and waiting for a connection. After the connection the state will change to BOOTED.
+     */
     X_LINK_BOOTLOADER,
+    /**
+     * The device has booted the flashed firmware/pipeline (e.g. in case of OAK POE devices in standalone mode).
+     */
     X_LINK_FLASH_BOOTED,
+    /**
+     * The device has booted the flashed firmware/pipeline (e.g. in case of OAK POE devices in standalone mode).
+     */
     X_LINK_BOOTED_NON_EXCLUSIVE = X_LINK_FLASH_BOOTED,
 } XLinkDeviceState_t;
 
