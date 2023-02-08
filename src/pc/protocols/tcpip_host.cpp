@@ -108,9 +108,9 @@ typedef struct
 {
     tcpipHostCommand_t command;
     char mxid[32];
-    int32_t linkSpeed = 0;
-    int32_t linkFullDuplex = 0;
-    int32_t gpioBootMode = 0;
+    int32_t linkSpeed;
+    int32_t linkFullDuplex;
+    int32_t gpioBootMode;
 } tcpipHostDeviceInformationResp_t;
 
 typedef struct
@@ -154,12 +154,15 @@ static constexpr auto DEVICE_DISCOVERY_RES_TIMEOUT = std::chrono::milliseconds{2
 
 static tcpipHostDeviceState_t tcpip_convert_device_state(XLinkDeviceState_t state) {
     switch (state) {
-        case XLinkDeviceState_t::X_LINK_BOOTED: return TCPIP_HOST_STATE_BOOTED;
-        case XLinkDeviceState_t::X_LINK_UNBOOTED: return TCPIP_HOST_STATE_UNBOOTED;
-        case XLinkDeviceState_t::X_LINK_BOOTLOADER: return TCPIP_HOST_STATE_BOOTLOADER;
-        case XLinkDeviceState_t::X_LINK_BOOTED_NON_EXCLUSIVE: return TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE;
-        case XLinkDeviceState_t::X_LINK_GATE: return TCPIP_HOST_STATE_GATE;
-        case XLinkDeviceState_t::X_LINK_GATE_BOOTED: return TCPIP_HOST_STATE_GATE_BOOTED;
+        case X_LINK_BOOTED: return TCPIP_HOST_STATE_BOOTED;
+        case X_LINK_UNBOOTED: return TCPIP_HOST_STATE_UNBOOTED;
+        case X_LINK_BOOTLOADER: return TCPIP_HOST_STATE_BOOTLOADER;
+        case X_LINK_BOOTED_NON_EXCLUSIVE: return TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE;
+        case X_LINK_GATE: return TCPIP_HOST_STATE_GATE;
+        case X_LINK_GATE_BOOTED: return TCPIP_HOST_STATE_GATE_BOOTED;
+
+        case X_LINK_ANY_STATE:
+            return TCPIP_HOST_STATE_INVALID;
     }
     return TCPIP_HOST_STATE_INVALID;
 }
@@ -227,6 +230,10 @@ static tcpipHostDevicePlatform_t tcpip_convert_device_platform(XLinkPlatform_t p
     switch (platform) {
         case X_LINK_MYRIAD_X: return TCPIP_HOST_PLATFORM_MYRIAD_X;
         case X_LINK_RVC3: return TCPIP_HOST_PLATFORM_RVC3;
+
+        case X_LINK_ANY_PLATFORM:
+        case X_LINK_MYRIAD_2:
+            return TCPIP_HOST_PLATFORM_INVALID;
     }
     return TCPIP_HOST_PLATFORM_INVALID;
 }
