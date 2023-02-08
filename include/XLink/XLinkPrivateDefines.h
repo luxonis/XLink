@@ -118,7 +118,7 @@ typedef enum
 } xLinkEventOrigin_t;
 
 #ifndef __DEVICE__
-#define MAX_LINKS 32
+#define MAX_LINKS 64
 #else
 #define MAX_LINKS 1
 #endif
