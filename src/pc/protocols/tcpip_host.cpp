@@ -35,22 +35,24 @@
 #include <Iphlpapi.h>
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
-using TCPIP_SOCKET = SOCKET;
+#define errno WSAGetLastError()
+#define ERRNO_EAGAIN WSAETIMEDOUT
 
 #else
 
 // *Unix specifics
+#include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <net/if.h>
-#include <netdb.h>
 #include <ifaddrs.h>
 #include <netinet/tcp.h>
 using TCPIP_SOCKET = int;
+#define ERRNO_EAGAIN EAGAIN
 
 #endif
 
@@ -72,6 +74,7 @@ typedef enum
     TCPIP_HOST_STATE_UNBOOTED = 2,
     TCPIP_HOST_STATE_BOOTLOADER = 3,
     TCPIP_HOST_STATE_FLASH_BOOTED = 4,
+    TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE = TCPIP_HOST_STATE_FLASH_BOOTED,
     TCPIP_HOST_STATE_GATE = 5,
     TCPIP_HOST_STATE_GATE_BOOTED = 6,
 } tcpipHostDeviceState_t;
@@ -91,7 +94,7 @@ typedef enum
 {
     TCPIP_HOST_PLATFORM_INVALID = 0,
     TCPIP_HOST_PLATFORM_MYRIAD_X = 2,
-    TCPIP_HOST_PLATFORM_KEEMBAY = 3,
+    TCPIP_HOST_PLATFORM_RVC3 = 3,
 } tcpipHostDevicePlatform_t;
 /* Device response payload */
 typedef struct
@@ -126,6 +129,7 @@ typedef struct
     tcpipHostCommand_t command;
 } tcpipHostDeviceDiscoveryReq_t;
 
+
 /* **************************************************************************/
 /*      Private Macro Definitions                                            */
 /* **************************************************************************/
@@ -153,7 +157,7 @@ static tcpipHostDeviceState_t tcpip_convert_device_state(XLinkDeviceState_t stat
         case XLinkDeviceState_t::X_LINK_BOOTED: return TCPIP_HOST_STATE_BOOTED;
         case XLinkDeviceState_t::X_LINK_UNBOOTED: return TCPIP_HOST_STATE_UNBOOTED;
         case XLinkDeviceState_t::X_LINK_BOOTLOADER: return TCPIP_HOST_STATE_BOOTLOADER;
-        case XLinkDeviceState_t::X_LINK_FLASH_BOOTED: return TCPIP_HOST_STATE_FLASH_BOOTED;
+        case XLinkDeviceState_t::X_LINK_BOOTED_NON_EXCLUSIVE: return TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE;
         case XLinkDeviceState_t::X_LINK_GATE: return TCPIP_HOST_STATE_GATE;
         case XLinkDeviceState_t::X_LINK_GATE_BOOTED: return TCPIP_HOST_STATE_GATE_BOOTED;
     }
@@ -174,9 +178,9 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     {
         return X_LINK_BOOTLOADER;
     }
-    else if(state == TCPIP_HOST_STATE_FLASH_BOOTED)
+    else if(state == TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE)
     {
-        return X_LINK_FLASH_BOOTED;
+        return X_LINK_BOOTED_NON_EXCLUSIVE;
     }
     else if(state == TCPIP_HOST_STATE_GATE)
     {
@@ -212,7 +216,7 @@ static XLinkPlatform_t tcpip_convert_device_platform(uint32_t platform)
     switch (platform)
     {
     case TCPIP_HOST_PLATFORM_MYRIAD_X: return X_LINK_MYRIAD_X;
-    case TCPIP_HOST_PLATFORM_KEEMBAY: return X_LINK_KEEMBAY;
+    case TCPIP_HOST_PLATFORM_RVC3: return X_LINK_RVC3;
     default:
         return X_LINK_ANY_PLATFORM;
         break;
@@ -222,7 +226,7 @@ static XLinkPlatform_t tcpip_convert_device_platform(uint32_t platform)
 static tcpipHostDevicePlatform_t tcpip_convert_device_platform(XLinkPlatform_t platform) {
     switch (platform) {
         case X_LINK_MYRIAD_X: return TCPIP_HOST_PLATFORM_MYRIAD_X;
-        case X_LINK_KEEMBAY: return TCPIP_HOST_PLATFORM_KEEMBAY;
+        case X_LINK_RVC3: return TCPIP_HOST_PLATFORM_RVC3;
     }
     return TCPIP_HOST_PLATFORM_INVALID;
 }
@@ -285,22 +289,6 @@ static tcpipHostError_t tcpip_create_socket_broadcast(TCPIP_SOCKET* out_sock, st
     return tcpip_create_socket(out_sock, true, static_cast<int>(timeout.count()));
 }
 
-static tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET sock) {
-#if (defined(_WIN32) || defined(_WIN64) )
-    if(sock != INVALID_SOCKET)
-    {
-        closesocket(sock);
-        return TCPIP_HOST_SUCCESS;
-    }
-#else
-    if(sock != -1)
-    {
-        close(sock);
-        return TCPIP_HOST_SUCCESS;
-    }
-#endif
-    return TCPIP_HOST_ERROR;
-}
 
 
 static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
@@ -427,6 +415,24 @@ tcpipHostError_t tcpip_initialize() {
 #endif
 
     return TCPIP_HOST_SUCCESS;
+}
+
+tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET sock)
+{
+#if (defined(_WIN32) || defined(_WIN64) )
+    if(sock != INVALID_SOCKET)
+    {
+        closesocket(sock);
+        return TCPIP_HOST_SUCCESS;
+    }
+#else
+    if(sock != -1)
+    {
+        close(sock);
+        return TCPIP_HOST_SUCCESS;
+    }
+#endif
+    return TCPIP_HOST_ERROR;
 }
 
 xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count)
@@ -1004,8 +1010,10 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
 
             PACKET_LEN packetlen = 0;
             if(( packetlen = recvfrom(sockfd, reinterpret_cast<char*>(&request), sizeof(request), 0, (struct sockaddr*) &send_addr, &socklen)) < 0){
-                mvLog(MVLOG_ERROR, "Device discovery service - Error recvform...\n");
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                if(errno != ERRNO_EAGAIN) {
+                    mvLog(MVLOG_ERROR, "Device discovery service - Error recvform - %d\n", errno);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
                 continue;
             }
 
@@ -1025,6 +1033,7 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
 
                     // send back device discovery response
                     tcpipHostDeviceDiscoveryResp_t resp = {};
+                    resp.command = TCPIP_HOST_CMD_DEVICE_DISCOVER;
                     strncpy(resp.mxid, deviceId.c_str(), sizeof(resp.mxid));
                     resp.state = deviceState;
 
@@ -1042,6 +1051,7 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
 
                     // send back device information response
                     tcpipHostDeviceInformationResp_t resp = {};
+                    resp.command = TCPIP_HOST_CMD_DEVICE_INFO;
                     strncpy(resp.mxid, deviceId.c_str(), sizeof(resp.mxid));
                     // TODO(themarpe) - reimplement or drop this command
                     resp.linkSpeed = 0;
@@ -1065,7 +1075,7 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
 
                 default: {
 
-                    printf("Received invalid request, sending back no_command\n");
+                    mvLog(MVLOG_DEBUG, "Received invalid request, sending back no_command");
 
                     // send back device information response
                     tcpipHostCommand_t resp = TCPIP_HOST_CMD_NO_COMMAND;
