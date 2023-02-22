@@ -102,9 +102,9 @@ typedef struct
 {
     tcpipHostCommand_t command;
     char mxid[32];
-    int32_t linkSpeed = 0;
-    int32_t linkFullDuplex = 0;
-    int32_t gpioBootMode = 0;
+    int32_t linkSpeed;
+    int32_t linkFullDuplex;
+    int32_t gpioBootMode;
 } tcpipHostDeviceInformationResp_t;
 
 typedef struct
@@ -154,6 +154,7 @@ static tcpipHostDeviceState_t tcpip_convert_device_state(XLinkDeviceState_t stat
         case XLinkDeviceState_t::X_LINK_BOOTED_NON_EXCLUSIVE: return TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE;
         case XLinkDeviceState_t::X_LINK_GATE: return TCPIP_HOST_STATE_GATE;
         case XLinkDeviceState_t::X_LINK_GATE_BOOTED: return TCPIP_HOST_STATE_GATE_BOOTED;
+        case XLinkDeviceState_t::X_LINK_ANY_STATE: return TCPIP_HOST_STATE_INVALID;
     }
     return TCPIP_HOST_STATE_INVALID;
 }
@@ -221,6 +222,8 @@ static tcpipHostDevicePlatform_t tcpip_convert_device_platform(XLinkPlatform_t p
     switch (platform) {
         case X_LINK_MYRIAD_X: return TCPIP_HOST_PLATFORM_MYRIAD_X;
         case X_LINK_RVC3: return TCPIP_HOST_PLATFORM_RVC3;
+        case X_LINK_ANY_PLATFORM: return TCPIP_HOST_PLATFORM_INVALID;
+        case X_LINK_MYRIAD_2: return TCPIP_HOST_PLATFORM_INVALID;
     }
     return TCPIP_HOST_PLATFORM_INVALID;
 }
@@ -434,6 +437,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     // Name signifies ip in TCP_IP protocol case
     const char* target_ip = in_deviceRequirements.name;
     XLinkDeviceState_t target_state = in_deviceRequirements.state;
+    XLinkPlatform_t target_platform = in_deviceRequirements.platform;
     const char* target_mxid = in_deviceRequirements.mxid;
 
     // Socket
@@ -541,6 +545,9 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
             // Check that state matches
             DEBUG("target_state: %d, foundState: %d\n", target_state, foundState);
             if(target_state != X_LINK_ANY_STATE && foundState != target_state) continue;
+            // Check that platform matches
+            DEBUG("target_platform: %d, platform: %d\n", target_platform, platform});
+            if(target_platform != X_LINK_ANY_PLATFORM && platform != target_platform) continue;
 
             // Correct device found, increase matched num and save details
             // Convert IP address in binary into string
