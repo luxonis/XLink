@@ -87,7 +87,7 @@ streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,
     if (readSize && !stream->readSize) {
         stream->readSize = readSize;
 
-#ifndef __PC__
+#ifdef __DEVICE__
         // FIXME: not the best solution but the simplest for now:
         // it is just for a check; real allocation will be done during receiving an usb package
         void *buffer = XLinkPlatformAllocateData(ALIGN_UP(readSize, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);

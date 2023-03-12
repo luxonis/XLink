@@ -10,21 +10,23 @@
 #ifndef _XLINKPUBLICDEFINES_H
 #define _XLINKPUBLICDEFINES_H
 #include <stdint.h>
+#include <stdbool.h>
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
 #define XLINK_MAX_MX_ID_SIZE 32
-
-#ifdef XLINK_USE_MX_ID_NAME
-#define XLINK_MAX_NAME_SIZE (XLINK_MAX_MX_ID_SIZE + 16) // additional space for device name (see supportedDevices)
-#else
 #define XLINK_MAX_NAME_SIZE 64
-#endif
 
+#ifdef XLINK_MAX_STREAM_RES
+#define XLINK_MAX_STREAMS XLINK_MAX_STREAM_RES
+#else
 #define XLINK_MAX_STREAMS 32
+#endif
 #define XLINK_MAX_PACKETS_PER_STREAM 64
+#define XLINK_NO_RW_TIMEOUT 0xFFFFFFFF
+
 
 typedef enum {
     X_LINK_USB_SPEED_UNKNOWN = 0,
@@ -45,7 +47,12 @@ typedef enum{
     X_LINK_TIMEOUT,
     X_LINK_ERROR,
     X_LINK_OUT_OF_MEMORY,
-    X_LINK_NOT_IMPLEMENTED
+    X_LINK_INSUFFICIENT_PERMISSIONS,
+    X_LINK_DEVICE_ALREADY_IN_USE,
+    X_LINK_NOT_IMPLEMENTED,
+    X_LINK_INIT_USB_ERROR,
+    X_LINK_INIT_TCP_IP_ERROR,
+    X_LINK_INIT_PCIE_ERROR,
 } XLinkError_t;
 
 typedef enum{
@@ -65,11 +72,30 @@ typedef enum{
 } XLinkPlatform_t;
 
 typedef enum{
+    /**
+     * Used only for searching devices. It means that the device state is not important.
+     */
     X_LINK_ANY_STATE = 0,
+    /**
+     * The device is booted (firmware is loaded) and the pipeline is running.
+     */
     X_LINK_BOOTED,
+    /**
+     * Device isn't booted, e.g. for USB devices with no bootloader flashed. In such case it's waiting for the USB boot.
+     */
     X_LINK_UNBOOTED,
+    /**
+     * The device is in bootloader and waiting for a connection. After the connection the state will change to BOOTED.
+     */
     X_LINK_BOOTLOADER,
+    /**
+     * The device has booted the flashed firmware/pipeline (e.g. in case of OAK POE devices in standalone mode).
+     */
     X_LINK_FLASH_BOOTED,
+    /**
+     * The device has booted the flashed firmware/pipeline (e.g. in case of OAK POE devices in standalone mode).
+     */
+    X_LINK_BOOTED_NON_EXCLUSIVE = X_LINK_FLASH_BOOTED,
 } XLinkDeviceState_t;
 
 typedef enum{
@@ -90,6 +116,10 @@ typedef struct {
     XLinkProtocol_t protocol;
     XLinkPlatform_t platform;
     char name[XLINK_MAX_NAME_SIZE];
+    XLinkDeviceState_t state;
+    char mxid[XLINK_MAX_MX_ID_SIZE];
+    XLinkError_t status;
+    bool nameHintOnly;
 } deviceDesc_t;
 
 typedef struct streamPacketDesc_t
@@ -112,6 +142,7 @@ typedef struct XLinkGlobalHandler_t
 {
     int profEnable;
     XLinkProf_t profilingData;
+    void* options;
 
     //Deprecated fields. Begin.
     int loglevel;

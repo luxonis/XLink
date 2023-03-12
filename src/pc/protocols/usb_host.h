@@ -6,6 +6,10 @@
 extern "C" {
 #endif
 
+#include <stdbool.h>
+#include "XLink/XLink.h"
+#include "XLink/XLinkPlatform.h"
+
 #define AUTO_VID                    0
 #define AUTO_PID                    0
 #define AUTO_UNBOOTED_PID           -1
@@ -31,17 +35,19 @@ typedef enum usbBootError {
     USB_BOOT_TIMEOUT
 } usbBootError_t;
 
-#if (!defined(_WIN32) && !defined(_WIN64))
-usbBootError_t usb_find_device_with_bcd(unsigned idx, char *input_addr,
-                                        unsigned addrsize, void **device, int vid, int pid,unsigned short* bcdusb);
-#else
-usbBootError_t usb_find_device(unsigned idx, char *addr, unsigned addrsize,
-   void **device, int vid, int pid);
-void initialize_usb_boot();
-#endif
+int usbInitialize(void* options);
+int usbInitialize_customdir(void** hContext);
+
 int usb_boot(const char *addr, const void *mvcmd, unsigned size);
 int get_pid_by_name(const char* name);
 
+xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* path);
+int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
+int usbPlatformClose(void *fd);
+int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
+
+int usbPlatformRead(void *fd, void *data, int size);
+int usbPlatformWrite(void *fd, void *data, int size);
 
 #ifdef __cplusplus
 }

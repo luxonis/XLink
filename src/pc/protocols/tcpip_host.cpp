@@ -39,6 +39,8 @@
 #include <ifaddrs.h>
 #endif
 
+#include <chrono>
+
 /* **************************************************************************/
 /*      Private Macro Definitions                                            */
 /* **************************************************************************/
@@ -53,8 +55,9 @@
 #define MAX_DEVICE_DISCOVERY_IFACE          10
 
 #define MSEC_TO_USEC(x)                     (x * 1000)
-#define DEVICE_DISCOVERY_RES_TIMEOUT_SEC    0.2
 #define DEVICE_RES_TIMEOUT_MSEC             20
+
+static constexpr auto DEVICE_DISCOVERY_RES_TIMEOUT = std::chrono::milliseconds{200};
 
 #ifdef HAS_DEBUG
 #define DEBUG(...) do { printf(__VA_ARGS__); } while(0)
@@ -62,23 +65,6 @@
 #define DEBUG(fmt, ...) do {} while(0)
 #endif
 
-
-/* **************************************************************************/
-/*      Private Function Definitions                                        */
-/* **************************************************************************/
-#if (defined(_WIN32) || defined(_WIN64) )
-#include <win_time.h>
-#endif
-static inline double seconds()
-{
-    static double s;
-    struct timespec ts;
-
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    if(!s)
-        s = ts.tv_sec + ts.tv_nsec * 1e-9;
-    return ts.tv_sec + ts.tv_nsec * 1e-9 - s;
-}
 
 static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
 {
@@ -163,7 +149,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
 
 #if (defined(_WIN32) || defined(_WIN64) )
 
-    DWORD rv, size;
+    DWORD rv, size = 0;
     PMIB_IPADDRTABLE ipaddrtable;
 
     rv = GetIpAddrTable(NULL, &size, 0);
@@ -171,6 +157,8 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
         return TCPIP_HOST_ERROR;
     }
     ipaddrtable = (PMIB_IPADDRTABLE) malloc(size);
+    if (!ipaddrtable)
+        return TCPIP_HOST_ERROR;
 
     rv = GetIpAddrTable(ipaddrtable, &size, 0);
     if (rv != NO_ERROR) {
@@ -189,7 +177,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
         MIB_IPADDRROW addr = ipaddrtable->table[i];
         broadcast.sin_addr.s_addr = (addr.dwAddr & addr.dwMask)
             | (addr.dwMask ^ (DWORD)0xffffffff);
-        sendto(sock, (const char *) &send_buffer, sizeof(send_buffer), 0, (struct sockaddr*) & broadcast, sizeof(broadcast));
+        sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr*) & broadcast, sizeof(broadcast));
 
 #ifdef HAS_DEBUG
         char ip_broadcast_str[INET_ADDRSTRLEN] = { 0 };
@@ -246,7 +234,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
                 broadcast_addr.sin_port = htons(BROADCAST_UDP_PORT);
 
                 tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
-                if(sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr)) < 0)
+                if(sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr)) < 0)
                 {
                     // Ignore if not successful. The devices on that interface won't be found
                 }
@@ -287,45 +275,92 @@ tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET sock)
     return TCPIP_HOST_ERROR;
 }
 
-xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count, const char* target_ip)
+xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count)
 {
+    // Name signifies ip in TCP_IP protocol case
+    const char* target_ip = in_deviceRequirements.name;
+    XLinkDeviceState_t target_state = in_deviceRequirements.state;
+    const char* target_mxid = in_deviceRequirements.mxid;
+
+    // Socket
+    TCPIP_SOCKET sock;
 
     bool check_target_ip = false;
+    bool has_target_ip = false;
     if(target_ip != NULL && strlen(target_ip) > 0){
-        check_target_ip = true;
+        has_target_ip = true;
+        if(!in_deviceRequirements.nameHintOnly){
+            check_target_ip = true;
+        }
     }
 
-    // Create ANY receiving socket first
-    TCPIP_SOCKET sock;
+    bool check_target_mxid = false;
+    if(target_mxid != NULL && strlen(target_mxid) > 0){
+        check_target_mxid = true;
+    }
+
+    // Create socket first (also capable of doing broadcasts)
     if(tcpip_create_socket_broadcast(&sock) != TCPIP_HOST_SUCCESS){
         return X_LINK_PLATFORM_ERROR;
     }
 
-    // Then send broadcast
-    if (tcpip_send_broadcast(sock) != TCPIP_HOST_SUCCESS) {
-        return X_LINK_PLATFORM_ERROR;
+    // If IP is specified, do UNICAST
+    if(has_target_ip) {
+        // TODO(themarpe) - Add IPv6 capabilities
+        // send unicast device discovery
+        struct sockaddr_in device_address;
+        device_address.sin_family = AF_INET;
+        device_address.sin_port = htons(BROADCAST_UDP_PORT);
+
+        // Convert address to binary
+        #if (defined(_WIN32) || defined(__USE_W32_SOCKETS)) && (_WIN32_WINNT <= 0x0501)
+            device_address.sin_addr.s_addr = inet_addr(target_ip);  // for XP
+        #else
+            inet_pton(AF_INET, target_ip, &device_address.sin_addr.s_addr);
+        #endif
+
+        tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
+
+        if(sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &device_address, sizeof(device_address)) < 0)
+        {
+            tcpip_close_socket(sock);
+            return X_LINK_PLATFORM_ERROR;
+        }
+    }
+
+    // If IP isn't enforced, do a broadcast
+    if(!check_target_ip) {
+        if (tcpip_send_broadcast(sock) != TCPIP_HOST_SUCCESS) {
+            tcpip_close_socket(sock);
+            return X_LINK_PLATFORM_ERROR;
+        }
     }
 
     // loop to receive message response from devices
     int num_devices_match = 0;
     // Loop through all sockets and received messages that arrived
-    double t1 = seconds();
+    auto t1 = std::chrono::steady_clock::now();
     do {
-        if(num_devices_match >= devices_size){
+        if(num_devices_match >= (long) devices_size){
             // Enough devices matched, exit the loop
             break;
         }
 
         char ip_addr[INET_ADDRSTRLEN] = {0};
-        tcpipHostDeviceDiscoveryResp_t recv_buffer = {0};
+        tcpipHostDeviceDiscoveryResp_t recv_buffer = {};
         struct sockaddr_in dev_addr;
-        uint32_t len = sizeof(dev_addr);
+        #if (defined(_WIN32) || defined(_WIN64) )
+            int len = sizeof(dev_addr);
+        #else
+            socklen_t len = sizeof(dev_addr);
+        #endif
 
         int ret = recvfrom(sock, (char *) &recv_buffer, sizeof(recv_buffer), 0, (struct sockaddr*) & dev_addr, &len);
         if(ret > 0)
         {
             DEBUG("Received UDP response, length: %d\n", ret);
-            if(recv_buffer.command == TCPIP_HOST_CMD_DEVICE_DISCOVER && state == tcpip_convert_device_state(recv_buffer.state))
+            XLinkDeviceState_t foundState = tcpip_convert_device_state(recv_buffer.state);
+            if(recv_buffer.command == TCPIP_HOST_CMD_DEVICE_DISCOVER && (target_state == X_LINK_ANY_STATE || target_state == foundState))
             {
                 // Correct device found, increase matched num and save details
 
@@ -337,37 +372,73 @@ xLinkPlatformErrorCode_t tcpip_get_devices(XLinkDeviceState_t state, deviceDesc_
 
                 // Check IP if needed
                 if(check_target_ip && strcmp(target_ip, ip_addr) != 0){
+                    // IP doesn't match, skip this device
+                    continue;
+                }
+                // Check MXID if needed
+                if(check_target_mxid && strcmp(target_mxid, recv_buffer.mxid)){
+                    // MXID doesn't match, skip this device
                     continue;
                 }
 
                 // copy device information
+                // Status
+                devices[num_devices_match].status = X_LINK_SUCCESS;
+                // IP
+                memset(devices[num_devices_match].name, 0, sizeof(devices[num_devices_match].name));
                 strncpy(devices[num_devices_match].name, ip_addr, sizeof(devices[num_devices_match].name));
+                // MXID
+                memset(devices[num_devices_match].mxid, 0, sizeof(devices[num_devices_match].mxid));
+                strncpy(devices[num_devices_match].mxid, recv_buffer.mxid, sizeof(devices[num_devices_match].mxid));
+                // Platform
                 devices[num_devices_match].platform = X_LINK_MYRIAD_X;
+                // Protocol
                 devices[num_devices_match].protocol = X_LINK_TCP_IP;
+                // State
+                devices[num_devices_match].state = foundState;
 
                 num_devices_match++;
             }
         }
-    } while(seconds() - t1 < DEVICE_DISCOVERY_RES_TIMEOUT_SEC);
+    } while(std::chrono::steady_clock::now() - t1 < DEVICE_DISCOVERY_RES_TIMEOUT);
 
     tcpip_close_socket(sock);
 
-    // return total device found
-    *device_count = num_devices_match;
+    // Filter out duplicates - routing table will decide through which interface the packets will traverse
+    // TODO(themarpe) - properly separate interfaces.
+    // Either bind to interface addr, or SO_BINDTODEVICE Linux, IP_BOUND_IF macOS, and prefix interface name
+    int write_index = 0;
+    for(int i = 0; i < num_devices_match; i++){
+        bool duplicate = false;
+        for(int j = i - 1; j >= 0; j--){
+            // Check if duplicate
+            if(strcmp(devices[i].name, devices[j].name) == 0 && strcmp(devices[i].mxid, devices[j].mxid) == 0){
+                duplicate = true;
+                break;
+            }
+        }
+        if(!duplicate){
+            devices[write_index] = devices[i];
+            write_index++;
+        }
+    }
 
     // if at least one device matched, return OK otherwise return not found
     if(num_devices_match <= 0)
     {
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
+    // return total device found
+    *device_count = write_index;
 
+    // Return success if search was successful (if atleast on device was found)
     return X_LINK_PLATFORM_SUCCESS;
 }
 
 
 xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     if(name == NULL || name[0] == 0){
-        return X_LINK_PLATFORM_ERROR;
+        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
     // Create socket for UDP unicast
@@ -390,7 +461,7 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     #endif
 
     tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_RESET;
-    if(sendto(sock, &send_buffer, sizeof(send_buffer), 0, (struct sockaddr *) &device_address, sizeof(device_address)) < 0)
+    if (sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *)&device_address, sizeof(device_address)) < 0)
     {
         return X_LINK_PLATFORM_ERROR;
     }

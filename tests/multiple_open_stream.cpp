@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 #include <atomic>
+#include <array>
 
 // The following is an Server side (host) test that opens many streams in random order.
 // Mainly used to test stream desync issue.
@@ -38,7 +39,8 @@ int main() {
     // Search for booted device
     deviceDesc_t deviceDesc, inDeviceDesc;
     inDeviceDesc.protocol = X_LINK_ANY_PROTOCOL;
-    if(X_LINK_SUCCESS != XLinkFindFirstSuitableDevice(X_LINK_BOOTED, inDeviceDesc, &deviceDesc)){
+    inDeviceDesc.state = X_LINK_BOOTED;
+    if(X_LINK_SUCCESS != XLinkFindFirstSuitableDevice(inDeviceDesc, &deviceDesc)){
         printf("Didn't find a device\n");
         return -1;
     }
