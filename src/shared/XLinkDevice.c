@@ -209,6 +209,21 @@ XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirement
     return parsePlatformError(rc);
 }
 
+XLinkError_t XLinkSearchForDevices(const deviceDesc_t in_deviceRequirements,
+                                         deviceDesc_t *out_foundDevicesPtr,
+                                         const unsigned int devicesArraySize,
+                                         unsigned int* out_foundDevicesCount,
+                                         int timeoutMs,
+                                         bool (*cb)(deviceDesc_t*, unsigned int)) {
+    XLINK_RET_IF(out_foundDevicesPtr == NULL);
+    XLINK_RET_IF(devicesArraySize <= 0);
+    XLINK_RET_IF(out_foundDevicesCount == NULL);
+
+    xLinkPlatformErrorCode_t rc;
+    rc = XLinkPlatformFindDevicesDynamic(in_deviceRequirements, out_foundDevicesPtr, devicesArraySize, out_foundDevicesCount, timeoutMs, cb);
+    return parsePlatformError(rc);
+}
+
 //Called only from app - per device
 XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 {

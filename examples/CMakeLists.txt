@@ -27,6 +27,9 @@ endmacro()
 # List devices
 add_example(list_devices list_devices.cpp)
 
+# Search devices
+add_example(search_devices search_devices.cpp)
+
 # Boot bootloader
 add_example(boot_bootloader boot_bootloader.cpp)
 
