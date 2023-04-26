@@ -290,7 +290,7 @@ xLinkPlatformErrorCode_t tcpip_create_search_context(void** pctx, const deviceDe
 
     // Create socket first (also capable of doing broadcasts)
     if(tcpip_create_socket_broadcast(&search_ctx->sock) != TCPIP_HOST_SUCCESS){
-        delete *pctx;
+        delete search_ctx;
         return X_LINK_PLATFORM_ERROR;
     }
 
