@@ -57,7 +57,7 @@
 #define MSEC_TO_USEC(x)                     (x * 1000)
 #define DEVICE_RES_TIMEOUT_MSEC             20
 
-static constexpr auto DEVICE_DISCOVERY_RES_TIMEOUT = std::chrono::milliseconds{200};
+static constexpr auto DEVICE_DISCOVERY_RES_TIMEOUT = std::chrono::milliseconds{500};
 
 #ifdef HAS_DEBUG
 #define DEBUG(...) do { printf(__VA_ARGS__); } while(0)

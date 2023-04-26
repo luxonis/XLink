@@ -433,6 +433,7 @@ XLinkError_t XLinkResetAll()
 
 XLinkError_t XLinkProfStart()
 {
+    XLINK_RET_IF(glHandler == NULL);
     glHandler->profEnable = 1;
     glHandler->profilingData.totalReadBytes = 0;
     glHandler->profilingData.totalWriteBytes = 0;
@@ -446,12 +447,14 @@ XLinkError_t XLinkProfStart()
 
 XLinkError_t XLinkProfStop()
 {
+    XLINK_RET_IF(glHandler == NULL);
     glHandler->profEnable = 0;
     return X_LINK_SUCCESS;
 }
 
 XLinkError_t XLinkProfPrint()
 {
+    XLINK_RET_IF(glHandler == NULL);
     printf("XLink profiling results:\n");
     if (glHandler->profilingData.totalWriteTime)
     {
@@ -481,6 +484,7 @@ XLinkError_t XLinkProfPrint()
 XLinkError_t XLinkGetGlobalProfilingData(XLinkProf_t* prof)
 {
     XLINK_RET_IF(prof == NULL);
+    XLINK_RET_IF(glHandler == NULL);
     // TODO(themarpe) - thread safe readout
     *prof = glHandler->profilingData;
     return X_LINK_SUCCESS;

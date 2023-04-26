@@ -192,6 +192,7 @@ const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val);
 
 /**
  * @brief Profiling funcs - keeping them global for now
+ * Invalid to be called if XLink was not yet initialized
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkProfStart();
