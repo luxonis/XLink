@@ -478,6 +478,25 @@ XLinkError_t XLinkProfPrint()
     return X_LINK_SUCCESS;
 }
 
+XLinkError_t XLinkGetGlobalProfilingData(XLinkProf_t* prof)
+{
+    XLINK_RET_IF(prof == NULL);
+    // TODO(themarpe) - thread safe readout
+    *prof = glHandler->profilingData;
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkGetProfilingData(linkId_t id, XLinkProf_t* prof)
+{
+    XLINK_RET_IF(prof == NULL);
+    xLinkDesc_t* link = getLinkById(id);
+    XLINK_RET_IF(link == NULL);
+
+    // TODO(themarpe) - thread safe readout
+    *prof = link->profilingData;
+    return X_LINK_SUCCESS;
+}
+
 UsbSpeed_t XLinkGetUSBSpeed(linkId_t id){
     xLinkDesc_t* link = getLinkById(id);
     return link->usbConnSpeed;

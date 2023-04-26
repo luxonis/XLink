@@ -197,6 +197,8 @@ const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val);
 XLinkError_t XLinkProfStart();
 XLinkError_t XLinkProfStop();
 XLinkError_t XLinkProfPrint();
+XLinkError_t XLinkGetGlobalProfilingData(XLinkProf_t* prof);
+XLinkError_t XLinkGetProfilingData(linkId_t id, XLinkProf_t* prof);
 
 
 // ------------------------------------
