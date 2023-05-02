@@ -189,6 +189,17 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
 
     free(ipaddrtable);
 
+    {
+        // Additionally send to broadcast IP as well
+        struct sockaddr_in broadcast_addr = { 0 };
+        broadcast_addr.sin_addr.s_addr = INADDR_BROADCAST;
+        broadcast_addr.sin_family = AF_INET;
+        broadcast_addr.sin_port = htons(BROADCAST_UDP_PORT);
+
+        tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
+        sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr));
+    }
+
     return TCPIP_HOST_SUCCESS;
 
 #else
@@ -249,6 +260,17 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
     // Release interface addresses
     freeifaddrs(ifaddr);
 
+    {
+        // Additionally send to broadcast IP as well
+        struct sockaddr_in broadcast_addr = { 0 };
+        broadcast_addr.sin_addr.s_addr = INADDR_BROADCAST;
+        broadcast_addr.sin_family = AF_INET;
+        broadcast_addr.sin_port = htons(BROADCAST_UDP_PORT);
+
+        tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
+        sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr));
+    }
+
     return TCPIP_HOST_SUCCESS;
 #endif
 }
@@ -299,7 +321,7 @@ xLinkPlatformErrorCode_t tcpip_create_search_context(void** pctx, const deviceDe
 
 xLinkPlatformErrorCode_t tcpip_perform_search(void* ctx, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count)
 {
-    if(ctx == nullptr) X_LINK_PLATFORM_INVALID_PARAMETERS;
+    if(ctx == nullptr) return X_LINK_PLATFORM_INVALID_PARAMETERS;
     SearchContex* search = (SearchContex*) ctx;
 
     // Name signifies ip in TCP_IP protocol case
@@ -436,7 +458,7 @@ xLinkPlatformErrorCode_t tcpip_perform_search(void* ctx, deviceDesc_t* devices, 
 
 xLinkPlatformErrorCode_t tcpip_close_search_context(void* ctx)
 {
-    if(ctx == nullptr) X_LINK_PLATFORM_INVALID_PARAMETERS;
+    if(ctx == nullptr) return X_LINK_PLATFORM_INVALID_PARAMETERS;
     SearchContex* search = (SearchContex*) ctx;
     tcpip_close_socket(search->sock);
     delete search;
