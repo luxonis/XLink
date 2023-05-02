@@ -70,6 +70,9 @@ typedef struct xLinkDesc_t {
     int hostClosedFD;
     //Deprecated fields. End.
 
+    // profiling
+    XLinkProf_t profilingData;
+
 } xLinkDesc_t;
 
 streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,

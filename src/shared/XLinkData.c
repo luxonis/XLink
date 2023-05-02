@@ -138,6 +138,8 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
         glHandler->profilingData.totalWriteBytes += size;
         glHandler->profilingData.totalWriteTime += opTime;
     }
+    link->profilingData.totalWriteBytes += size;
+    link->profilingData.totalWriteTime += size;
 
     return X_LINK_SUCCESS;
 }
@@ -166,6 +168,9 @@ XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packe
         glHandler->profilingData.totalReadBytes += (*packet)->length;
         glHandler->profilingData.totalReadTime += opTime;
     }
+    link->profilingData.totalReadBytes += (*packet)->length;
+    link->profilingData.totalReadTime += opTime;
+
 
     return X_LINK_SUCCESS;
 }
@@ -191,6 +196,8 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t*
         glHandler->profilingData.totalWriteBytes += size;
         glHandler->profilingData.totalWriteTime += opTime;
     }
+    link->profilingData.totalWriteBytes += size;
+    link->profilingData.totalWriteTime += opTime;
 
     return X_LINK_SUCCESS;
 }
@@ -219,6 +226,8 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
         glHandler->profilingData.totalReadBytes += (*packet)->length;
         glHandler->profilingData.totalReadTime += opTime;
     }
+    link->profilingData.totalReadBytes += (*packet)->length;
+    link->profilingData.totalReadTime += opTime;
 
     return X_LINK_SUCCESS;
 }
@@ -253,6 +262,9 @@ XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* co
         glHandler->profilingData.totalReadBytes += packet->length;
         glHandler->profilingData.totalReadTime += opTime;
     }
+    link->profilingData.totalReadBytes += packet->length;
+    link->profilingData.totalReadTime += opTime;
+
 
     const XLinkError_t retVal = XLinkReleaseData(streamId);
     if (retVal != X_LINK_SUCCESS) {
@@ -297,6 +309,8 @@ XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t const streamId, streamPacke
         glHandler->profilingData.totalReadBytes += packet->length;
         glHandler->profilingData.totalReadTime += opTime;
     }
+    link->profilingData.totalReadBytes += packet->length;
+    link->profilingData.totalReadTime += opTime;
 
     const XLinkError_t retVal = XLinkReleaseData(streamId);
     if (retVal != X_LINK_SUCCESS) {
