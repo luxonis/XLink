@@ -49,7 +49,7 @@ static xLinkPlatformErrorCode_t getTcpIpDevices(const deviceDesc_t in_deviceRequ
 xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, unsigned sizeFoundDevices,
                                                      unsigned int *out_amountOfFoundDevices) {
-    memset(out_foundDevices, sizeFoundDevices, sizeof(deviceDesc_t));
+    memset(out_foundDevices, 0, sizeFoundDevices * sizeof(deviceDesc_t));
     xLinkPlatformErrorCode_t USB_rc;
     xLinkPlatformErrorCode_t PCIe_rc;
     xLinkPlatformErrorCode_t TCPIP_rc;
