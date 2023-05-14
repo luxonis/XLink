@@ -1165,20 +1165,15 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
         // initialize pseudo libusb path using the host controller index +1 as the "libusb bus number"
         std::string pseudoLibUsbPath = std::to_string(std::distance(hostControllerLocationPaths.begin(), hostController) + 1);
 
-        // find USBROOT in the location path as the starting search position
-        // there is only one root hub per host controller, so it is always on port 0
-        auto searchPosition = locationPaths.find("#USBROOT(0)");
-        if (searchPosition == std::string::npos) {
-            mvLog(MVLOG_FATAL, "Malformed USBROOT hub path");
-            continue;
-        }
-        constexpr auto usbRootLength = sizeof("#USBROOT(0)") - 1;
-        searchPosition += usbRootLength;
+        // there is only one root hub per host controller, it is always on port 0,
+        // therefore start the search past this known root hub in the usb path
+        static constexpr auto usbRootLength = sizeof("#USBROOT(0)") - 1;
+        auto searchPosition{usbPath.c_str() + hostController->size() + usbRootLength};
 
         // parse and transform the Windows USB path to the pseudo libusb path
         int charsRead = 0;
         int port = 0;
-        while (sscanf(usbPath.c_str() + searchPosition, "#USB(%4d)%n", &port, &charsRead) == 1) {
+        while (sscanf(searchPosition, "#USB(%4d)%n", &port, &charsRead) == 1) {
             searchPosition += charsRead;
             pseudoLibUsbPath += '.' + std::to_string(port);
         }
