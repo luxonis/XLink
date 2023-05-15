@@ -115,7 +115,6 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
                 TCPIP_rc = getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
                 *out_amountOfFoundDevices += numFoundDevices;
                 out_foundDevices += numFoundDevices;
-                sizeFoundDevices -= numFoundDevices;
                 // Found enough devices, return
                 if (numFoundDevices >= sizeFoundDevices) {
                     return X_LINK_PLATFORM_SUCCESS;
