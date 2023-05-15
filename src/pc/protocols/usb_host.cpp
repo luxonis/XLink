@@ -1075,7 +1075,6 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
 // - Since USB is dynamic, it is technically possible for a device to change its path at any time
 std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
     if (dev == NULL) return {};
-    mvLog(MVLOG_FATAL, "seeking   %04hx  %04hx  %s", vidpid.first, vidpid.second, getLibusbDevicePath(dev).c_str());
 
     // init device info vars
     HDEVINFO hDevInfoSet;
@@ -1158,7 +1157,7 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
             return usbPath.find(candidateController) == 0;
         });
         if (hostController == hostControllerLocationPaths.end()) {
-            mvLog(MVLOG_FATAL, "Found device with matching vid/pid but no matching USBROOT hub");
+            mvLog(MVLOG_WARN, "Found device with matching vid/pid but no matching USBROOT hub");
             continue;
         }
 
@@ -1178,7 +1177,6 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
             pseudoLibUsbPath += '.' + std::to_string(port);
         }
 
-        mvLog(MVLOG_FATAL, "Candidate %04hx  %04hx  %s  %s", vid, pid, pseudoLibUsbPath.c_str(), serialId);
         if(pseudoLibUsbPath == goalPath) {
             deviceId = serialId;
             break;
