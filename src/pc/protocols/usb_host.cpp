@@ -24,10 +24,10 @@
 #include <chrono>
 #include <cstring>
 
-constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
-static const int MX_ID_TIMEOUT_MS = 100;
 
+static constexpr int MAXIMUM_PORT_NUMBERS = 7;
+static constexpr int MX_ID_TIMEOUT_MS = 100;
 static constexpr auto DEFAULT_OPEN_TIMEOUT = std::chrono::seconds(5);
 static constexpr auto DEFAULT_WRITE_TIMEOUT = 2000;
 static constexpr std::chrono::milliseconds DEFAULT_CONNECT_TIMEOUT{20000};
@@ -61,10 +61,12 @@ static UsbSetupPacket bootBootloaderPacket{
 
 
 
-static std::mutex mutex;
+static std::mutex mutex; // Also protects usb_mx_id_cache
 static libusb_context* context;
 
 int usbInitialize(void* options){
+    std::lock_guard<std::mutex> l(mutex);
+
     #ifdef __ANDROID__
         // If Android, set the options as JavaVM (to default context)
         if(options != nullptr){
@@ -75,10 +77,14 @@ int usbInitialize(void* options){
     // // Debug
     // mvLogLevelSet(MVLOG_DEBUG);
 
+    // Initialize mx id cache
+    usb_mx_id_cache_init();
+
     #if defined(_WIN32) && defined(_MSC_VER)
         return usbInitialize_customdir((void**)&context);
+    #else
+        return libusb_init(&context);
     #endif
-    return libusb_init(&context);
 }
 
 struct pair_hash {
@@ -97,7 +103,7 @@ static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceS
 
 static std::string getLibusbDevicePath(libusb_device *dev);
 static libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev, std::string& outMxId);
-static const char* xlink_libusb_strerror(int x);
+static const char* xlink_libusb_strerror(ssize_t x);
 #ifdef _WIN32
 std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev);
 #endif
@@ -105,20 +111,15 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev);
 extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                      unsigned int *out_amountOfFoundDevices) {
-
-    // Also protects usb_mx_id_cache
     std::lock_guard<std::mutex> l(mutex);
 
     // Get list of usb devices
-    static libusb_device **devs = NULL;
+    libusb_device **devs = nullptr;
     auto numDevices = libusb_get_device_list(context, &devs);
     if(numDevices < 0) {
         mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
         return X_LINK_PLATFORM_ERROR;
     }
-
-    // Initialize mx id cache
-    usb_mx_id_cache_init();
 
     // Loop over all usb devices, increase count only if myriad device
     int numDevicesFound = 0;
@@ -218,28 +219,31 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
     return X_LINK_PLATFORM_SUCCESS;
 }
 
-extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libusb_device** pdev) {
-
-    std::lock_guard<std::mutex> l(mutex);
+// search for usb device by libusb *path* not name, increment refcount on device, return device in pdev pointer
+// TODO investigate the need for extern C
+extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, libusb_device** pdev) noexcept {
+    // validate params
+    if (!pdev || !path || !*path) {
+        return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+    const std::string requiredPath(path);
 
     // Get list of usb devices
-    static libusb_device **devs = NULL;
-    auto numDevices = libusb_get_device_list(context, &devs);
+    libusb_device **devs = nullptr;
+    const auto numDevices = libusb_get_device_list(context, &devs);
     if(numDevices < 0) {
         mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
         return X_LINK_PLATFORM_ERROR;
     }
 
-    // Loop over all usb devices, increase count only if myriad device
+    // Loop over all usb devices, increase count only if myriad device that matches the name
+    // TODO does not filter by myriad devices, investigate if needed
     bool found = false;
     for(ssize_t i = 0; i < numDevices; i++) {
         if(devs[i] == nullptr) continue;
 
-        // Check path only
-        std::string devicePath = getLibusbDevicePath(devs[i]);
-        // Check if compare with name
-        std::string requiredName(name);
-        if(requiredName.length() > 0 && requiredName == devicePath){
+        // compare device path with name
+        if(requiredPath == getLibusbDevicePath(devs[i])){
             // Found, increase ref and exit the loop
             libusb_ref_device(devs[i]);
             *pdev = devs[i];
@@ -262,11 +266,10 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libu
 
 std::string getLibusbDevicePath(libusb_device *dev) {
 
-    std::string devicePath = "";
-
     // Add bus number
     uint8_t bus = libusb_get_bus_number(dev);
-    devicePath += std::to_string(bus) + ".";
+    std::string devicePath{std::to_string(bus)};
+    devicePath += '.';
 
     // Add all subsequent port numbers
     uint8_t portNumbers[MAXIMUM_PORT_NUMBERS];
@@ -281,7 +284,7 @@ std::string getLibusbDevicePath(libusb_device *dev) {
     }
 
     for (int i = 0; i < count - 1; i++){
-        devicePath += std::to_string(portNumbers[i]) + ".";
+        devicePath += std::to_string(portNumbers[i]) + '.';
     }
     devicePath += std::to_string(portNumbers[count - 1]);
 
@@ -294,7 +297,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
     char mxId[XLINK_MAX_MX_ID_SIZE] = {0};
 
     // Default MXID - empty
-    outMxId = "";
+    outMxId.clear();
 
     // first check if entry already exists in the list (and is still valid)
     // if found, it stores it into mx_id variable
@@ -328,8 +331,8 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                     // If WIN32, access error and state == BOOTED
                     #ifdef _WIN32
                     if(libusb_rc == LIBUSB_ERROR_ACCESS && state == X_LINK_BOOTED) {
-                        auto winMxId = getWinUsbMxId({pDesc->idVendor, pDesc->idProduct}, dev);
-                        if(winMxId != "") {
+                        const auto winMxId = getWinUsbMxId({pDesc->idVendor, pDesc->idProduct}, dev);
+                        if(!winMxId.empty()) {
                             strncpy(mxId, winMxId.c_str(), sizeof(mxId) - 1);
                             libusb_rc = 0;
                             break;
@@ -492,7 +495,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
 }
 
-const char* xlink_libusb_strerror(int x) {
+const char* xlink_libusb_strerror(ssize_t x) {
     return libusb_strerror((libusb_error) x);
 }
 
@@ -677,7 +680,6 @@ xLinkPlatformErrorCode_t usbLinkOpen(const char *path, libusb_device_handle*& h)
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
 
-    usbBootError_t rc = USB_BOOT_DEVICE_NOT_FOUND;
     h = nullptr;
     libusb_device *dev = nullptr;
     bool found = false;
