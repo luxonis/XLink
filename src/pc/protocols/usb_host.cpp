@@ -14,6 +14,7 @@
 #include "usb_mx_id.h"
 #include "usb_host.h"
 #include "../PlatformDeviceFd.h"
+#include "wrap_libusb.hpp"
 
 // std
 #include <mutex>
@@ -103,7 +104,7 @@ static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceS
 
 static std::string getLibusbDevicePath(libusb_device *dev);
 static libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev, std::string& outMxId);
-static const char* xlink_libusb_strerror(ssize_t x);
+static const char* xlink_libusb_strerror(ssize_t);
 #ifdef _WIN32
 std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev);
 #endif
@@ -111,35 +112,37 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev);
 extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                      unsigned int *out_amountOfFoundDevices) {
-    std::lock_guard<std::mutex> l(mutex);
-
     // Get list of usb devices
-    libusb_device **devs = nullptr;
-    auto numDevices = libusb_get_device_list(context, &devs);
-    if(numDevices < 0) {
-        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
+    std::lock_guard<std::mutex> l(mutex);
+    LibusbDeviceList deviceList;
+    try {
+        deviceList = LibusbDeviceList(context);
+    }
+    catch(const std::exception&) {
+        // this try/catch can be larger and surround the whole function
+        // LibusbDeviceList has already logged with mvLog
         return X_LINK_PLATFORM_ERROR;
     }
 
     // Loop over all usb devices, increase count only if myriad device
+    const std::string requiredName(in_deviceRequirements.name);
+    const std::string requiredMxId(in_deviceRequirements.mxid);
     int numDevicesFound = 0;
-    for(ssize_t i = 0; i < numDevices; i++) {
-        if(devs[i] == nullptr) continue;
-
+    for (auto* const usbDevice : deviceList) {
+        if(usbDevice == nullptr) continue;
         if(numDevicesFound >= sizeFoundDevices){
             break;
         }
 
         // Get device descriptor
         struct libusb_device_descriptor desc;
-        auto res = libusb_get_device_descriptor(devs[i], &desc);
+        const auto res = libusb_get_device_descriptor(usbDevice, &desc);
         if (res < 0) {
             mvLog(MVLOG_DEBUG, "Unable to get USB device descriptor: %s", xlink_libusb_strerror(res));
             continue;
         }
 
-        VidPid vidpid{desc.idVendor, desc.idProduct};
-
+        const VidPid vidpid{desc.idVendor, desc.idProduct};
         if(vidPidToDeviceState.count(vidpid) > 0){
             // Device found
 
@@ -154,13 +157,12 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                 continue;
             }
 
-            // Get device name
-            std::string devicePath = getLibusbDevicePath(devs[i]);
-            // Check if compare with name, if name is only a hint, don't filter
+            // Get device path
+            const std::string devicePath = getLibusbDevicePath(usbDevice);
 
+            // Compare with name. If name is only a hint then don't filter
             if(!in_deviceRequirements.nameHintOnly){
-                std::string requiredName(in_deviceRequirements.name);
-                if(requiredName.length() > 0 && requiredName != devicePath){
+                if(!requiredName.empty() && requiredName != devicePath){
                     // Current device doesn't match the "filter"
                     continue;
                 }
@@ -168,7 +170,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
 
             // Get device mxid
             std::string mxId;
-            libusb_error rc = getLibusbDeviceMxId(state, devicePath, &desc, devs[i], mxId);
+            libusb_error rc = getLibusbDeviceMxId(state, devicePath, &desc, usbDevice, mxId);
             mvLog(MVLOG_DEBUG, "getLibusbDeviceMxId returned: %s", xlink_libusb_strerror(rc));
             switch (rc)
             {
@@ -186,9 +188,8 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                 break;
             }
 
-            // compare with MxId
-            std::string requiredMxId(in_deviceRequirements.mxid);
-            if(requiredMxId.length() > 0 && requiredMxId != mxId){
+            // Compare with MxId
+            if(!requiredMxId.empty() && requiredMxId != mxId){
                 // Current device doesn't match the "filter"
                 continue;
             }
@@ -204,18 +205,12 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
             memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
             strncpy(out_foundDevices[numDevicesFound].mxid, mxId.c_str(), sizeof(out_foundDevices[numDevicesFound].mxid));
-            numDevicesFound++;
-
+            ++numDevicesFound;
         }
-
     }
-
-    // Free list of usb devices
-    libusb_free_device_list(devs, 1);
 
     // Write the number of found devices
     *out_amountOfFoundDevices = numDevicesFound;
-
     return X_LINK_PLATFORM_SUCCESS;
 }
 
@@ -226,40 +221,28 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, libu
     if (!pdev || !path || !*path) {
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
-    const std::string requiredPath(path);
 
     // Get list of usb devices
-    libusb_device **devs = nullptr;
-    const auto numDevices = libusb_get_device_list(context, &devs);
-    if(numDevices < 0) {
-        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(numDevices));
+    const auto deviceList = LibusbDeviceList::create(context);
+    if(!deviceList) {
         return X_LINK_PLATFORM_ERROR;
     }
 
     // Loop over all usb devices, increase count only if myriad device that matches the name
     // TODO does not filter by myriad devices, investigate if needed
-    bool found = false;
-    for(ssize_t i = 0; i < numDevices; i++) {
-        if(devs[i] == nullptr) continue;
+    const std::string requiredPath(path);
+    for (auto* const usbDevice : *deviceList) {
+        if(usbDevice == nullptr) continue;
 
         // compare device path with name
-        if(requiredPath == getLibusbDevicePath(devs[i])){
+        if(requiredPath == getLibusbDevicePath(usbDevice)){
             // Found, increase ref and exit the loop
-            libusb_ref_device(devs[i]);
-            *pdev = devs[i];
-            found = true;
-            break;
+            libusb_ref_device(usbDevice);
+            *pdev = usbDevice;
+            return X_LINK_PLATFORM_SUCCESS;
         }
     }
-
-    // Free list of usb devices (unref each)
-    libusb_free_device_list(devs, 1);
-
-    if(!found){
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
-    }
-
-    return X_LINK_PLATFORM_SUCCESS;
+    return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
 }
 
 
