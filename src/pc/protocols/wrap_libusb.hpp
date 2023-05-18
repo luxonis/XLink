@@ -43,8 +43,8 @@ public:
 };
 
 // simple libusb resource wrappers
-using context = unique_resource_ptr<libusb_context, libusb_exit>;
-using config_descriptor = unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>;
+//using context = unique_resource_ptr<libusb_context, libusb_exit>;
+//using config_descriptor = unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>;
 
 // device_list container class wrapper for libusb_get_device_list()
 // Use constructors to create an instance as the primary approach.
@@ -192,6 +192,22 @@ private:
     size_type countDevices{0};
     pointer deviceList{nullptr};
 };
+
+// wrapper for libusb_get_config_descriptor()
+class config_descriptor : public unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor> {
+public:
+    using unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>::unique_resource_ptr;
+
+    config_descriptor(libusb_device* dev, uint8_t configIndex) {
+        libusb_config_descriptor *config{nullptr};
+        const auto rcNum = libusb_get_config_descriptor(dev, configIndex, &config);
+        if (rcNum < 0) {
+            mvLog(MVLOG_ERROR, "Unable to get USB config descriptor: %s", xlink_libusb_strerror(rcNum));
+            throw usb_error(rcNum);
+        }
+        reset(config);
+    }
+};
+
 } // namespace libusb
 } // namespace dai
-

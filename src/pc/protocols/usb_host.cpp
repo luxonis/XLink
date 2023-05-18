@@ -25,7 +25,9 @@
 #include <chrono>
 #include <cstring>
 
+using dai::libusb::config_descriptor;
 using dai::libusb::device_list;
+using dai::libusb::usb_error;
 using VidPid = std::pair<uint16_t, uint16_t>;
 
 static constexpr int MAXIMUM_PORT_NUMBERS = 7;
@@ -486,7 +488,6 @@ const char* xlink_libusb_strerror(ssize_t x) {
 
 static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libusb_device_handle*& handle)
 {
-    struct libusb_config_descriptor *cdesc;
     const struct libusb_interface_descriptor *ifdesc;
     libusb_device_handle *h = NULL;
     int res;
@@ -523,12 +524,21 @@ static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libus
         libusb_close(h);
         return (libusb_error) res;
     }
-    if((res = libusb_get_config_descriptor(dev, 0, &cdesc)) < 0)
-    {
-        mvLog(MVLOG_DEBUG, "Unable to get USB config descriptor: %s\n", xlink_libusb_strerror(res));
-        libusb_close(h);
-        return (libusb_error) res;
+
+    // Get device config descriptor
+    config_descriptor cdesc;
+    try {
+        cdesc = config_descriptor{dev, 0};
     }
+    catch(const usb_error& e) {
+        libusb_close(h);
+        return static_cast<libusb_error>(e.code().value());
+    }
+    catch(const std::exception&) {
+        libusb_close(h);
+        return LIBUSB_ERROR_OTHER;
+    }
+
     ifdesc = cdesc->interface->altsetting;
     for(int i=0; i<ifdesc->bNumEndpoints; i++)
     {
@@ -540,12 +550,11 @@ static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libus
         {
             *endpoint = ifdesc->endpoint[i].bEndpointAddress;
             bulk_chunklen = ifdesc->endpoint[i].wMaxPacketSize;
-            libusb_free_config_descriptor(cdesc);
             handle = h;
             return LIBUSB_SUCCESS;
         }
     }
-    libusb_free_config_descriptor(cdesc);
+    cdesc.reset();
     libusb_close(h);
     return LIBUSB_ERROR_ACCESS;
 }
