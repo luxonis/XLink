@@ -314,7 +314,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
             // Open device - if not already
             if(!handle){
                 try {
-                    handle = device_handle(dev);
+                    handle = device_handle{dev};
                 }
                 catch(const usb_error& e) {
                     // Some kind of error, either NO_MEM, ACCESS, NO_DEVICE or other
@@ -369,18 +369,29 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
                 // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
                 libusb_set_auto_detach_kernel_driver(handle.get(), 1);
+
                 // Claim interface (as we'll be doing IO on endpoints)
-                if ((libusb_rc = libusb_claim_interface(handle.get(), 0)) < 0) {
+                try {
+                    handle.claim_interface(0);
+                }
+                catch(const usb_error& e) {
+                    libusb_rc = e.code().value();
+                    /*
+                    // TODO need to decide if `usb_error` does logging
                     if(libusb_rc != LIBUSB_ERROR_BUSY){
                         mvLog(MVLOG_ERROR, "libusb_claim_interface: %s", xlink_libusb_strerror(libusb_rc));
                     } else {
                         mvLog(MVLOG_DEBUG, "libusb_claim_interface: %s", xlink_libusb_strerror(libusb_rc));
                     }
+                    */
+
                     // retry - most likely device busy by another app
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                     continue;
                 }
-
+                catch(const std::exception&) {
+                    return LIBUSB_ERROR_OTHER;
+                }
 
                 const int send_ep = 0x01;
                 int transferred = 0;
@@ -429,8 +440,15 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 ///////////////////////
 
                 // Release claimed interface
-                // ignore error as it doesn't matter
-                libusb_release_interface(handle.get(), 0);
+                try {
+                    handle.release_interface(0);
+                }
+                catch(const usb_error&) {
+                    // ignore error as it doesn't matter
+                }
+                catch(const std::exception&) {
+                    return LIBUSB_ERROR_OTHER;
+                }
 
                 // Parse mxId into HEX presentation
                 // There's a bug, it should be 0x0F, but setting as in MDK
@@ -497,7 +515,7 @@ static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libus
 
     device_handle h;
     try {
-        h = device_handle(dev);
+        h = device_handle{dev};
     }
     catch(const usb_error& e) {
         return static_cast<libusb_error>(e.code().value());
@@ -524,10 +542,16 @@ static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libus
 
     // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
     libusb_set_auto_detach_kernel_driver(h.get(), 1);
-    if((res = libusb_claim_interface(h.get(), 0)) < 0)
-    {
-        mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
-        return (libusb_error) res;
+
+    // claim interface 0
+    try {
+        h.claim_interface(0);
+    }
+    catch(const usb_error& e) {
+        return static_cast<libusb_error>(e.code().value());
+    }
+    catch(const std::exception&) {
+        return LIBUSB_ERROR_OTHER;
     }
 
     // Get device config descriptor
@@ -677,6 +701,7 @@ xLinkPlatformErrorCode_t usbLinkOpen(const char *path, libusb_device_handle*& h)
 
     auto t1 = steady_clock::now();
     do {
+        // BUGBUG what code decrements this ref? usbLinkClose() doesn't do it.
         if(refLibusbDeviceByName(path, &dev) == X_LINK_PLATFORM_SUCCESS){
             found = true;
             break;
@@ -717,7 +742,7 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
 
     device_handle h;
     try {
-        h = device_handle(dev.get());
+        h = device_handle{dev.get()};
     }
     catch(const usb_error& e) {
         if(e.code().value() == LIBUSB_ERROR_ACCESS) {

@@ -13,13 +13,14 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <vector>
 
 namespace dai {
 
 // TEMPLATE WRAPPERS
 template<typename Resource, void(*Dispose)(Resource*)>
 struct unique_resource_deleter {
-    inline void operator()(Resource* const ptr) {
+    inline void operator()(Resource* const ptr) noexcept {
         Dispose(ptr);
     }
 };
@@ -191,6 +192,10 @@ public:
 
 // wrapper for libusb_open(), libusb_wrap_sys_device()
 class device_handle : public unique_resource_ptr<libusb_device_handle, libusb_close> {
+private:
+    using _base = unique_resource_ptr<libusb_device_handle, libusb_close>;
+    std::vector<int> claimedInterfaces{};
+
 public:
     using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
 
@@ -201,7 +206,7 @@ public:
             mvLog(MVLOG_ERROR, "Unable to get libusb device_handle: %s", libusb_strerror(rcNum));
             throw usb_error(rcNum);
         }
-        reset(resource);
+        _base::reset(resource);
     }
     device_handle(libusb_context *ctx, intptr_t sys_dev_handle) {
         libusb_device_handle *resource{};
@@ -210,7 +215,67 @@ public:
             mvLog(MVLOG_ERROR, "Unable to get libusb device_handle: %s", libusb_strerror(rcNum));
             throw usb_error(rcNum);
         }
-        reset(resource);
+        _base::reset(resource);
+    }
+    device_handle(const device_handle&) = delete;
+    device_handle& operator=(const device_handle&) = delete;
+    device_handle(device_handle &&other) noexcept :
+        _base{std::exchange<_base, _base>(other, {})},
+        claimedInterfaces{std::exchange(other.claimedInterfaces, {})}
+    {}
+    device_handle &operator=(device_handle &&other) noexcept {
+        if (this != &other) {
+            _base::operator=(std::exchange<_base, _base>(other, {}));
+            claimedInterfaces = std::exchange(other.claimedInterfaces, {});
+        }
+        return *this;
+    }
+    ~device_handle() noexcept {
+        reset();
+    }
+
+    // release all managed objects with libusb_release_interface() and libusb_close()
+    // No exceptions are thrown. Errors are logged.
+    void reset() noexcept {
+        for (const auto interfaceNumber : claimedInterfaces) {
+            const auto rcNum = libusb_release_interface(get(), interfaceNumber);
+            if (rcNum < 0) {
+                mvLog(MVLOG_ERROR, "Unable to release libusb interface %d: %s", interfaceNumber, libusb_strerror(rcNum));
+            }
+        }
+        _base::reset();
+    }
+
+    // release ownership of the managed libusb_device_handle and all device interfaces
+    // caller is responsible for calling libusb_release_interface() and libusb_close()
+    device_handle::pointer release() noexcept {
+        claimedInterfaces.clear();
+        return _base::release();
+    }
+
+    // wrapper for libusb_claim_interface()
+    void claim_interface(int interface_number) {
+        if (std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interface_number) != claimedInterfaces.end())
+            return;
+        const auto rcNum = libusb_claim_interface(get(), interface_number);
+        if (rcNum < 0) {
+            mvLog(MVLOG_ERROR, "Unable to claim libusb interface %d: %s", interface_number, libusb_strerror(rcNum));
+            throw usb_error(rcNum);
+        }
+        claimedInterfaces.emplace_back(interface_number);
+    }
+
+    // wrapper for libusb_release_interface()
+    void release_interface(int interface_number) {
+        auto candidate = std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interface_number);
+        if (candidate == claimedInterfaces.end())
+            return;
+        const auto rcNum = libusb_release_interface(get(), interface_number);
+        if (rcNum < 0) {
+            mvLog(MVLOG_ERROR, "Unable to release libusb interface %d: %s", interface_number, libusb_strerror(rcNum));
+            throw usb_error(rcNum);
+        }
+        claimedInterfaces.erase(candidate);
     }
 };
 
