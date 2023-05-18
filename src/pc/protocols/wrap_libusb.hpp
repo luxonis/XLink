@@ -14,19 +14,17 @@
 #include <string>
 #include <system_error>
 
-static const char *xlink_libusb_strerror(ssize_t);
-
 namespace dai {
 
 // TEMPLATE WRAPPERS
-template<typename T, void(*FreeFunc)(T*)>
+template<typename Resource, void(*Dispose)(Resource*)>
 struct unique_resource_deleter {
-    inline void operator()(T* const ptr) {
-        FreeFunc(ptr);
+    inline void operator()(Resource* const ptr) {
+        Dispose(ptr);
     }
 };
-template<typename T, void(*FreeFunc)(T*)>
-using unique_resource_ptr = std::unique_ptr<T, unique_resource_deleter<T, FreeFunc>>;
+template<typename Resource, void(*Dispose)(Resource*)>
+using unique_resource_ptr = std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>;
 
 
 namespace libusb {
@@ -42,7 +40,9 @@ public:
         std::system_error{std::error_code(libusbErrorCode, std::system_category()), what} {}
 };
 
-// simple libusb resource wrappers
+// wraps libusb_device and automatically libusb_unref_device() on destruction
+using usb_device = unique_resource_ptr<libusb_device, libusb_unref_device>;
+
 //using context = unique_resource_ptr<libusb_context, libusb_exit>;
 //using config_descriptor = unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>;
 
@@ -59,7 +59,7 @@ public:
             //const auto result = std::unique_ptr<device_list>(new device_list());
             const auto rcNum = libusb_get_device_list(context, &result->deviceList);
             if (rcNum < 0 || result->deviceList == nullptr) {
-                mvLog(MVLOG_ERROR, "Unable to get USB device list: %s", xlink_libusb_strerror(rcNum));
+                mvLog(MVLOG_ERROR, "Unable to get USB device list: %s", libusb_strerror(rcNum));
                 result.reset();
             }
             else {
@@ -95,7 +95,7 @@ public:
     explicit device_list(libusb_context* context) {
         const auto rcNum = libusb_get_device_list(context, &deviceList);
         if (rcNum < 0 || deviceList == nullptr) {
-            mvLog(MVLOG_ERROR, "Unable to get USB device list: %s", xlink_libusb_strerror(rcNum));
+            mvLog(MVLOG_ERROR, "Unable to get USB device list: %s", libusb_strerror(rcNum));
             throw usb_error(static_cast<int>(rcNum));
         }
         countDevices = static_cast<size_type>(rcNum);
@@ -189,8 +189,8 @@ public:
     }
 
 private:
-    size_type countDevices{0};
-    pointer deviceList{nullptr};
+    size_type countDevices{};
+    pointer deviceList{};
 };
 
 // wrapper for libusb_get_config_descriptor()
@@ -199,15 +199,61 @@ public:
     using unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>::unique_resource_ptr;
 
     config_descriptor(libusb_device* dev, uint8_t configIndex) {
-        libusb_config_descriptor *config{nullptr};
-        const auto rcNum = libusb_get_config_descriptor(dev, configIndex, &config);
+        libusb_config_descriptor *resource{};
+        const auto rcNum = libusb_get_config_descriptor(dev, configIndex, &resource);
         if (rcNum < 0) {
-            mvLog(MVLOG_ERROR, "Unable to get USB config descriptor: %s", xlink_libusb_strerror(rcNum));
+            mvLog(MVLOG_ERROR, "Unable to get libusb config_descriptor: %s", libusb_strerror(rcNum));
             throw usb_error(rcNum);
         }
-        reset(config);
+        reset(resource);
     }
 };
+
+// wrapper for libusb_open(), libusb_wrap_sys_device()
+class device_handle : public unique_resource_ptr<libusb_device_handle, libusb_close> {
+public:
+    using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
+
+    device_handle(libusb_device* dev) {
+        libusb_device_handle *resource{};
+        const auto rcNum = libusb_open(dev, &resource);
+        if (rcNum < 0) {
+            mvLog(MVLOG_ERROR, "Unable to get libusb device_handle: %s", libusb_strerror(rcNum));
+            throw usb_error(rcNum);
+        }
+        reset(resource);
+    }
+    device_handle(libusb_context *ctx, intptr_t sys_dev_handle) {
+        libusb_device_handle *resource{};
+        const auto rcNum = libusb_wrap_sys_device(ctx, sys_dev_handle, &resource);
+        if (rcNum < 0) {
+            mvLog(MVLOG_ERROR, "Unable to get libusb device_handle: %s", libusb_strerror(rcNum));
+            throw usb_error(rcNum);
+        }
+        reset(resource);
+    }
+};
+
+/*
+// https://stackoverflow.com/questions/57622162/get-function-arguments-type-as-tuple
+// https://stackoverflow.com/questions/36612596/tuple-to-parameter-pack
+#include <tuple>
+template<typename Func>
+class function_traits;
+
+// specialization for functions
+template<typename Func, typename... FuncArgs>
+class function_traits<Func (FuncArgs...)> {
+public:
+    using arguments = ::std::tuple<FuncArgs...>;
+    using numargs = sizeof(...FuncArgs);
+};
+
+using foo_arguments = function_traits<decltype(libusb_get_config_descriptor)>::arguments;
+using foo_argsize = function_traits<decltype(libusb_get_config_descriptor)>::numargs;
+
+*/
+
 
 } // namespace libusb
 } // namespace dai

@@ -26,7 +26,9 @@
 #include <cstring>
 
 using dai::libusb::config_descriptor;
+using dai::libusb::device_handle;
 using dai::libusb::device_list;
+using dai::libusb::usb_device;
 using dai::libusb::usb_error;
 using VidPid = std::pair<uint16_t, uint16_t>;
 
@@ -297,7 +299,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
         // If not found, retrieve mxId
 
         // get serial from usb descriptor
-        libusb_device_handle *handle = nullptr;
+        device_handle handle;
         int libusb_rc = LIBUSB_SUCCESS;
 
         // Retry getting MX ID for 15ms
@@ -306,13 +308,14 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
         auto t1 = std::chrono::steady_clock::now();
         do {
-
             // Open device - if not already
-            if(handle == nullptr){
-                libusb_rc = libusb_open(dev, &handle);
-                if (libusb_rc < 0){
+            if(!handle){
+                try {
+                    handle = device_handle(dev);
+                }
+                catch(const usb_error& e) {
                     // Some kind of error, either NO_MEM, ACCESS, NO_DEVICE or other
-                    mvLog(MVLOG_DEBUG, "libusb_open: %s", xlink_libusb_strerror(libusb_rc));
+                    libusb_rc = e.code().value();
 
                     // If WIN32, access error and state == BOOTED
                     #ifdef _WIN32
@@ -330,6 +333,9 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     continue;
                 }
+                catch(const std::exception&) {
+                    return LIBUSB_ERROR_OTHER;
+                }
             }
 
             // if UNBOOTED state, perform mx_id retrieval procedure using small program and a read command
@@ -337,10 +343,10 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
                 // Get configuration first (From OS cache)
                 int active_configuration = -1;
-                if( (libusb_rc = libusb_get_configuration(handle, &active_configuration)) == 0){
+                if( (libusb_rc = libusb_get_configuration(handle.get(), &active_configuration)) == 0){
                     if(active_configuration != 1){
                         mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1\n", active_configuration);
-                        if ((libusb_rc = libusb_set_configuration(handle, 1)) < 0) {
+                        if ((libusb_rc = libusb_set_configuration(handle.get(), 1)) < 0) {
                             mvLog(MVLOG_ERROR, "libusb_set_configuration: %s", xlink_libusb_strerror(libusb_rc));
 
                             // retry
@@ -359,9 +365,9 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
 
                 // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
-                libusb_set_auto_detach_kernel_driver(handle, 1);
+                libusb_set_auto_detach_kernel_driver(handle.get(), 1);
                 // Claim interface (as we'll be doing IO on endpoints)
-                if ((libusb_rc = libusb_claim_interface(handle, 0)) < 0) {
+                if ((libusb_rc = libusb_claim_interface(handle.get(), 0)) < 0) {
                     if(libusb_rc != LIBUSB_ERROR_BUSY){
                         mvLog(MVLOG_ERROR, "libusb_claim_interface: %s", xlink_libusb_strerror(libusb_rc));
                     } else {
@@ -380,7 +386,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 // Start
                 // WD Protection & MXID Retrieval Command
                 transferred = 0;
-                libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT_MS);
+                libusb_rc = libusb_bulk_transfer(handle.get(), send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT_MS);
                 if (libusb_rc < 0 || usb_mx_id_get_payload_size() != transferred) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_size());
                     // Mark as error and retry
@@ -395,7 +401,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 const int expectedMxIdReadSize = 9;
                 uint8_t rbuf[128];
                 transferred = 0;
-                libusb_rc = libusb_bulk_transfer(handle, recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT_MS);
+                libusb_rc = libusb_bulk_transfer(handle.get(), recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT_MS);
                 if (libusb_rc < 0 || expectedMxIdReadSize != transferred) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, expectedMxIdReadSize);
                     // Mark as error and retry
@@ -407,7 +413,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
                 // WD Protection end
                 transferred = 0;
-                libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload_end()), usb_mx_id_get_payload_end_size(), &transferred, MX_ID_TIMEOUT_MS);
+                libusb_rc = libusb_bulk_transfer(handle.get(), send_ep, ((uint8_t*) usb_mx_id_get_payload_end()), usb_mx_id_get_payload_end_size(), &transferred, MX_ID_TIMEOUT_MS);
                 if (libusb_rc < 0 || usb_mx_id_get_payload_end_size() != transferred) {
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_end_size());
                     // Mark as error and retry
@@ -421,7 +427,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
                 // Release claimed interface
                 // ignore error as it doesn't matter
-                libusb_release_interface(handle, 0);
+                libusb_release_interface(handle.get(), 0);
 
                 // Parse mxId into HEX presentation
                 // There's a bug, it should be 0x0F, but setting as in MDK
@@ -437,7 +443,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
             } else {
 
-                if( (libusb_rc = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, ((uint8_t*) mxId), sizeof(mxId))) < 0){
+                if( (libusb_rc = libusb_get_string_descriptor_ascii(handle.get(), pDesc->iSerialNumber, ((uint8_t*) mxId), sizeof(mxId))) < 0){
                     mvLog(MVLOG_WARN, "Failed to get string descriptor");
 
                     // retry
@@ -451,11 +457,6 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
             }
 
         } while (libusb_rc != 0 && std::chrono::steady_clock::now() - t1 < RETRY_TIMEOUT);
-
-        // Close opened device
-        if(handle != nullptr){
-            libusb_close(handle);
-        }
 
         // if mx_id couldn't be retrieved, exit by returning error
         if(libusb_rc != 0){
@@ -489,39 +490,40 @@ const char* xlink_libusb_strerror(ssize_t x) {
 static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libusb_device_handle*& handle)
 {
     const struct libusb_interface_descriptor *ifdesc;
-    libusb_device_handle *h = NULL;
     int res;
 
-    if((res = libusb_open(dev, &h)) < 0)
-    {
-        mvLog(MVLOG_DEBUG, "cannot open device: %s\n", xlink_libusb_strerror(res));
-        return (libusb_error) res;
+    device_handle h;
+    try {
+        h = device_handle(dev);
+    }
+    catch(const usb_error& e) {
+        return static_cast<libusb_error>(e.code().value());
+    }
+    catch(const std::exception& e) {
+        return LIBUSB_ERROR_OTHER;
     }
 
     // Get configuration first
     int active_configuration = -1;
-    if((res = libusb_get_configuration(h, &active_configuration)) < 0){
+    if((res = libusb_get_configuration(h.get(), &active_configuration)) < 0){
         mvLog(MVLOG_DEBUG, "setting config 1 failed: %s\n", xlink_libusb_strerror(res));
-        libusb_close(h);
         return (libusb_error) res;
     }
 
     // Check if set configuration call is needed
     if(active_configuration != 1){
         mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1\n", active_configuration);
-        if ((res = libusb_set_configuration(h, 1)) < 0) {
+        if ((res = libusb_set_configuration(h.get(), 1)) < 0) {
             mvLog(MVLOG_ERROR, "libusb_set_configuration: %s\n", xlink_libusb_strerror(res));
-            libusb_close(h);
             return (libusb_error) res;
         }
     }
 
     // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
-    libusb_set_auto_detach_kernel_driver(h, 1);
-    if((res = libusb_claim_interface(h, 0)) < 0)
+    libusb_set_auto_detach_kernel_driver(h.get(), 1);
+    if((res = libusb_claim_interface(h.get(), 0)) < 0)
     {
         mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
-        libusb_close(h);
         return (libusb_error) res;
     }
 
@@ -531,11 +533,9 @@ static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libus
         cdesc = config_descriptor{dev, 0};
     }
     catch(const usb_error& e) {
-        libusb_close(h);
         return static_cast<libusb_error>(e.code().value());
     }
     catch(const std::exception&) {
-        libusb_close(h);
         return LIBUSB_ERROR_OTHER;
     }
 
@@ -550,12 +550,10 @@ static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libus
         {
             *endpoint = ifdesc->endpoint[i].bEndpointAddress;
             bulk_chunklen = ifdesc->endpoint[i].wMaxPacketSize;
-            handle = h;
+            handle = h.release();
             return LIBUSB_SUCCESS;
         }
     }
-    cdesc.reset();
-    libusb_close(h);
     return LIBUSB_ERROR_ACCESS;
 }
 
@@ -657,10 +655,7 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
         }
     }
 
-    if (dev) {
-        libusb_unref_device(dev);
-    }
-
+    libusb_unref_device(dev);
     return rc;
 }
 
@@ -704,29 +699,36 @@ xLinkPlatformErrorCode_t usbLinkOpen(const char *path, libusb_device_handle*& h)
 
 
 xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
-
-    libusb_device *dev = nullptr;
-    auto refErr = refLibusbDeviceByName(path, &dev);
-    if(refErr != X_LINK_PLATFORM_SUCCESS) {
-        return refErr;
+    usb_device dev;
+    {
+        libusb_device *tmpDev = nullptr;
+        auto refErr = refLibusbDeviceByName(path, &tmpDev);
+        if(refErr != X_LINK_PLATFORM_SUCCESS) {
+            return refErr;
+        }
+        if(tmpDev == nullptr){
+            return X_LINK_PLATFORM_ERROR;
+        }
+        dev.reset(tmpDev);
     }
-    if(dev == NULL){
-        return X_LINK_PLATFORM_ERROR;
+
+    device_handle h;
+    try {
+        h = device_handle(dev.get());
     }
-    libusb_device_handle *h = NULL;
-
-
-    int libusb_rc = libusb_open(dev, &h);
-    if (libusb_rc < 0) {
-        libusb_unref_device(dev);
-        if(libusb_rc == LIBUSB_ERROR_ACCESS) {
+    catch(const usb_error& e) {
+        if(e.code().value() == LIBUSB_ERROR_ACCESS) {
             return X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
         }
         return X_LINK_PLATFORM_ERROR;
     }
+    catch(const std::exception&) {
+        return X_LINK_PLATFORM_ERROR;
+    }
 
     // Make control transfer
-    libusb_rc = libusb_control_transfer(h,
+    // Ignore errors and unref+close device
+    if(0 > libusb_control_transfer(h.get(),
         bootBootloaderPacket.requestType,   // bmRequestType: device-directed
         bootBootloaderPacket.request,   // bRequest: custom
         bootBootloaderPacket.value, // wValue: custom
@@ -734,16 +736,9 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
         NULL,   // data pointer
         0,      // data size
         1000    // timeout [ms]
-    );
-
-    // Ignore error and close device
-    libusb_unref_device(dev);
-    libusb_close(h);
-
-    if(libusb_rc < 0) {
+    )) {
         return X_LINK_PLATFORM_ERROR;
     }
-
     return X_LINK_PLATFORM_SUCCESS;
 }
 
