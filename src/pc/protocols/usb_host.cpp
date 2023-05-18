@@ -25,6 +25,7 @@
 #include <chrono>
 #include <cstring>
 
+using dai::libusb::device_list;
 using VidPid = std::pair<uint16_t, uint16_t>;
 
 static constexpr int MAXIMUM_PORT_NUMBERS = 7;
@@ -114,9 +115,9 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                                                      unsigned int *out_amountOfFoundDevices) {
     // Get list of usb devices
     std::lock_guard<std::mutex> l(mutex);
-    LibusbDeviceList deviceList;
+    device_list deviceList;
     try {
-        deviceList = LibusbDeviceList(context);
+        deviceList = device_list{context};
     }
     catch(const std::exception&) {
         // this try/catch can be larger and surround the whole function
@@ -223,7 +224,7 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, libu
     }
 
     // Get list of usb devices
-    const auto deviceList = LibusbDeviceList::create(context);
+    const auto deviceList = device_list::create(context);
     if(!deviceList) {
         return X_LINK_PLATFORM_ERROR;
     }
