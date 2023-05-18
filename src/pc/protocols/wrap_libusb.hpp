@@ -31,14 +31,20 @@ using unique_resource_ptr = std::unique_ptr<T, unique_resource_deleter<T, FreeFu
 
 namespace libusb {
 
-// EXAMPLE LIBUSB WRAPPERS
-void libusb_free_device_list_unref(libusb_device *list[]) {
-    libusb_free_device_list((libusb_device **)list, 1);
-}
-using unique_context = unique_resource_ptr<libusb_context, libusb_exit>;
-using unique_device_list = unique_resource_ptr<libusb_device*, libusb_free_device_list_unref>;
+// exception error class for libusb errors
+class usb_error : public std::system_error {
+public:
+    explicit usb_error(const int libusbErrorCode) noexcept :
+        std::system_error{std::error_code(libusbErrorCode, std::system_category()), libusb_strerror(libusbErrorCode)} {}
+    usb_error(const int libusbErrorCode, const std::string& what) noexcept :
+        std::system_error{std::error_code(libusbErrorCode, std::system_category()), what} {}
+    usb_error(const int libusbErrorCode, const char* what) noexcept :
+        std::system_error{std::error_code(libusbErrorCode, std::system_category()), what} {}
+};
 
-
+// simple libusb resource wrappers
+using context = unique_resource_ptr<libusb_context, libusb_exit>;
+using config_descriptor = unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>;
 
 // device_list container class wrapper for libusb_get_device_list()
 // Use constructors to create an instance as the primary approach.
@@ -90,7 +96,7 @@ public:
         const auto rcNum = libusb_get_device_list(context, &deviceList);
         if (rcNum < 0 || deviceList == nullptr) {
             mvLog(MVLOG_ERROR, "Unable to get USB device list: %s", xlink_libusb_strerror(rcNum));
-            throw std::system_error(std::error_code(static_cast<int>(rcNum), std::system_category()), std::string("Unable to get USB device list: ").append(xlink_libusb_strerror(rcNum)));
+            throw usb_error(static_cast<int>(rcNum));
         }
         countDevices = static_cast<size_type>(rcNum);
     }
