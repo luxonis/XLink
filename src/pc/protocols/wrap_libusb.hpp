@@ -8,6 +8,7 @@
 #include <libusb-1.0/libusb.h>
 #endif
 
+#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <stdexcept>
@@ -17,7 +18,24 @@
 
 namespace dai {
 
-// TEMPLATE WRAPPERS
+#if __cplusplus >= 201402L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201402L)
+    // C++14 or newer
+    #include <utility>
+    #define XLINK_EXCHANGE std::exchange
+#else
+    // older than C++14
+    #define XLINK_EXCHANGE exchange11
+    #include <type_traits>
+    template <class _Ty, class _Other = _Ty>
+    _Ty exchange11(_Ty& _Val, _Other&& _New_val) noexcept(
+        std::is_nothrow_move_constructible<_Ty>::value && std::is_nothrow_assignable<_Ty&, _Other>::value) {
+        _Ty _Old_val = static_cast<_Ty&&>(_Val);
+        _Val         = static_cast<_Other&&>(_New_val);
+        return _Old_val;
+    }
+#endif
+
+// base implementation wrappers
 template<typename Resource, void(*Dispose)(Resource*)>
 struct unique_resource_deleter {
     inline void operator()(Resource* const ptr) noexcept {
@@ -63,13 +81,13 @@ public:
     device_list(const device_list&) = delete;
     device_list& operator=(const device_list&) = delete;
     device_list(device_list&& other) noexcept :
-        countDevices{std::exchange(other.countDevices, 0)},
-        deviceList{std::exchange(other.deviceList, nullptr)} {};
+        countDevices{XLINK_EXCHANGE(other.countDevices, 0)},
+        deviceList{XLINK_EXCHANGE(other.deviceList, nullptr)} {};
     device_list& operator=(device_list&& other) noexcept {
         if (this == &other)
             return *this;
-        countDevices = std::exchange(other.countDevices, 0);
-        deviceList = std::exchange(other.deviceList, nullptr);
+        countDevices = XLINK_EXCHANGE(other.countDevices, 0);
+        deviceList = XLINK_EXCHANGE(other.deviceList, nullptr);
         return *this;
     }
 
@@ -118,10 +136,10 @@ public:
         return deviceList;
     }
     reverse_iterator rbegin() noexcept {
-        return std::make_reverse_iterator(end());
+        return std::reverse_iterator<iterator>{end()};
     }
     const_reverse_iterator rbegin() const noexcept {
-        return std::make_reverse_iterator(cend());
+        return std::reverse_iterator<const_iterator>{cend()};
     }
     iterator end() noexcept {
         return begin() + countDevices;
@@ -133,10 +151,10 @@ public:
         return cbegin() + countDevices;
     }
     reverse_iterator rend() noexcept {
-        return std::make_reverse_iterator(begin());
+        return std::reverse_iterator<iterator>{begin()};
     }
     const_reverse_iterator rend() const noexcept {
-        return std::make_reverse_iterator(cbegin());
+        return std::reverse_iterator<const_iterator>{cbegin()};
     }
     reference front() noexcept {
         return *begin();
@@ -220,13 +238,13 @@ public:
     device_handle(const device_handle&) = delete;
     device_handle& operator=(const device_handle&) = delete;
     device_handle(device_handle &&other) noexcept :
-        _base{std::exchange<_base, _base>(other, {})},
-        claimedInterfaces{std::exchange(other.claimedInterfaces, {})}
+        _base{XLINK_EXCHANGE<_base, _base>(other, {})},
+        claimedInterfaces{XLINK_EXCHANGE(other.claimedInterfaces, {})}
     {}
     device_handle &operator=(device_handle &&other) noexcept {
         if (this != &other) {
-            _base::operator=(std::exchange<_base, _base>(other, {}));
-            claimedInterfaces = std::exchange(other.claimedInterfaces, {});
+            _base::operator=(XLINK_EXCHANGE<_base, _base>(other, {}));
+            claimedInterfaces = XLINK_EXCHANGE(other.claimedInterfaces, {});
         }
         return *this;
     }
@@ -301,4 +319,7 @@ using foo_argsize = function_traits<decltype(libusb_get_config_descriptor)>::num
 
 
 } // namespace libusb
+
+#undef XLINK_EXCHANGE
+
 } // namespace dai

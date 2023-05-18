@@ -520,7 +520,7 @@ static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libus
     catch(const usb_error& e) {
         return static_cast<libusb_error>(e.code().value());
     }
-    catch(const std::exception& e) {
+    catch(const std::exception&) {
         return LIBUSB_ERROR_OTHER;
     }
 
