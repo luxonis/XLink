@@ -52,26 +52,6 @@ using usb_device = unique_resource_ptr<libusb_device, libusb_unref_device>;
 class device_list;
 class device_list {
 public:
-    static std::unique_ptr<device_list> create(libusb_context* context) noexcept {
-        static_assert(std::is_nothrow_constructible_v<device_list>, "device_list() errantly throws");
-        auto result = std::make_unique<device_list>();
-        if (result) {
-            //const auto result = std::unique_ptr<device_list>(new device_list());
-            const auto rcNum = libusb_get_device_list(context, &result->deviceList);
-            if (rcNum < 0 || result->deviceList == nullptr) {
-                mvLog(MVLOG_ERROR, "Unable to get USB device list: %s", libusb_strerror(rcNum));
-                result.reset();
-            }
-            else {
-                result->countDevices = static_cast<size_type>(rcNum);
-            }
-        }
-        else {
-            mvLog(MVLOG_ERROR, "Unable to allocate memory for USB device list");
-        }
-        return result;
-    }
-
     // default constructors, destructor, copy, move
     device_list() = default; // could be private by create() using `new device_list()`
     ~device_list() noexcept {

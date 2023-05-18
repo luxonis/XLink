@@ -228,15 +228,18 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, libu
     }
 
     // Get list of usb devices
-    const auto deviceList = device_list::create(context);
-    if(!deviceList) {
+    device_list deviceList;
+    try {
+        deviceList = device_list{context};
+    }
+    catch(const std::exception&) {
         return X_LINK_PLATFORM_ERROR;
     }
 
     // Loop over all usb devices, increase count only if myriad device that matches the name
     // TODO does not filter by myriad devices, investigate if needed
     const std::string requiredPath(path);
-    for (auto* const usbDevice : *deviceList) {
+    for (auto* const usbDevice : deviceList) {
         if(usbDevice == nullptr) continue;
 
         // compare device path with name
