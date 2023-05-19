@@ -1,3 +1,6 @@
+#ifndef _WRAP_LIBUSB_HPP_
+#define _WRAP_LIBUSB_HPP_
+
 // project
 #define MVLOG_UNIT_NAME xLinkUsb
 
@@ -15,11 +18,12 @@
 #include <string>
 #include <system_error>
 #include <vector>
+#include "wrap_libusb_details.hpp"
 
 namespace dai {
 
-#if __cplusplus >= 201402L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201402L)
-    // C++14 or newer
+// checks for C++14, when not available then include definitions
+#if __WRAP_CPLUSPLUS >= 201402L
     #include <utility>
     #define XLINK_EXCHANGE std::exchange
 #else
@@ -34,6 +38,7 @@ namespace dai {
         return _Old_val;
     }
 #endif
+
 
 // base implementation wrappers
 template<typename Resource, void(*Dispose)(Resource*)>
@@ -94,7 +99,7 @@ public:
     explicit device_list(libusb_context* context) {
         const auto rcNum = libusb_get_device_list(context, &deviceList);
         if (rcNum < 0 || deviceList == nullptr) {
-            mvLog(MVLOG_ERROR, "Unable to get USB device list: %s", libusb_strerror(rcNum));
+            mvLog(MVLOG_ERROR, "Unable to get USB device list: %s", libusb_strerror(static_cast<int>(rcNum)));
             throw usb_error(static_cast<int>(rcNum));
         }
         countDevices = static_cast<size_type>(rcNum);
@@ -254,14 +259,14 @@ public:
 
     // release all managed objects with libusb_release_interface() and libusb_close()
     // No exceptions are thrown. Errors are logged.
-    void reset() noexcept {
+    void reset(pointer ptr = pointer{}) noexcept {
         for (const auto interfaceNumber : claimedInterfaces) {
             const auto rcNum = libusb_release_interface(get(), interfaceNumber);
             if (rcNum < 0) {
                 mvLog(MVLOG_ERROR, "Unable to release libusb interface %d: %s", interfaceNumber, libusb_strerror(rcNum));
             }
         }
-        _base::reset();
+        _base::reset(ptr);
     }
 
     // release ownership of the managed libusb_device_handle and all device interfaces
@@ -323,3 +328,4 @@ using foo_argsize = function_traits<decltype(libusb_get_config_descriptor)>::num
 #undef XLINK_EXCHANGE
 
 } // namespace dai
+#endif // _WRAP_LIBUSB_HPP_
