@@ -37,7 +37,7 @@ int main() {
     XLinkInitialize(&gHandler);
 
     // Search for booted device
-    deviceDesc_t deviceDesc, inDeviceDesc;
+    deviceDesc_t deviceDesc = {}, inDeviceDesc = {};
     inDeviceDesc.protocol = X_LINK_ANY_PROTOCOL;
     inDeviceDesc.state = X_LINK_BOOTED;
     if(X_LINK_SUCCESS != XLinkFindFirstSuitableDevice(inDeviceDesc, &deviceDesc)){
