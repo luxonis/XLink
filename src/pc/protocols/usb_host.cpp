@@ -223,10 +223,9 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
 }
 
 // search for usb device by libusb *path* not name, increment refcount on device, return device in pdev pointer
-// TODO investigate the need for extern C
-extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, libusb_device** pdev) noexcept {
+xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, usb_device& dev) noexcept {
     // validate params
-    if (!pdev || !path || !*path) {
+    if (!dev || !path || !*path) {
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
 
@@ -247,9 +246,8 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, libu
 
         // compare device path with name
         if(requiredPath == getLibusbDevicePath(usbDevice)){
-            // Found, increase ref and exit the loop
-            libusb_ref_device(usbDevice);
-            *pdev = usbDevice;
+            // usb_device::reset() takes ownership and increments the ref count
+            dev.reset(usbDevice);
             return X_LINK_PLATFORM_SUCCESS;
         }
     }
@@ -597,7 +595,7 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
 
     auto t1 = steady_clock::now();
     do {
-        if(refLibusbDeviceByName(addr, dai::out_param(dev)) == X_LINK_PLATFORM_SUCCESS){
+        if(refLibusbDeviceByName(addr, dev) == X_LINK_PLATFORM_SUCCESS){
             break;
         }
         std::this_thread::sleep_for(milliseconds(10));
@@ -646,7 +644,7 @@ xLinkPlatformErrorCode_t usbLinkOpen(const char *path, device_handle& handle)
 
     auto t1 = steady_clock::now();
     do {
-        if(refLibusbDeviceByName(path, dai::out_param(dev)) == X_LINK_PLATFORM_SUCCESS){
+        if(refLibusbDeviceByName(path, dev) == X_LINK_PLATFORM_SUCCESS){
             found = true;
             break;
         }
@@ -672,7 +670,7 @@ xLinkPlatformErrorCode_t usbLinkOpen(const char *path, device_handle& handle)
 
 xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
     usb_device dev;
-    auto refErr = refLibusbDeviceByName(path, dai::out_param(dev));
+    auto refErr = refLibusbDeviceByName(path, dev);
     if(refErr != X_LINK_PLATFORM_SUCCESS) {
         return refErr;
     }

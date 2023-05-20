@@ -30,12 +30,10 @@ namespace dai {
 
 // checks for C++14, when not available then include definitions
 #if WRAP_CPLUSPLUS >= 201402L
-    #include <utility>
     #define WRAP_EXCHANGE std::exchange
 #else
     // older than C++14
     #define WRAP_EXCHANGE exchange11
-    #include <type_traits>
     template <class _Ty, class _Other = _Ty>
     _Ty exchange11(_Ty& _Val, _Other&& _New_val) noexcept(
         std::is_nothrow_move_constructible<_Ty>::value && std::is_nothrow_assignable<_Ty&, _Other>::value) {
@@ -255,19 +253,8 @@ public:
     }
 };
 
-class usb_device : public unique_resource_ptr<libusb_device, libusb_unref_device> {
-public:
-    using unique_resource_ptr<libusb_device, libusb_unref_device>::unique_resource_ptr;
-
-    // wrapper for libusb_get_config_descriptor()
-    config_descriptor get_config_descriptor(uint8_t config_index) const {
-        config_descriptor descriptor{};
-        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, get(), config_index, dai::out_param(descriptor));
-        return descriptor;
-    }
-};
-
-// wrapper for libusb_open(), libusb_wrap_sys_device()
+// device_handle allows I/O on device. Create with usb_device::open() or device_handle(libusb_device* dev)
+// or from raw pointers using libusb_open() or libusb_wrap_sys_device()
 class device_handle : public unique_resource_ptr<libusb_device_handle, libusb_close> {
 private:
     using _base = unique_resource_ptr<libusb_device_handle, libusb_close>;
@@ -279,9 +266,14 @@ public:
     device_handle(libusb_device* dev) {
         CALL_LOG_ERROR_THROW(libusb_open, dev, dai::out_param(*static_cast<_base*>(this)));
     }
+
+    // wrap a platform-specific system device handle and get a libusb device_handle for it
+    // never use libusb_open() on this wrapped handle's underlying device
     device_handle(libusb_context *ctx, intptr_t sys_dev_handle) {
         CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sys_dev_handle, dai::out_param(*static_cast<_base*>(this)));
     }
+
+    // copy and move constructors and assignment operators
     device_handle(const device_handle&) = delete;
     device_handle& operator=(const device_handle&) = delete;
     device_handle(device_handle &&other) noexcept :
@@ -349,6 +341,51 @@ public:
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
     void set_auto_detach_kernel_driver(bool enable) {
         call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_set_auto_detach_kernel_driver, get(), enable);
+    }
+};
+
+class usb_device : public unique_resource_ptr<libusb_device, libusb_unref_device> {
+private:
+    using _base = unique_resource_ptr<libusb_device, libusb_unref_device>;
+
+public:
+    // inherit base constructors
+    using unique_resource_ptr<libusb_device, libusb_unref_device>::unique_resource_ptr;
+
+    // stores a raw libusb_device* pointer, increments its refcount with libusb_ref_device()
+    explicit usb_device(pointer p) noexcept : _base{libusb_ref_device(p)} {}
+
+    // delete base constructors that conflict with libusb ref counts
+    usb_device(pointer p, const deleter_type &d) = delete;
+    usb_device(pointer p, deleter_type &&d) = delete;
+
+    // generate a device_handle with libusb_open() to enable i/o on the device
+    device_handle open() const {
+        device_handle handle;
+        CALL_LOG_ERROR_THROW(libusb_open, get(), dai::out_param(handle));
+        return handle;
+    }
+
+    // start managing the new libusb_device* with libusb_ref_device()
+    // then remove the old libusb_device* and decrement its ref count
+    // No exceptions are thrown. No errors are logged.
+    void reset(pointer p = pointer{}) noexcept {
+        static_cast<_base*>(this)->reset(libusb_ref_device(p));
+    }
+
+    // wrapper for libusb_get_config_descriptor()
+    config_descriptor get_config_descriptor(uint8_t config_index) const {
+        config_descriptor descriptor;
+        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, get(), config_index, dai::out_param(descriptor));
+        return descriptor;
+    }
+
+    // wrapper for libusb_get_device_descriptor()
+    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
+    libusb_device_descriptor get_device_descriptor() const {
+        libusb_device_descriptor descriptor{};
+        call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_device_descriptor, get(), &descriptor);
+        return descriptor;
     }
 };
 
