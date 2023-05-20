@@ -112,9 +112,6 @@ inline auto call_log_throw(const char* func_within, const int line_number, Func&
 // libusb resource wrappers
 ///////////////////////////////
 
-// wraps libusb_device and automatically libusb_unref_device() on destruction
-using usb_device = unique_resource_ptr<libusb_device, libusb_unref_device>;
-
 // wraps libusb_context and automatically libusb_exit() on destruction
  using usb_context = unique_resource_ptr<libusb_context, libusb_exit>;
 
@@ -245,8 +242,20 @@ class config_descriptor : public unique_resource_ptr<libusb_config_descriptor, l
 public:
     using unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>::unique_resource_ptr;
 
-    config_descriptor(libusb_device* dev, uint8_t configIndex) {
-        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, dev, configIndex, dai::out_param(*this));
+    config_descriptor(libusb_device* dev, uint8_t config_index) {
+        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, dev, config_index, dai::out_param(*this));
+    }
+};
+
+class usb_device : public unique_resource_ptr<libusb_device, libusb_unref_device> {
+public:
+    using unique_resource_ptr<libusb_device, libusb_unref_device>::unique_resource_ptr;
+
+    // wrapper for libusb_get_config_descriptor()
+    config_descriptor get_config_descriptor(uint8_t config_index) const {
+        config_descriptor descriptor{};
+        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, get(), config_index, dai::out_param(descriptor));
+        return descriptor;
     }
 };
 
@@ -322,7 +331,7 @@ public:
 
     // wrapper for libusb_get_configuration()
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
-    int get_configuration() {
+    int get_configuration() const {
         int configuration{};
         call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_configuration, get(), &configuration);
         return configuration;

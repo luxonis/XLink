@@ -508,11 +508,10 @@ static libusb_error usb_open_device(const usb_device& dev, uint8_t* endpoint, de
         handle.claim_interface(0);
 
         // Get device config descriptor
-        config_descriptor cdesc{dev.get(), 0};
+        const auto cdesc = dev.get_config_descriptor(0);
 
-        const struct libusb_interface_descriptor *ifdesc;
-        ifdesc = cdesc->interface->altsetting;
         // TODO add endpoint pointer boundary checks
+        const struct libusb_interface_descriptor *ifdesc = cdesc->interface->altsetting;
         for(int i=0; i<ifdesc->bNumEndpoints; i++)
         {
             mvLog(MVLOG_DEBUG, "Found EP 0x%02x : max packet size is %u bytes",
