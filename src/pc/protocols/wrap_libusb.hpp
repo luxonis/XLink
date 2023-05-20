@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 #include "wrap_libusb_details.hpp"
 
@@ -43,26 +44,6 @@ namespace dai {
     }
 #endif
 
-// macros to check for libusb resource errors, log, and possibly throw
-
-#define WRAP_CHECK_LOG_THROW(ERRCODE, LOGPHRASE)                                                     \
-    if ((ERRCODE) < 0) {                                                                             \
-        mvLog(MVLOG_ERROR, "Failed " #LOGPHRASE ": %s", libusb_strerror(static_cast<int>(ERRCODE))); \
-        throw usb_error(static_cast<int>(ERRCODE));                                                  \
-    }
-#define WRAP_CHECK_LOG(ERRCODE, LOGPHRASE)                                                           \
-    if ((ERRCODE) < 0) {                                                                             \
-        mvLog(MVLOG_ERROR, "Failed " #LOGPHRASE ": %s", libusb_strerror(static_cast<int>(ERRCODE))); \
-    }
-
-// macros to call libusb resource functions, return results in a var, check for errors, log, and possibly throw
-#define WRAP_CALL_CHECK_LOG_THROW(FUNCNAME, ...) \
-    const auto rcNum = FUNCNAME(__VA_ARGS__);    \
-    WRAP_CHECK_LOG_THROW(rcNum, FUNCNAME(__VA_ARGS__))
-#define WRAP_CALL_CHECK_LOG(FUNCNAME, ...)    \
-    const auto rcNum = FUNCNAME(__VA_ARGS__); \
-    WRAP_CHECK_LOG(rcNum, FUNCNAME(__VA_ARGS__))
-
 // base implementation wrapper
 template<typename Resource, void(*Dispose)(Resource*)>
 struct unique_resource_deleter {
@@ -75,10 +56,11 @@ template<typename Resource, void(*Dispose)(Resource*)>
 using unique_resource_ptr = std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>;
 
 
-///////////////////////////////
-// libusb resource wrappers
-///////////////////////////////
 namespace libusb {
+
+///////////////////////////////////
+// libusb error exception wrappers
+///////////////////////////////////
 
 // exception error class for libusb errors
 class usb_error : public std::system_error {
@@ -90,6 +72,45 @@ public:
     usb_error(const int libusbErrorCode, const char* what) noexcept :
         std::system_error{std::error_code(libusbErrorCode, std::system_category()), what} {}
 };
+
+// template function that can call any libusb function passed to it
+// function parameters are passed as variadic template arguments
+template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, typename Func, typename... Args>
+inline auto call_log_throw(const char* func_within, const int line_number, Func&& func, Args&&... args) -> decltype(func(std::forward<Args>(args)...)) {
+    const auto rcNum = func(std::forward<Args>(args)...);
+    if (rcNum < 0) {
+        logprintf(MVLOGLEVEL(MVLOG_UNIT_NAME), Loglevel, func_within, line_number, "dai::libusb failed %s(): %s", func_within, libusb_strerror(static_cast<int>(rcNum)));
+        if (Throw)
+            throw usb_error(static_cast<int>(rcNum));
+    }
+    return rcNum;
+}
+#define CALL_LOG_ERROR_THROW(...) call_log_throw(__func__, __LINE__, __VA_ARGS__)
+
+/*
+// macros to check for libusb resource errors, log, and possibly throw
+#define WRAP_CHECK_LOG_THROW(ERRCODE, LOGPHRASE)                                                     \
+    if ((ERRCODE) < 0) {                                                                             \
+        mvLog(MVLOG_ERROR, "Failed " #LOGPHRASE ": %s", libusb_strerror(static_cast<int>(ERRCODE))); \
+        throw usb_error(static_cast<int>(ERRCODE));                                                  \
+    }
+#define WRAP_CHECK_LOG(ERRCODE, LOGPHRASE)                                                           \
+    if ((ERRCODE) < 0) {                                                                             \
+        mvLog(MVLOG_ERROR, "Failed " #LOGPHRASE ": %s", libusb_strerror(static_cast<int>(ERRCODE))); \
+    }
+
+// macros to call libusb resource functions, return results in a var, check for errors, log, and possibly throw
+#define WRAP_CALL_LOG_THROW(FUNCNAME, ...) \
+    const auto rcNum = FUNCNAME(__VA_ARGS__);    \
+    WRAP_CHECK_LOG_THROW(rcNum, FUNCNAME(__VA_ARGS__))
+#define WRAP_CALL_LOG(FUNCNAME, ...)    \
+    const auto rcNum = FUNCNAME(__VA_ARGS__); \
+    WRAP_CHECK_LOG(rcNum, FUNCNAME(__VA_ARGS__))
+*/
+
+///////////////////////////////
+// libusb resource wrappers
+///////////////////////////////
 
 // wraps libusb_device and automatically libusb_unref_device() on destruction
 using usb_device = unique_resource_ptr<libusb_device, libusb_unref_device>;
@@ -124,8 +145,7 @@ public:
     }
 
     explicit device_list(libusb_context* context) {
-        WRAP_CALL_CHECK_LOG_THROW(libusb_get_device_list, context, &deviceList);
-        countDevices = static_cast<size_type>(rcNum);
+        countDevices = static_cast<size_type>(CALL_LOG_ERROR_THROW(libusb_get_device_list, context, &deviceList));
     }
 
     // container interface
@@ -226,7 +246,7 @@ public:
     using unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>::unique_resource_ptr;
 
     config_descriptor(libusb_device* dev, uint8_t configIndex) {
-        WRAP_CALL_CHECK_LOG_THROW(libusb_get_config_descriptor, dev, configIndex, dai::out_param(*this));
+        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, dev, configIndex, dai::out_param(*this));
     }
 };
 
@@ -240,10 +260,10 @@ public:
     using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
 
     device_handle(libusb_device* dev) {
-        WRAP_CALL_CHECK_LOG_THROW(libusb_open, dev, dai::out_param(*static_cast<_base*>(this)));
+        CALL_LOG_ERROR_THROW(libusb_open, dev, dai::out_param(*static_cast<_base*>(this)));
     }
     device_handle(libusb_context *ctx, intptr_t sys_dev_handle) {
-        WRAP_CALL_CHECK_LOG_THROW(libusb_wrap_sys_device, ctx, sys_dev_handle, dai::out_param(*static_cast<_base*>(this)));
+        CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sys_dev_handle, dai::out_param(*static_cast<_base*>(this)));
     }
     device_handle(const device_handle&) = delete;
     device_handle& operator=(const device_handle&) = delete;
@@ -266,7 +286,7 @@ public:
     // No exceptions are thrown. Errors are logged.
     void reset(pointer ptr = pointer{}) noexcept {
         for (const auto interfaceNumber : claimedInterfaces) {
-            WRAP_CALL_CHECK_LOG(libusb_release_interface, get(), interfaceNumber);
+            call_log_throw<MVLOG_ERROR, false>(__func__, __LINE__, libusb_release_interface, get(), interfaceNumber);
         }
         static_cast<_base*>(this)->reset(ptr);
     }
@@ -282,7 +302,7 @@ public:
     void claim_interface(int interface_number) {
         if (std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interface_number) != claimedInterfaces.end())
             return;
-        WRAP_CALL_CHECK_LOG_THROW(libusb_claim_interface, get(), interface_number);
+        CALL_LOG_ERROR_THROW(libusb_claim_interface, get(), interface_number);
         claimedInterfaces.emplace_back(interface_number);
     }
 
@@ -291,7 +311,7 @@ public:
         auto candidate = std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interface_number);
         if (candidate == claimedInterfaces.end())
             return;
-        WRAP_CALL_CHECK_LOG_THROW(libusb_release_interface, get(), interface_number);
+        CALL_LOG_ERROR_THROW(libusb_release_interface, get(), interface_number);
         claimedInterfaces.erase(candidate);
     }
 };
@@ -320,10 +340,7 @@ using foo_argsize = function_traits<decltype(libusb_get_config_descriptor)>::num
 } // namespace libusb
 
 #undef WRAP_EXCHANGE
-#undef WRAP_CHECK_LOG_THROW
-#undef WRAP_CHECK_LOG
-#undef WRAP_CALL_CHECK_LOG_THROW
-#undef WRAP_CALL_CHECK_LOG
+#undef CALL_LOG_ERROR_THROW
 
 } // namespace dai
 #endif // _WRAP_LIBUSB_HPP_
