@@ -345,49 +345,25 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
             // if UNBOOTED state, perform mx_id retrieval procedure using small program and a read command
             if(state == X_LINK_UNBOOTED){
-
-                // Get configuration first (From OS cache)
-                int active_configuration = -1;
-                if( (libusb_rc = libusb_get_configuration(handle.get(), &active_configuration)) == 0){
+                try {
+                    // Get configuration first (From OS cache), Check if set configuration call is needed
+                    // TODO consider sharing this whole block of code with usb_open_device()
+                    const auto active_configuration = handle.get_configuration<MVLOG_DEBUG>();
                     if(active_configuration != 1){
                         mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1\n", active_configuration);
-                        if ((libusb_rc = libusb_set_configuration(handle.get(), 1)) < 0) {
-                            mvLog(MVLOG_ERROR, "libusb_set_configuration: %s", xlink_libusb_strerror(libusb_rc));
-
-                            // retry
-                            std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
-                            continue;
-                        }
+                        handle.set_configuration(1);
                     }
-                } else {
-                    // getting config failed...
-                    mvLog(MVLOG_ERROR, "libusb_set_configuration: %s", xlink_libusb_strerror(libusb_rc));
 
-                    // retry
-                    std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
-                    continue;
-                }
+                    // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
+                    libusb_set_auto_detach_kernel_driver(handle.get(), 1);
 
-
-                // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
-                libusb_set_auto_detach_kernel_driver(handle.get(), 1);
-
-                // Claim interface (as we'll be doing IO on endpoints)
-                try {
+                    // Claim interface (as we'll be doing IO on endpoints)
+                    // TODO consider that previous C code logged with (libusb_rc == LIBUSB_ERROR_BUSY ? MVLOG_DEBUG : MVLOG_ERROR)
                     handle.claim_interface(0);
                 }
                 catch(const usb_error& e) {
-                    libusb_rc = e.code().value();
-                    /*
-                    // TODO need to decide if `usb_error` does logging
-                    if(libusb_rc != LIBUSB_ERROR_BUSY){
-                        mvLog(MVLOG_ERROR, "libusb_claim_interface: %s", xlink_libusb_strerror(libusb_rc));
-                    } else {
-                        mvLog(MVLOG_DEBUG, "libusb_claim_interface: %s", xlink_libusb_strerror(libusb_rc));
-                    }
-                    */
-
                     // retry - most likely device busy by another app
+                    libusb_rc = e.code().value();
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                     continue;
                 }
@@ -395,11 +371,12 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                     return LIBUSB_ERROR_OTHER;
                 }
 
+                // ///////////////////////
+                // Start
+                // ///////////////////////
                 const int send_ep = 0x01;
                 int transferred = 0;
 
-                // ///////////////////////
-                // Start
                 // WD Protection & MXID Retrieval Command
                 transferred = 0;
                 libusb_rc = libusb_bulk_transfer(handle.get(), send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT_MS);
@@ -512,77 +489,50 @@ const char* xlink_libusb_strerror(ssize_t x) {
 
 static libusb_error usb_open_device(const usb_device& dev, uint8_t* endpoint, device_handle& handle)
 {
-    const struct libusb_interface_descriptor *ifdesc;
-    int res;
-
     try {
+        // open usb device and get handle
         handle = device_handle{dev.get()};
-    }
-    catch(const usb_error& e) {
-        return static_cast<libusb_error>(e.code().value());
-    }
-    catch(const std::exception&) {
-        return LIBUSB_ERROR_OTHER;
-    }
 
-    // Get configuration first
-    int active_configuration = -1;
-    if((res = libusb_get_configuration(handle.get(), &active_configuration)) < 0){
-        mvLog(MVLOG_DEBUG, "setting config 1 failed: %s\n", xlink_libusb_strerror(res));
-        return (libusb_error) res;
-    }
-
-    // Check if set configuration call is needed
-    if(active_configuration != 1){
-        mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1\n", active_configuration);
-        if ((res = libusb_set_configuration(handle.get(), 1)) < 0) {
-            mvLog(MVLOG_ERROR, "libusb_set_configuration: %s\n", xlink_libusb_strerror(res));
-            return (libusb_error) res;
+        // Get current active configuration, Check if set configuration call is needed
+        const auto active_configuration = handle.get_configuration<MVLOG_DEBUG>();
+        if(active_configuration != 1){
+            mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1\n", active_configuration);
+            handle.set_configuration(1);
         }
-    }
 
-    // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
-    libusb_set_auto_detach_kernel_driver(handle.get(), 1);
+        // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
+        libusb_set_auto_detach_kernel_driver(handle.get(), 1);
 
-    // claim interface 0
-    try {
+        // claim interface 0
         handle.claim_interface(0);
-    }
-    catch(const usb_error& e) {
-        return static_cast<libusb_error>(e.code().value());
-    }
-    catch(const std::exception&) {
-        return LIBUSB_ERROR_OTHER;
-    }
 
-    // Get device config descriptor
-    config_descriptor cdesc;
-    try {
-        cdesc = config_descriptor{dev.get(), 0};
-    }
-    catch(const usb_error& e) {
-        return static_cast<libusb_error>(e.code().value());
-    }
-    catch(const std::exception&) {
-        return LIBUSB_ERROR_OTHER;
-    }
+        // Get device config descriptor
+        config_descriptor cdesc{dev.get(), 0};
 
-    ifdesc = cdesc->interface->altsetting;
-    // TODO add endpoint pointer boundary checks
-    for(int i=0; i<ifdesc->bNumEndpoints; i++)
-    {
-        mvLog(MVLOG_DEBUG, "Found EP 0x%02x : max packet size is %u bytes",
-              ifdesc->endpoint[i].bEndpointAddress, ifdesc->endpoint[i].wMaxPacketSize);
-        if((ifdesc->endpoint[i].bmAttributes & LIBUSB_TRANSFER_TYPE_MASK) != LIBUSB_TRANSFER_TYPE_BULK)
-            continue;
-        if( !(ifdesc->endpoint[i].bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK) )
+        const struct libusb_interface_descriptor *ifdesc;
+        ifdesc = cdesc->interface->altsetting;
+        // TODO add endpoint pointer boundary checks
+        for(int i=0; i<ifdesc->bNumEndpoints; i++)
         {
-            *endpoint = ifdesc->endpoint[i].bEndpointAddress;
-            bulk_chunklen = ifdesc->endpoint[i].wMaxPacketSize;
-            return LIBUSB_SUCCESS;
+            mvLog(MVLOG_DEBUG, "Found EP 0x%02x : max packet size is %u bytes",
+                ifdesc->endpoint[i].bEndpointAddress, ifdesc->endpoint[i].wMaxPacketSize);
+            if((ifdesc->endpoint[i].bmAttributes & LIBUSB_TRANSFER_TYPE_MASK) != LIBUSB_TRANSFER_TYPE_BULK)
+                continue;
+            if( !(ifdesc->endpoint[i].bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK) )
+            {
+                *endpoint = ifdesc->endpoint[i].bEndpointAddress;
+                bulk_chunklen = ifdesc->endpoint[i].wMaxPacketSize;
+                return LIBUSB_SUCCESS;
+            }
         }
+        return LIBUSB_ERROR_ACCESS;
     }
-    return LIBUSB_ERROR_ACCESS;
+    catch(const usb_error& e) {
+        return static_cast<libusb_error>(e.code().value());
+    }
+    catch(const std::exception&) {
+        return LIBUSB_ERROR_OTHER;
+    }
 }
 
 static int send_file(libusb_device_handle* h, uint8_t endpoint, const void* tx_buf, unsigned filesize,uint16_t bcdusb)

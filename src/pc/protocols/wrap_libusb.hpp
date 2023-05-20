@@ -314,6 +314,19 @@ public:
         CALL_LOG_ERROR_THROW(libusb_release_interface, get(), interface_number);
         claimedInterfaces.erase(candidate);
     }
+
+    // wrapper for libusb_set_configuration()
+    void set_configuration(int configuration) {
+        CALL_LOG_ERROR_THROW(libusb_set_configuration, get(), configuration);
+    }
+
+    // wrapper for libusb_get_configuration()
+    template<mvLog_t Loglevel = MVLOG_ERROR>
+    int get_configuration() {
+        int configuration{};
+        call_log_throw<Loglevel>(__func__, __LINE__, libusb_get_configuration, get(), &configuration);
+        return configuration;
+    }
 };
 
 /*
