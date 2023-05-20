@@ -22,13 +22,17 @@
 
 namespace dai {
 
+///////////////////////////////
+// Helper functions and macros
+///////////////////////////////
+
 // checks for C++14, when not available then include definitions
-#if __WRAP_CPLUSPLUS >= 201402L
+#if WRAP_CPLUSPLUS >= 201402L
     #include <utility>
-    #define XLINK_EXCHANGE std::exchange
+    #define WRAP_EXCHANGE std::exchange
 #else
     // older than C++14
-    #define XLINK_EXCHANGE exchange11
+    #define WRAP_EXCHANGE exchange11
     #include <type_traits>
     template <class _Ty, class _Other = _Ty>
     _Ty exchange11(_Ty& _Val, _Other&& _New_val) noexcept(
@@ -39,18 +43,41 @@ namespace dai {
     }
 #endif
 
+// macros to check for libusb resource errors, log, and possibly throw
 
-// base implementation wrappers
+#define WRAP_CHECK_LOG_THROW(ERRCODE, LOGPHRASE)                                                     \
+    if ((ERRCODE) < 0) {                                                                             \
+        mvLog(MVLOG_ERROR, "Failed " #LOGPHRASE ": %s", libusb_strerror(static_cast<int>(ERRCODE))); \
+        throw usb_error(static_cast<int>(ERRCODE));                                                  \
+    }
+#define WRAP_CHECK_LOG(ERRCODE, LOGPHRASE)                                                           \
+    if ((ERRCODE) < 0) {                                                                             \
+        mvLog(MVLOG_ERROR, "Failed " #LOGPHRASE ": %s", libusb_strerror(static_cast<int>(ERRCODE))); \
+    }
+
+// macros to call libusb resource functions, return results in a var, check for errors, log, and possibly throw
+#define WRAP_CALL_CHECK_LOG_THROW(FUNCNAME, ...) \
+    const auto rcNum = FUNCNAME(__VA_ARGS__);    \
+    WRAP_CHECK_LOG_THROW(rcNum, FUNCNAME(__VA_ARGS__))
+#define WRAP_CALL_CHECK_LOG(FUNCNAME, ...)    \
+    const auto rcNum = FUNCNAME(__VA_ARGS__); \
+    WRAP_CHECK_LOG(rcNum, FUNCNAME(__VA_ARGS__))
+
+// base implementation wrapper
 template<typename Resource, void(*Dispose)(Resource*)>
 struct unique_resource_deleter {
     inline void operator()(Resource* const ptr) noexcept {
-        Dispose(ptr);
+        if (ptr != nullptr)
+            Dispose(ptr);
     }
 };
 template<typename Resource, void(*Dispose)(Resource*)>
 using unique_resource_ptr = std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>;
 
 
+///////////////////////////////
+// libusb resource wrappers
+///////////////////////////////
 namespace libusb {
 
 // exception error class for libusb errors
@@ -67,8 +94,8 @@ public:
 // wraps libusb_device and automatically libusb_unref_device() on destruction
 using usb_device = unique_resource_ptr<libusb_device, libusb_unref_device>;
 
-//using context = unique_resource_ptr<libusb_context, libusb_exit>;
-//using config_descriptor = unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>;
+// wraps libusb_context and automatically libusb_exit() on destruction
+// using context = unique_resource_ptr<libusb_context, libusb_exit>;
 
 // device_list container class wrapper for libusb_get_device_list()
 // Use constructors to create an instance as the primary approach.
@@ -77,7 +104,7 @@ class device_list;
 class device_list {
 public:
     // default constructors, destructor, copy, move
-    device_list() = default; // could be private by create() using `new device_list()`
+    device_list() = default;
     ~device_list() noexcept {
         if (deviceList != nullptr) {
             libusb_free_device_list(deviceList, 1);
@@ -86,22 +113,18 @@ public:
     device_list(const device_list&) = delete;
     device_list& operator=(const device_list&) = delete;
     device_list(device_list&& other) noexcept :
-        countDevices{XLINK_EXCHANGE(other.countDevices, 0)},
-        deviceList{XLINK_EXCHANGE(other.deviceList, nullptr)} {};
+        countDevices{WRAP_EXCHANGE(other.countDevices, 0)},
+        deviceList{WRAP_EXCHANGE(other.deviceList, nullptr)} {};
     device_list& operator=(device_list&& other) noexcept {
         if (this == &other)
             return *this;
-        countDevices = XLINK_EXCHANGE(other.countDevices, 0);
-        deviceList = XLINK_EXCHANGE(other.deviceList, nullptr);
+        countDevices = WRAP_EXCHANGE(other.countDevices, 0);
+        deviceList = WRAP_EXCHANGE(other.deviceList, nullptr);
         return *this;
     }
 
     explicit device_list(libusb_context* context) {
-        const auto rcNum = libusb_get_device_list(context, &deviceList);
-        if (rcNum < 0 || deviceList == nullptr) {
-            mvLog(MVLOG_ERROR, "Unable to get USB device list: %s", libusb_strerror(static_cast<int>(rcNum)));
-            throw usb_error(static_cast<int>(rcNum));
-        }
+        WRAP_CALL_CHECK_LOG_THROW(libusb_get_device_list, context, &deviceList);
         countDevices = static_cast<size_type>(rcNum);
     }
 
@@ -203,13 +226,7 @@ public:
     using unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>::unique_resource_ptr;
 
     config_descriptor(libusb_device* dev, uint8_t configIndex) {
-        libusb_config_descriptor *resource{};
-        const auto rcNum = libusb_get_config_descriptor(dev, configIndex, &resource);
-        if (rcNum < 0) {
-            mvLog(MVLOG_ERROR, "Unable to get libusb config_descriptor: %s", libusb_strerror(rcNum));
-            throw usb_error(rcNum);
-        }
-        reset(resource);
+        WRAP_CALL_CHECK_LOG_THROW(libusb_get_config_descriptor, dev, configIndex, dai::out_param(*this));
     }
 };
 
@@ -223,33 +240,21 @@ public:
     using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
 
     device_handle(libusb_device* dev) {
-        libusb_device_handle *resource{};
-        const auto rcNum = libusb_open(dev, &resource);
-        if (rcNum < 0) {
-            mvLog(MVLOG_ERROR, "Unable to get libusb device_handle: %s", libusb_strerror(rcNum));
-            throw usb_error(rcNum);
-        }
-        _base::reset(resource);
+        WRAP_CALL_CHECK_LOG_THROW(libusb_open, dev, dai::out_param(*static_cast<_base*>(this)));
     }
     device_handle(libusb_context *ctx, intptr_t sys_dev_handle) {
-        libusb_device_handle *resource{};
-        const auto rcNum = libusb_wrap_sys_device(ctx, sys_dev_handle, &resource);
-        if (rcNum < 0) {
-            mvLog(MVLOG_ERROR, "Unable to get libusb device_handle: %s", libusb_strerror(rcNum));
-            throw usb_error(rcNum);
-        }
-        _base::reset(resource);
+        WRAP_CALL_CHECK_LOG_THROW(libusb_wrap_sys_device, ctx, sys_dev_handle, dai::out_param(*static_cast<_base*>(this)));
     }
     device_handle(const device_handle&) = delete;
     device_handle& operator=(const device_handle&) = delete;
     device_handle(device_handle &&other) noexcept :
-        _base{XLINK_EXCHANGE<_base, _base>(other, {})},
-        claimedInterfaces{XLINK_EXCHANGE(other.claimedInterfaces, {})}
+        _base{WRAP_EXCHANGE<_base, _base>(other, {})},
+        claimedInterfaces{WRAP_EXCHANGE(other.claimedInterfaces, {})}
     {}
     device_handle &operator=(device_handle &&other) noexcept {
         if (this != &other) {
-            _base::operator=(XLINK_EXCHANGE<_base, _base>(other, {}));
-            claimedInterfaces = XLINK_EXCHANGE(other.claimedInterfaces, {});
+            *static_cast<_base*>(this) = WRAP_EXCHANGE<_base, _base>(other, {});
+            claimedInterfaces = WRAP_EXCHANGE(other.claimedInterfaces, {});
         }
         return *this;
     }
@@ -261,30 +266,23 @@ public:
     // No exceptions are thrown. Errors are logged.
     void reset(pointer ptr = pointer{}) noexcept {
         for (const auto interfaceNumber : claimedInterfaces) {
-            const auto rcNum = libusb_release_interface(get(), interfaceNumber);
-            if (rcNum < 0) {
-                mvLog(MVLOG_ERROR, "Unable to release libusb interface %d: %s", interfaceNumber, libusb_strerror(rcNum));
-            }
+            WRAP_CALL_CHECK_LOG(libusb_release_interface, get(), interfaceNumber);
         }
-        _base::reset(ptr);
+        static_cast<_base*>(this)->reset(ptr);
     }
 
     // release ownership of the managed libusb_device_handle and all device interfaces
     // caller is responsible for calling libusb_release_interface() and libusb_close()
     device_handle::pointer release() noexcept {
         claimedInterfaces.clear();
-        return _base::release();
+        return static_cast<_base*>(this)->release();
     }
 
     // wrapper for libusb_claim_interface()
     void claim_interface(int interface_number) {
         if (std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interface_number) != claimedInterfaces.end())
             return;
-        const auto rcNum = libusb_claim_interface(get(), interface_number);
-        if (rcNum < 0) {
-            mvLog(MVLOG_ERROR, "Unable to claim libusb interface %d: %s", interface_number, libusb_strerror(rcNum));
-            throw usb_error(rcNum);
-        }
+        WRAP_CALL_CHECK_LOG_THROW(libusb_claim_interface, get(), interface_number);
         claimedInterfaces.emplace_back(interface_number);
     }
 
@@ -293,11 +291,7 @@ public:
         auto candidate = std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interface_number);
         if (candidate == claimedInterfaces.end())
             return;
-        const auto rcNum = libusb_release_interface(get(), interface_number);
-        if (rcNum < 0) {
-            mvLog(MVLOG_ERROR, "Unable to release libusb interface %d: %s", interface_number, libusb_strerror(rcNum));
-            throw usb_error(rcNum);
-        }
+        WRAP_CALL_CHECK_LOG_THROW(libusb_release_interface, get(), interface_number);
         claimedInterfaces.erase(candidate);
     }
 };
@@ -325,7 +319,11 @@ using foo_argsize = function_traits<decltype(libusb_get_config_descriptor)>::num
 
 } // namespace libusb
 
-#undef XLINK_EXCHANGE
+#undef WRAP_EXCHANGE
+#undef WRAP_CHECK_LOG_THROW
+#undef WRAP_CHECK_LOG
+#undef WRAP_CALL_CHECK_LOG_THROW
+#undef WRAP_CALL_CHECK_LOG
 
 } // namespace dai
 #endif // _WRAP_LIBUSB_HPP_

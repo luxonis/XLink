@@ -15,15 +15,15 @@
 
 // _MSVC_LANG is the more accurate way to get the C++ version in MSVC
 #if defined(_MSVC_LANG) && (_MSVC_LANG > __cplusplus)
-#define __WRAP_CPLUSPLUS _MSVC_LANG
+#define WRAP_CPLUSPLUS _MSVC_LANG
 #else
-#define __WRAP_CPLUSPLUS __cplusplus
+#define WRAP_CPLUSPLUS __cplusplus
 #endif
 
-#if __WRAP_CPLUSPLUS >= 201703L
-    #define XLINK_NODISCARD [[nodiscard]]
+#if WRAP_CPLUSPLUS >= 201703L
+    #define WRAP_NODISCARD [[nodiscard]]
 #else
-    #define XLINK_NODISCARD
+    #define WRAP_NODISCARD
 #endif
 
 #include <cassert>
@@ -147,4 +147,6 @@ namespace dai {
     }
 
 }
+
+#undef WRAP_NODISCARD
 #endif // _WRAP_LIBUSB_DETAILS_HPP_
