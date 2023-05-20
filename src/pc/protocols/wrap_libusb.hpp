@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 #include <vector>
 #include "wrap_libusb_details.hpp"
@@ -73,15 +74,22 @@ public:
         std::system_error{std::error_code(libusbErrorCode, std::system_category()), what} {}
 };
 
+// tag dispatch for throwing or not throwing exceptions
+inline void throw_conditional(int errCode, std::true_type) {
+    throw usb_error(errCode);
+}
+inline void throw_conditional(int, std::false_type) {
+    // do nothing
+}
+
 // template function that can call any libusb function passed to it
 // function parameters are passed as variadic template arguments
 template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, typename Func, typename... Args>
-inline auto call_log_throw(const char* func_within, const int line_number, Func&& func, Args&&... args) -> decltype(func(std::forward<Args>(args)...)) {
+inline auto call_log_throw(const char* func_within, const int line_number, Func&& func, Args&&... args) noexcept(!Throw) -> decltype(func(std::forward<Args>(args)...)) {
     const auto rcNum = func(std::forward<Args>(args)...);
     if (rcNum < 0) {
         logprintf(MVLOGLEVEL(MVLOG_UNIT_NAME), Loglevel, func_within, line_number, "dai::libusb failed %s(): %s", func_within, libusb_strerror(static_cast<int>(rcNum)));
-        if (Throw)
-            throw usb_error(static_cast<int>(rcNum));
+        throw_conditional(static_cast<int>(rcNum), std::integral_constant<bool, Throw>{});
     }
     return rcNum;
 }
