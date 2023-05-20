@@ -387,6 +387,19 @@ public:
         call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_device_descriptor, get(), &descriptor);
         return descriptor;
     }
+
+    // wrapper for libusb_get_bus_number()
+    uint8_t get_bus_number() const {
+        return CALL_LOG_ERROR_THROW(libusb_get_bus_number, get());
+    }
+
+    // wrapper for libusb_get_port_numbers()
+    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, int Len = 7>
+    std::vector<uint8_t> get_port_numbers() const {
+        std::vector<uint8_t> numbers{Len, 0};
+        numbers.resize(call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_port_numbers, get(), numbers.data(), Len));
+        return numbers;
+    }
 };
 
 /*
