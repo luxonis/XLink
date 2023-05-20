@@ -321,11 +321,17 @@ public:
     }
 
     // wrapper for libusb_get_configuration()
-    template<mvLog_t Loglevel = MVLOG_ERROR>
+    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
     int get_configuration() {
         int configuration{};
-        call_log_throw<Loglevel>(__func__, __LINE__, libusb_get_configuration, get(), &configuration);
+        call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_configuration, get(), &configuration);
         return configuration;
+    }
+
+    // wrapper for libusb_set_auto_detach_kernel_driver()
+    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
+    void set_auto_detach_kernel_driver(bool enable) {
+        call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_set_auto_detach_kernel_driver, get(), enable);
     }
 };
 
