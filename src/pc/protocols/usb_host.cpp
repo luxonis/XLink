@@ -28,6 +28,7 @@
 using dai::libusb::config_descriptor;
 using dai::libusb::device_handle;
 using dai::libusb::device_list;
+using dai::libusb::usb_context;
 using dai::libusb::usb_device;
 using dai::libusb::usb_error;
 using VidPid = std::pair<uint16_t, uint16_t>;
@@ -68,7 +69,7 @@ static UsbSetupPacket bootBootloaderPacket{
 
 
 static std::mutex mutex; // Also protects usb_mx_id_cache
-static libusb_context* context;
+static usb_context context;
 
 int usbInitialize(void* options){
     std::lock_guard<std::mutex> l(mutex);
@@ -89,9 +90,9 @@ int usbInitialize(void* options){
     usb_mx_id_cache_init();
 
     #if defined(_WIN32) && defined(_MSC_VER)
-        return usbInitialize_customdir((void**)&context);
+        return usbInitialize_customdir(dai::out_param_ptr<void**>(context));
     #else
-        return libusb_init(&context);
+        return libusb_init(dai::out_param(context));
     #endif
 }
 
@@ -123,7 +124,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
     std::lock_guard<std::mutex> l(mutex);
     device_list deviceList;
     try {
-        deviceList = device_list{context};
+        deviceList = device_list{context.get()};
     }
     catch(const std::exception&) {
         // this try/catch can be larger and surround the whole function
@@ -232,7 +233,7 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, libu
     // Get list of usb devices
     device_list deviceList;
     try {
-        deviceList = device_list{context};
+        deviceList = device_list{context.get()};
     }
     catch(const std::exception&) {
         return X_LINK_PLATFORM_ERROR;

@@ -116,7 +116,7 @@ inline auto call_log_throw(const char* func_within, const int line_number, Func&
 using usb_device = unique_resource_ptr<libusb_device, libusb_unref_device>;
 
 // wraps libusb_context and automatically libusb_exit() on destruction
-// using context = unique_resource_ptr<libusb_context, libusb_exit>;
+ using usb_context = unique_resource_ptr<libusb_context, libusb_exit>;
 
 // device_list container class wrapper for libusb_get_device_list()
 // Use constructors to create an instance as the primary approach.
