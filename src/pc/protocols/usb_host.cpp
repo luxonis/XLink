@@ -139,7 +139,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
             try {
                 // Get device descriptor
                 const usb_device usbDevice{candidate};
-                auto desc = usbDevice.get_device_descriptor<MVLOG_DEBUG>();
+                const auto desc = usbDevice.get_device_descriptor<MVLOG_DEBUG>();
 
                 // Filter device by known vid/pid pairs
                 const auto vidpid = vidPidToDeviceState.find(VidPid{desc.idVendor, desc.idProduct});
@@ -226,7 +226,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
 // search for usb device by libusb *path* not name, increment refcount on device, return device in pdev pointer
 xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, usb_device& dev) noexcept {
     // validate params
-    if (!dev || !path || !*path) {
+    if (!path || !*path) {
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
 
@@ -238,9 +238,8 @@ xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, usb_device& dev
         // TODO does not filter by myriad devices, investigate if needed
         const std::string requiredPath(path);
         for (auto* const candidate : deviceList) {
-            if(candidate == nullptr) continue;
-
             // usb_device takes ownership and increments ref count
+            if(candidate == nullptr) continue;
             usb_device usbDevice{candidate};
 
             // compare device path with name
@@ -251,8 +250,9 @@ xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, usb_device& dev
         }
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
-    catch(const usb_error&) {
+    catch(const usb_error& e) {
         // ignore
+        mvLog(MVLOG_FATAL, "Unexpected exception: %s", e.what());
     }
     catch(const std::exception& e) {
         mvLog(MVLOG_ERROR, "Unexpected exception: %s", e.what());
@@ -441,18 +441,26 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
                 libusb_rc = 0;
 
             } else {
-
-                if( (libusb_rc = libusb_get_string_descriptor_ascii(handle.get(), pDesc->iSerialNumber, ((uint8_t*) mxId), sizeof(mxId))) < 0){
-                    mvLog(MVLOG_WARN, "Failed to get string descriptor");
-
-                    // retry
+                // when not X_LINK_UNBOOTED state, get mx_id from the device's serial number string descriptor
+                try {
+                    // TODO refactor try/catch broader
+                    // TODO refactor to save a string directly to outMxId
+                    const auto serialNumber = handle.get_string_descriptor_ascii<MVLOG_WARN, true, sizeof(mxId) - 1>(pDesc->iSerialNumber);
+                    serialNumber.copy(mxId, sizeof(mxId) - 1);
+                    mxId[serialNumber.size()] = '\0';
+                }
+                catch(const usb_error& e) {
+                    libusb_rc = e.code().value();
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                     continue;
+                }
+                catch(const std::exception& e) {
+                    mvLog(MVLOG_ERROR, "Unexpected exception: %s", e.what());
+                    return LIBUSB_ERROR_OTHER;
                 }
 
                 // Indicate no error
                 libusb_rc = 0;
-
             }
 
         } while (libusb_rc != 0 && std::chrono::steady_clock::now() - t1 < RETRY_TIMEOUT);
@@ -492,12 +500,8 @@ static libusb_error usb_open_device(const usb_device& dev, uint8_t* endpoint, de
         // open usb device and get handle
         handle = dev.open();
 
-        // Get current active configuration, Check if set configuration call is needed
-        const auto active_configuration = handle.get_configuration<MVLOG_DEBUG>();
-        if(active_configuration != 1){
-            mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1\n", active_configuration);
-            handle.set_configuration(1);
-        }
+        // Set configuration to 1; optimize to check if the device is already configured
+        handle.set_configuration(1);
 
         // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
         handle.set_auto_detach_kernel_driver<MVLOG_INFO, false>(true);
@@ -710,8 +714,15 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
 
 void usbLinkClose(libusb_device_handle *h)
 {
+    // BUGBUG expected a need to unref the original device that was used to open the handle
+    // but debugger shows the ref=1 when entering this function. This is unexplained.
+    // when env LIBUSB_DEBUG=3, on app exit usually get...
+    //   libusb: warning [libusb_exit] device 2.0 still referenced
+    //   libusb: warning [libusb_exit] device 3.0 still referenced
     libusb_release_interface(h, 0);
+    //libusb_device *const temp = libusb_get_device(h);
     libusb_close(h);
+    //libusb_unref_device(temp);
 }
 
 

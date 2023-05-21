@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -82,6 +83,7 @@ inline void throw_conditional(int, std::false_type) {
 
 // template function that can call any libusb function passed to it
 // function parameters are passed as variadic template arguments
+// caution: when Throw=false, a negative return code can be returned on error; always handle such scenarios
 template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, typename Func, typename... Args>
 inline auto call_log_throw(const char* func_within, const int line_number, Func&& func, Args&&... args) noexcept(!Throw) -> decltype(func(std::forward<Args>(args)...)) {
     const auto rcNum = func(std::forward<Args>(args)...);
@@ -93,27 +95,6 @@ inline auto call_log_throw(const char* func_within, const int line_number, Func&
 }
 #define CALL_LOG_ERROR_THROW(...) call_log_throw(__func__, __LINE__, __VA_ARGS__)
 
-/*
-// macros to check for libusb resource errors, log, and possibly throw
-#define WRAP_CHECK_LOG_THROW(ERRCODE, LOGPHRASE)                                                     \
-    if ((ERRCODE) < 0) {                                                                             \
-        mvLog(MVLOG_ERROR, "Failed " #LOGPHRASE ": %s", libusb_strerror(static_cast<int>(ERRCODE))); \
-        throw usb_error(static_cast<int>(ERRCODE));                                                  \
-    }
-#define WRAP_CHECK_LOG(ERRCODE, LOGPHRASE)                                                           \
-    if ((ERRCODE) < 0) {                                                                             \
-        mvLog(MVLOG_ERROR, "Failed " #LOGPHRASE ": %s", libusb_strerror(static_cast<int>(ERRCODE))); \
-    }
-
-// macros to call libusb resource functions, return results in a var, check for errors, log, and possibly throw
-#define WRAP_CALL_LOG_THROW(FUNCNAME, ...) \
-    const auto rcNum = FUNCNAME(__VA_ARGS__);    \
-    WRAP_CHECK_LOG_THROW(rcNum, FUNCNAME(__VA_ARGS__))
-#define WRAP_CALL_LOG(FUNCNAME, ...)    \
-    const auto rcNum = FUNCNAME(__VA_ARGS__); \
-    WRAP_CHECK_LOG(rcNum, FUNCNAME(__VA_ARGS__))
-*/
-
 ///////////////////////////////
 // libusb resource wrappers
 ///////////////////////////////
@@ -121,10 +102,12 @@ inline auto call_log_throw(const char* func_within, const int line_number, Func&
 // wraps libusb_context and automatically libusb_exit() on destruction
  using usb_context = unique_resource_ptr<libusb_context, libusb_exit>;
 
+// wrap libusb_device* with RAII ref counting
+class usb_device;
+
 // device_list container class wrapper for libusb_get_device_list()
 // Use constructors to create an instance as the primary approach.
 // Use device_list::create() to create an instance via factory approach.
-class device_list;
 class device_list {
 public:
     // default constructors, destructor, copy, move
@@ -148,6 +131,14 @@ public:
     }
 
     explicit device_list(libusb_context* context) {
+        // libusb_get_device_list() is not thread safe!
+        // multiple threads simultaneously generating device lists causes crashes and memory violations
+        // within libusb itself due to incorrect libusb ref count handling, wrongly deleted devices, etc.
+        // crashes occurred when libusb internally called libusb_ref_device(), XLink called libusb_unref_device(),
+        // often when libusb called usbi_get_device_priv(dev) and then operated on the pointers
+        // line in file libusb/os/windows_winusb.c in winusb_get_device_list() line 1741
+        std::lock_guard<std::mutex> l(mtx);
+
         countDevices = static_cast<size_type>(CALL_LOG_ERROR_THROW(libusb_get_device_list, context, &deviceList));
     }
 
@@ -239,11 +230,15 @@ public:
     }
 
 private:
+    static std::mutex mtx;
     size_type countDevices{};
     pointer deviceList{};
 };
 
-// wrapper for libusb_get_config_descriptor()
+// TODO move to dedicated cpp file to avoid multiple definitions
+std::mutex device_list::mtx;
+
+// wraps libusb_config_descriptor* and automatically libusb_free_config_descriptor() on destruction
 class config_descriptor : public unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor> {
 public:
     using unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>::unique_resource_ptr;
@@ -253,8 +248,8 @@ public:
     }
 };
 
-// device_handle allows I/O on device. Create with usb_device::open() or device_handle(libusb_device* dev)
-// or from raw pointers using libusb_open() or libusb_wrap_sys_device()
+// wrap libusb_device_handle* to allow I/O on device. Create with usb_device::open(), device_handle{libusb_device*}
+// or from raw platform pointers with device_handle{libusb_context*, intptr_t}
 class device_handle : public unique_resource_ptr<libusb_device_handle, libusb_close> {
 private:
     using _base = unique_resource_ptr<libusb_device_handle, libusb_close>;
@@ -324,11 +319,6 @@ public:
         claimedInterfaces.erase(candidate);
     }
 
-    // wrapper for libusb_set_configuration()
-    void set_configuration(int configuration) {
-        CALL_LOG_ERROR_THROW(libusb_set_configuration, get(), configuration);
-    }
-
     // wrapper for libusb_get_configuration()
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
     int get_configuration() const {
@@ -337,11 +327,43 @@ public:
         return configuration;
     }
 
+    // wrapper for libusb_set_configuration()
+    // if skip_active_check = true, the current configuration is not checked before setting the new one
+    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
+    void set_configuration(int configuration, bool skip_active_check = false) {
+        if (!skip_active_check) {
+            const auto active = get_configuration<Loglevel, Throw>();
+            if(active == configuration)
+                return;
+            mvLog(MVLOG_DEBUG, "Setting configuration from %d to %d", active, configuration);
+        }
+        call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_set_configuration, get(), configuration);
+    }
+
+    // wrapper for libusb_get_string_descriptor_ascii()
+    // template param Len is the maximum possible number of chars (without null terminator) read from the descriptor
+    // the return string is resized to the actual number of chars read
+    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, int Len = 31>
+    std::string get_string_descriptor_ascii(uint8_t desc_index) const {
+        std::string descriptor(Len + 1, 0);
+        const auto result = call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_string_descriptor_ascii, get(), desc_index, (unsigned char*)descriptor.data(), Len + 1);
+        if (Throw || result >= 0) {
+            // when throwing enabled, then throw occurs on negative/error results before this resize(),
+            // so don't need to check result and compiler can optimize this away.
+            // when throwing disabled, then always prevent resize to negative/error code result
+            descriptor.resize(result);
+        }
+        return descriptor;
+    }
+
     // wrapper for libusb_set_auto_detach_kernel_driver()
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
     void set_auto_detach_kernel_driver(bool enable) {
         call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_set_auto_detach_kernel_driver, get(), enable);
     }
+
+    // wrap libusb_get_device()
+    usb_device get_device() const;
 };
 
 class usb_device : public unique_resource_ptr<libusb_device, libusb_unref_device> {
@@ -394,34 +416,26 @@ public:
     }
 
     // wrapper for libusb_get_port_numbers()
+    // template param Len is the maximum possible number of port-numbers read from usb
+    // the return vector is resized to the actual number read
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, int Len = 7>
     std::vector<uint8_t> get_port_numbers() const {
-        std::vector<uint8_t> numbers{Len, 0};
-        numbers.resize(call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_port_numbers, get(), numbers.data(), Len));
+        std::vector<uint8_t> numbers(Len, 0);
+        const auto result = call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_port_numbers, get(), numbers.data(), Len);
+        if (Throw || result >= 0) {
+            // when throwing enabled, then throw occurs on error results before this resize(),
+            // so don't need to check result and compiler can optimize this if chain away.
+            // when throwing disabled, then always prevent resize of negative/error code result
+            numbers.resize(result);
+        }
         return numbers;
     }
 };
 
-/*
-// https://stackoverflow.com/questions/57622162/get-function-arguments-type-as-tuple
-// https://stackoverflow.com/questions/36612596/tuple-to-parameter-pack
-#include <tuple>
-template<typename Func>
-class function_traits;
-
-// specialization for functions
-template<typename Func, typename... FuncArgs>
-class function_traits<Func (FuncArgs...)> {
-public:
-    using arguments = ::std::tuple<FuncArgs...>;
-    using numargs = sizeof(...FuncArgs);
-};
-
-using foo_arguments = function_traits<decltype(libusb_get_config_descriptor)>::arguments;
-using foo_argsize = function_traits<decltype(libusb_get_config_descriptor)>::numargs;
-
-*/
-
+// wrap libusb_get_device()
+inline usb_device device_handle::get_device() const {
+    return usb_device{libusb_get_device(get())};
+}
 
 } // namespace libusb
 
