@@ -46,7 +46,6 @@ static constexpr int USB_ENDPOINT_OUT = 0x01;
 
 static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
 
-static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int initialized;
 
@@ -523,7 +522,7 @@ static libusb_error usb_open_device(const usb_device& dev, uint8_t* endpoint, de
             if( !(ifdesc->endpoint[i].bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK) )
             {
                 *endpoint = ifdesc->endpoint[i].bEndpointAddress;
-                bulk_chunklen = ifdesc->endpoint[i].wMaxPacketSize;
+                handle.set_max_packet_size(*endpoint, ifdesc->endpoint[i].wMaxPacketSize);
                 return LIBUSB_SUCCESS;
             }
         }
@@ -537,7 +536,7 @@ static libusb_error usb_open_device(const usb_device& dev, uint8_t* endpoint, de
     }
 }
 
-static int send_file(libusb_device_handle* h, uint8_t endpoint, const void* tx_buf, unsigned filesize,uint16_t bcdusb)
+static int send_file(const device_handle& h, uint8_t endpoint, const void* tx_buf, unsigned filesize, uint16_t bcdusb)
 {
     using namespace std::chrono;
 
@@ -548,6 +547,15 @@ static int send_file(libusb_device_handle* h, uint8_t endpoint, const void* tx_b
     twb = 0;
     p = const_cast<uint8_t*>((const uint8_t*)tx_buf);
     int send_zlp = ((filesize % 512) == 0);
+
+    /*
+    // adjust chunklen with endpoint max packet size
+    if (h.get_max_packet_size(endpoint) < bulk_chunklen) {
+        mvLog(MVLOG_FATAL, "bulk_chunklen %d is too big for endpoint %02x, reducing to %d",
+              bulk_chunklen, endpoint, h.get_max_packet_size(endpoint));
+        bulk_chunklen = h.get_max_packet_size(endpoint);
+    }
+    */
 
     if(bcdusb < 0x200) {
         bulk_chunklen = USB1_CHUNKSZ;
@@ -561,7 +569,7 @@ static int send_file(libusb_device_handle* h, uint8_t endpoint, const void* tx_b
         if(wb > bulk_chunklen)
             wb = bulk_chunklen;
         wbr = 0;
-        rc = libusb_bulk_transfer(h, endpoint, p, wb, &wbr, write_timeout);
+        rc = libusb_bulk_transfer(h.get(), endpoint, p, wb, &wbr, write_timeout);
         if((rc || (wb != wbr)) && (wb != 0)) // Don't check the return code for ZLP
         {
             if(rc == LIBUSB_ERROR_NO_DEVICE)
@@ -594,7 +602,7 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
 
     usb_device dev;
     device_handle handle;
-    uint16_t bcdusb = -1;
+    uint16_t bcdusb = -1; // -1 has all bits set to 1, therefore the highest possible USB version
     libusb_error res = LIBUSB_ERROR_ACCESS;
 
     auto t1 = steady_clock::now();
@@ -620,7 +628,11 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
     } while(steady_clock::now() - t2 < DEFAULT_CONNECT_TIMEOUT);
 
     if(res == LIBUSB_SUCCESS) {
-        rc = send_file(handle.get(), endpoint, mvcmd, size, bcdusb);
+        // get USB specification number from device descriptor
+        bcdusb = dev.get_device_descriptor().bcdUSB;
+        mvLog(MVLOG_DEBUG, "USB specification version: %x.%02x", bcdusb >> 8, bcdusb & 0xff);
+
+        rc = send_file(handle, endpoint, mvcmd, size, bcdusb);
     } else {
         if(res == LIBUSB_ERROR_ACCESS) {
             rc = X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;

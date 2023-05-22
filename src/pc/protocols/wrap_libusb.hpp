@@ -12,6 +12,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -254,6 +255,7 @@ class device_handle : public unique_resource_ptr<libusb_device_handle, libusb_cl
 private:
     using _base = unique_resource_ptr<libusb_device_handle, libusb_close>;
     std::vector<int> claimedInterfaces{};
+    std::array<decltype(libusb_endpoint_descriptor::wMaxPacketSize), 32> maxPacketSize{};
 
 public:
     using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
@@ -360,6 +362,18 @@ public:
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
     void set_auto_detach_kernel_driver(bool enable) {
         call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_set_auto_detach_kernel_driver, get(), enable);
+    }
+
+    void set_max_packet_size(uint8_t endpoint, decltype(libusb_endpoint_descriptor::wMaxPacketSize) size) noexcept {
+        // keep endpoint bits 0-3, then move bit 7 to bit 4
+        // this creates a 0-31 number representing all possible endpoint addresses
+        maxPacketSize[(endpoint & 0x0F) | ((endpoint & 0x80) >> 3)] = size;
+    }
+
+    decltype(libusb_endpoint_descriptor::wMaxPacketSize) get_max_packet_size(uint8_t endpoint) const noexcept {
+        // keep endpoint bits 0-3, then move bit 7 to bit 4
+        // this creates a 0-31 number representing all possible endpoint addresses
+        return maxPacketSize[(endpoint & 0x0F) | ((endpoint & 0x80) >> 3)];
     }
 
     // wrap libusb_get_device()
