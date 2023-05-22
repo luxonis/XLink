@@ -201,6 +201,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                 out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
                 out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
                 out_foundDevices[numDevicesFound].state = state;
+                // TODO remove memset() because strncpy() guarantees it will fill any unused bytes with null; or change to string::copy()
                 memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
                 strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
                 memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
@@ -222,7 +223,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
     }
 }
 
-// search for usb device by libusb *path* not name, increment refcount on device, return device in pdev pointer
+// search for usb device by libusb *path* not name, return ref-counted usb_device
 xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, usb_device& dev) noexcept {
     // validate params
     if (!path || !*path) {
@@ -482,27 +483,27 @@ const char* xlink_libusb_strerror(ssize_t x) {
 }
 
 
-static libusb_error usb_open_device(const usb_device& dev, uint8_t* endpoint, device_handle& handle) noexcept
+static libusb_error usb_open_device(const usb_device& dev, uint8_t& endpoint, device_handle& handle) noexcept
 {
     try {
-        // open usb device and get handle
-        handle = dev.open();
+        // open usb device and get candidate handle
+        auto candidate = dev.open();
 
         // Set configuration to 1; optimize to check if the device is already configured
-        handle.set_configuration(1);
+        candidate.set_configuration(1);
 
         // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
-        handle.set_auto_detach_kernel_driver<MVLOG_INFO, false>(true);
+        candidate.set_auto_detach_kernel_driver<MVLOG_INFO, false>(true);
 
         // claim interface 0
-        handle.claim_interface(0);
+        candidate.claim_interface(0);
 
         // Get device config descriptor
         const auto cdesc = dev.get_config_descriptor(0);
 
         // TODO add endpoint pointer boundary checks
         const struct libusb_interface_descriptor *ifdesc = cdesc->interface->altsetting;
-        for(int i=0; i<ifdesc->bNumEndpoints; i++)
+        for(int i=0; i<ifdesc->bNumEndpoints; ++i)
         {
             mvLog(MVLOG_DEBUG, "Found EP 0x%02x : max packet size is %u bytes",
                 ifdesc->endpoint[i].bEndpointAddress, ifdesc->endpoint[i].wMaxPacketSize);
@@ -510,8 +511,9 @@ static libusb_error usb_open_device(const usb_device& dev, uint8_t* endpoint, de
                 continue;
             if( !(ifdesc->endpoint[i].bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK) )
             {
-                *endpoint = ifdesc->endpoint[i].bEndpointAddress;
-                handle.set_max_packet_size(*endpoint, ifdesc->endpoint[i].wMaxPacketSize);
+                endpoint = ifdesc->endpoint[i].bEndpointAddress;
+                candidate.set_max_packet_size(endpoint, ifdesc->endpoint[i].wMaxPacketSize);
+                handle = std::move(candidate);
                 return LIBUSB_SUCCESS;
             }
         }
@@ -610,7 +612,7 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
     uint8_t endpoint = 0;
     auto t2 = steady_clock::now();
     do {
-        if((res = usb_open_device(dev, &endpoint, handle)) == LIBUSB_SUCCESS){
+        if((res = usb_open_device(dev, endpoint, handle)) == LIBUSB_SUCCESS){
             break;
         }
         std::this_thread::sleep_for(milliseconds(100));
@@ -660,7 +662,7 @@ xLinkPlatformErrorCode_t usbLinkOpen(const char *path, device_handle& handle)
     }
 
     uint8_t ep = 0;
-    const libusb_error libusb_rc = usb_open_device(dev, &ep, handle);
+    const libusb_error libusb_rc = usb_open_device(dev, ep, handle);
     if(libusb_rc == LIBUSB_SUCCESS) {
         return X_LINK_PLATFORM_SUCCESS;
     } else if(libusb_rc == LIBUSB_ERROR_ACCESS) {
@@ -715,15 +717,12 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
 
 void usbLinkClose(libusb_device_handle *h)
 {
-    // BUGBUG expected a need to unref the original device that was used to open the handle
-    // but debugger shows the ref=1 when entering this function. This is unexplained.
+    // BUGBUG debugger correctly shows ref=1 when entering this function.
     // when env LIBUSB_DEBUG=3, on app exit usually get...
     //   libusb: warning [libusb_exit] device 2.0 still referenced
     //   libusb: warning [libusb_exit] device 3.0 still referenced
     libusb_release_interface(h, 0);
-    //libusb_device *const temp = libusb_get_device(h);
     libusb_close(h);
-    //libusb_unref_device(temp);
 }
 
 
@@ -832,8 +831,9 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     // it can automatically handle refcounting, interfaces, and closing
 
     // Store the usb handle and create a "unique" key instead
-    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
-    // release ownership (not reset) the device_handle so can be later released in usbLinkClose()
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link).
+    // Release ownership (not reset) the device_handle. Both interfaces and handle must be released
+    // in usbLinkClose() with libusb_release_interface() and libusb_close().
     *fd = createPlatformDeviceFdKey(usbHandle.release());
 
 #endif  /*USE_USB_VSC*/
