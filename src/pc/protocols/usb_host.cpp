@@ -416,17 +416,6 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
                 // End
                 ///////////////////////
 
-                // Release claimed interface
-                try {
-                    handle.release_interface(0);
-                }
-                catch(const usb_error&) {
-                    // ignore error as it doesn't matter
-                }
-                catch(const std::exception&) {
-                    return LIBUSB_ERROR_OTHER;
-                }
-
                 // Parse mxId into HEX presentation
                 // There's a bug, it should be 0x0F, but setting as in MDK
                 rbuf[8] &= 0xF0;

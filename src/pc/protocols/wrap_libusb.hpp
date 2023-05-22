@@ -75,10 +75,10 @@ public:
 };
 
 // tag dispatch for throwing or not throwing exceptions
-inline void throw_conditional(int errCode, std::true_type) {
+inline void throw_conditional(int errCode, std::true_type) noexcept(false) {
     throw usb_error(errCode);
 }
-inline void throw_conditional(int, std::false_type) {
+inline void throw_conditional(int, std::false_type) noexcept(true) {
     // do nothing
 }
 
@@ -131,7 +131,7 @@ public:
         return *this;
     }
 
-    explicit device_list(libusb_context* context) {
+    explicit device_list(libusb_context* context) noexcept(false) {
         // libusb_get_device_list() is not thread safe!
         // multiple threads simultaneously generating device lists causes crashes and memory violations
         // within libusb itself due to incorrect libusb ref count handling, wrongly deleted devices, etc.
@@ -244,7 +244,7 @@ class config_descriptor : public unique_resource_ptr<libusb_config_descriptor, l
 public:
     using unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>::unique_resource_ptr;
 
-    config_descriptor(libusb_device* dev, uint8_t config_index) {
+    config_descriptor(libusb_device* dev, uint8_t config_index) noexcept(false) {
         CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, dev, config_index, dai::out_param(*this));
     }
 };
@@ -260,13 +260,13 @@ private:
 public:
     using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
 
-    device_handle(libusb_device* dev) {
+    device_handle(libusb_device* dev) noexcept(false) {
         CALL_LOG_ERROR_THROW(libusb_open, dev, dai::out_param(*static_cast<_base*>(this)));
     }
 
     // wrap a platform-specific system device handle and get a libusb device_handle for it
     // never use libusb_open() on this wrapped handle's underlying device
-    device_handle(libusb_context *ctx, intptr_t sys_dev_handle) {
+    device_handle(libusb_context *ctx, intptr_t sys_dev_handle) noexcept(false) {
         CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sys_dev_handle, dai::out_param(*static_cast<_base*>(this)));
     }
 
@@ -305,7 +305,7 @@ public:
     }
 
     // wrapper for libusb_claim_interface()
-    void claim_interface(int interface_number) {
+    void claim_interface(int interface_number) noexcept(false) {
         if (std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interface_number) != claimedInterfaces.end())
             return;
         CALL_LOG_ERROR_THROW(libusb_claim_interface, get(), interface_number);
@@ -313,7 +313,7 @@ public:
     }
 
     // wrapper for libusb_release_interface()
-    void release_interface(int interface_number) {
+    void release_interface(int interface_number) noexcept(false) {
         auto candidate = std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interface_number);
         if (candidate == claimedInterfaces.end())
             return;
@@ -323,7 +323,7 @@ public:
 
     // wrapper for libusb_get_configuration()
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
-    int get_configuration() const {
+    int get_configuration() const noexcept(!Throw) {
         int configuration{};
         call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_configuration, get(), &configuration);
         return configuration;
@@ -332,7 +332,7 @@ public:
     // wrapper for libusb_set_configuration()
     // if skip_active_check = true, the current configuration is not checked before setting the new one
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
-    void set_configuration(int configuration, bool skip_active_check = false) {
+    void set_configuration(int configuration, bool skip_active_check = false) noexcept(!Throw) {
         if (!skip_active_check) {
             const auto active = get_configuration<Loglevel, Throw>();
             if(active == configuration)
@@ -346,7 +346,7 @@ public:
     // template param Len is the maximum possible number of chars (without null terminator) read from the descriptor
     // the return string is resized to the actual number of chars read
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, int Len = 31>
-    std::string get_string_descriptor_ascii(uint8_t desc_index) const {
+    std::string get_string_descriptor_ascii(uint8_t desc_index) const noexcept(!Throw) {
         std::string descriptor(Len + 1, 0);
         const auto result = call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_string_descriptor_ascii, get(), desc_index, (unsigned char*)descriptor.data(), Len + 1);
         if (Throw || result >= 0) {
@@ -360,7 +360,7 @@ public:
 
     // wrapper for libusb_set_auto_detach_kernel_driver()
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
-    void set_auto_detach_kernel_driver(bool enable) {
+    void set_auto_detach_kernel_driver(bool enable) noexcept(!Throw) {
         call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_set_auto_detach_kernel_driver, get(), enable);
     }
 
@@ -377,7 +377,7 @@ public:
     }
 
     // wrap libusb_get_device()
-    usb_device get_device() const;
+    usb_device get_device() const noexcept;
 };
 
 class usb_device : public unique_resource_ptr<libusb_device, libusb_unref_device> {
@@ -396,7 +396,7 @@ public:
     usb_device(pointer p, deleter_type &&d) = delete;
 
     // generate a device_handle with libusb_open() to enable i/o on the device
-    device_handle open() const {
+    device_handle open() const noexcept(false) {
         device_handle handle;
         CALL_LOG_ERROR_THROW(libusb_open, get(), dai::out_param(handle));
         return handle;
@@ -410,7 +410,7 @@ public:
     }
 
     // wrapper for libusb_get_config_descriptor()
-    config_descriptor get_config_descriptor(uint8_t config_index) const {
+    config_descriptor get_config_descriptor(uint8_t config_index) const noexcept(false) {
         config_descriptor descriptor;
         CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, get(), config_index, dai::out_param(descriptor));
         return descriptor;
@@ -418,14 +418,14 @@ public:
 
     // wrapper for libusb_get_device_descriptor()
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
-    libusb_device_descriptor get_device_descriptor() const {
+    libusb_device_descriptor get_device_descriptor() const noexcept(!Throw) {
         libusb_device_descriptor descriptor{};
         call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_device_descriptor, get(), &descriptor);
         return descriptor;
     }
 
     // wrapper for libusb_get_bus_number()
-    uint8_t get_bus_number() const {
+    uint8_t get_bus_number() const noexcept(false) {
         return CALL_LOG_ERROR_THROW(libusb_get_bus_number, get());
     }
 
@@ -433,7 +433,7 @@ public:
     // template param Len is the maximum possible number of port-numbers read from usb
     // the return vector is resized to the actual number read
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, int Len = 7>
-    std::vector<uint8_t> get_port_numbers() const {
+    std::vector<uint8_t> get_port_numbers() const noexcept(!Throw) {
         std::vector<uint8_t> numbers(Len, 0);
         const auto result = call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_port_numbers, get(), numbers.data(), Len);
         if (Throw || result >= 0) {
@@ -447,7 +447,7 @@ public:
 };
 
 // wrap libusb_get_device()
-inline usb_device device_handle::get_device() const {
+inline usb_device device_handle::get_device() const noexcept {
     return usb_device{libusb_get_device(get())};
 }
 
