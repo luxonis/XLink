@@ -269,7 +269,6 @@ public:
 class device_handle : public unique_resource_ptr<libusb_device_handle, libusb_close> {
 private:
     using _base = unique_resource_ptr<libusb_device_handle, libusb_close>;
-    using bulk_transfer_return = decltype(libusb_bulk_transfer(nullptr, 0, nullptr, 0, nullptr, 0));
 
     static constexpr decltype(libusb_endpoint_descriptor::wMaxPacketSize) DEFAULT_MAX_PACKET_SIZE = 512;
 
@@ -430,10 +429,25 @@ public:
     // wrapper for libusb_bulk_transfer(); returns std::pair with error code and number of bytes actually transferred
     // Transfers on IN endpoints will continue until the requested number of bytes has been transferred
     // TODO should a short packet on IN endpoint indicate the device is finished and this function return?
-    template <mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, unsigned int ChunkTimeoutMs = 0 /* unlimited */, bool ZeroLengthPacketEnding = false, unsigned int TimeoutMs = 0 /* unlimited */, typename BufferValueType>
-    std::pair<bulk_transfer_return, ptrdiff_t> bulk_transfer(const unsigned char endpoint,
-                                                             BufferValueType* buffer,
-                                                             intmax_t bufferSizeBytes) const noexcept(!Throw);
+    template <mvLog_t Loglevel = MVLOG_ERROR,
+              bool Throw = true,
+              unsigned int ChunkTimeoutMs = 0 /* unlimited */,
+              bool ZeroLengthPacketEnding = false,
+              unsigned int TimeoutMs = 0 /* unlimited */,
+              typename BufferValueType>
+    std::pair<libusb_error, ptrdiff_t> bulk_transfer(const unsigned char endpoint, BufferValueType* buffer, intmax_t bufferSizeBytes) const noexcept(!Throw);
+
+    // bulk_transfer() overload for contiguous storage containers having data() and size() methods
+    template <mvLog_t Loglevel = MVLOG_ERROR,
+              bool Throw = true,
+              unsigned int ChunkTimeoutMs = 0 /* unlimited */,
+              bool ZeroLengthPacketEnding = false,
+              unsigned int TimeoutMs = 0 /* unlimited */,
+              typename ContainerType>
+    std::pair<libusb_error, ptrdiff_t> bulk_transfer(const unsigned char endpoint, ContainerType& container) const noexcept(!Throw) {
+        return bulk_transfer<Loglevel, Throw, ChunkTimeoutMs, ZeroLengthPacketEnding, TimeoutMs>(
+            endpoint, container.data(), container.size() * sizeof(typename ContainerType::value_type));
+    }
 
     // basic wrapper for libusb_bulk_transfer()
     int bulk_transfer(unsigned char endpoint, void *data, int length, int *transferred, std::chrono::milliseconds timeout) const noexcept {
@@ -513,9 +527,9 @@ inline usb_device device_handle::get_device() const noexcept {
 }
 
 template <mvLog_t Loglevel, bool Throw, unsigned int ChunkTimeoutMs, bool ZeroLengthPacketEnding, unsigned int TimeoutMs, typename BufferValueType>
-inline std::pair<device_handle::bulk_transfer_return, ptrdiff_t> device_handle::bulk_transfer(const unsigned char endpoint,
-                                                                                              BufferValueType* buffer, // TODO make this const
-                                                                                              intmax_t bufferSizeBytes) const noexcept(!Throw) {
+inline std::pair<libusb_error, ptrdiff_t> device_handle::bulk_transfer(const unsigned char endpoint,
+                                                                       BufferValueType* const buffer,
+                                                                       intmax_t bufferSizeBytes) const noexcept(!Throw) {
     static constexpr auto FAIL_FORMAT =    "dai::libusb failed bulk_transfer(%u %s): %td/%jd bytes transmit; %s";
     static constexpr auto START_FORMAT =   "dai::libusb starting bulk_transfer(%u %s): 0/%jd bytes transmit";
     static constexpr auto ZLP_FORMAT =     "dai::libusb zerolp bulk_transfer(%u %s): %td/%jd bytes transmit";
@@ -526,7 +540,7 @@ inline std::pair<device_handle::bulk_transfer_return, ptrdiff_t> device_handle::
     static constexpr bool BUFFER_IS_CONST = static_cast<bool>(std::is_const<BufferValueType>::value);
     static constexpr auto CHUNK_TIMEOUT = (TimeoutMs == 0) ? ChunkTimeoutMs : std::min(ChunkTimeoutMs, TimeoutMs);
 
-    std::pair<bulk_transfer_return, ptrdiff_t> result{LIBUSB_ERROR_INVALID_PARAM, 0};
+    std::pair<libusb_error, ptrdiff_t> result{LIBUSB_ERROR_INVALID_PARAM, 0};
 
     // verify parameters and that buffer for specific endpoint is non-const for IN endpoints
     if((BUFFER_IS_CONST && is_direction_in(endpoint)) || buffer == nullptr || bufferSizeBytes < 0) {
@@ -535,11 +549,8 @@ inline std::pair<device_handle::bulk_transfer_return, ptrdiff_t> device_handle::
     }
 
     // start transfer
-    // BUGBUG how handle scenario of receiving data from an IN endpoint, and the device sends less data than the bufferSizeBytes?
-    // This is getLibusbDeviceMxId() scenaro. How does the code below know to exit the loop? Will an error eventually occur
-    // and that cause the exit?
     else {
-        const bool transmitZeroLengthPacket = ZeroLengthPacketEnding && (bufferSizeBytes % get_max_packet_size(endpoint) == 0);
+        const bool transmitZeroLengthPacket = ZeroLengthPacketEnding; // && (bufferSizeBytes % get_max_packet_size(endpoint) == 0);
         const auto chunkSize = get_device_descriptor().bcdUSB >= 0x200 ? DEFAULT_CHUNK_SIZE : DEFAULT_CHUNK_SIZE_USB1;
         const auto completeSizeBytes = bufferSizeBytes;
         auto& rcNum = result.first;
@@ -549,7 +560,6 @@ inline std::pair<device_handle::bulk_transfer_return, ptrdiff_t> device_handle::
         // loop until all data is transferred
         const auto t1 = std::chrono::steady_clock::now();
         auto iterationBuffer = reinterpret_cast<unsigned char*>(const_cast<typename std::remove_cv<BufferValueType>::type*>(buffer));
-        std::vector<unsigned char> overflowBuffer(get_max_packet_size(endpoint));
         while(bufferSizeBytes || transmitZeroLengthPacket) {
             // calculate the number of bytes to transfer in this iteration; never more than chunkSize
             int iterationBytesToTransfer = static_cast<int>(std::min<intmax_t>(bufferSizeBytes, chunkSize));
@@ -557,8 +567,9 @@ inline std::pair<device_handle::bulk_transfer_return, ptrdiff_t> device_handle::
             // Low-level usb packets sized at the endpoint's max packet size will prevent overflow errors.
             // This must be handled during the last chunk. If that chunk isn't exactly a multiple of the
             // endpoint's max packet size, then need to transfer the largest multiple of max packet size
-            // and then create a local buffer to receive the final "partial" packet of that final chunk
+            // and then create a overflow buffer to receive the final "partial" packet of that final chunk
             // and then copy that into the outgoing buffer.
+            std::vector<unsigned char> overflowBuffer;
             if (is_direction_in(endpoint) && (iterationBytesToTransfer % get_max_packet_size(endpoint) != 0)) {
                 // adjust down the iterationBytesToTransfer to the largest multiple of max packet size
                 // which lets this iteration complete without overflow errors, and setup the next
@@ -568,6 +579,7 @@ inline std::pair<device_handle::bulk_transfer_return, ptrdiff_t> device_handle::
                 // if this is the final packet, then use the local overflow buffer to receive
                 // the final "partial" packet and copy the transmitted bytes into the outgoing buffer
                 if (iterationBytesToTransfer == 0) {
+                    overflowBuffer.resize(get_max_packet_size(endpoint));
                     iterationBuffer = overflowBuffer.data();
                     iterationBytesToTransfer = static_cast<int>(overflowBuffer.size());
                 }
@@ -575,7 +587,7 @@ inline std::pair<device_handle::bulk_transfer_return, ptrdiff_t> device_handle::
 
             // transfer the data
             int iterationTransferredBytes{0};
-            rcNum = libusb_bulk_transfer(get(), endpoint, iterationBuffer, iterationBytesToTransfer, &iterationTransferredBytes, CHUNK_TIMEOUT);
+            rcNum = static_cast<libusb_error>(libusb_bulk_transfer(get(), endpoint, iterationBuffer, iterationBytesToTransfer, &iterationTransferredBytes, CHUNK_TIMEOUT));
 
             // validate if too much data received; likely corrupts memory
             // caution: libusb docs writes when error is LIBUSB_ERROR_OVERFLOW
@@ -591,24 +603,35 @@ inline std::pair<device_handle::bulk_transfer_return, ptrdiff_t> device_handle::
                 // did the transfer happen from the overflow buffer?
                 if(iterationBuffer == overflowBuffer.data()) {
                     // validate the data transmitted into the overflow buffer is not larger than remaining space in outgoing buffer
-                    if(iterationTransferredBytes > bufferSizeBytes) {
-                        rcNum = LIBUSB_ERROR_OVERFLOW;
-                        mvLog(Loglevel, FAIL_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], transferredBytes, completeSizeBytes, "final packet won't fit into outgoing buffer");
-                        throw_conditional_transfer_error(LIBUSB_ERROR_OVERFLOW, transferredBytes, std::integral_constant<bool, Throw>{});
-                        break;
-                    }
+                    // However in testing, if I start an 84 byte incoming transfer, so it is all in one packet, so I use the overflow buffer to receive
+                    // since it is not %=0, so I tell the libusbapi 512 bytes buffer to avoid overflows, then libusb comes back with 512 bytes instead
+                    // of the 84 I would expect. Either libusb or the device sent the data. When I inspected the 512 packet, I could see
+                    // the first 84 bytes seemed formatted and regular, and then the 85 bytes and later seemed patterned. Maybe that is
+                    // uninitialized data.
+                    //if(iterationTransferredBytes > bufferSizeBytes) {
+                    //    rcNum = LIBUSB_ERROR_OVERFLOW;
+                    //    mvLog(Loglevel, FAIL_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], transferredBytes, completeSizeBytes, "final packet won't fit into outgoing buffer");
+                    //    throw_conditional_transfer_error(LIBUSB_ERROR_OVERFLOW, transferredBytes, std::integral_constant<bool, Throw>{});
+                    //    break;
+                    //}
 
                     // copy the final "partial" packet from the overflow buffer into the outgoing buffer
                     std::copy_n(overflowBuffer.data(),
-                                iterationTransferredBytes,
+                                bufferSizeBytes,
                                 reinterpret_cast<unsigned char*>(const_cast<typename std::remove_cv<BufferValueType>::type*>(buffer)) + transferredBytes);
+                    iterationTransferredBytes = bufferSizeBytes;
                 }
                 transferredBytes += iterationTransferredBytes;
             }
 
             // handle error codes, or if the number of bytes transferred != number bytes requested
-            // except...don't check either when is a zero length packet
-            if(((rcNum < 0) || (iterationTransferredBytes != iterationBytesToTransfer)) && (iterationBytesToTransfer != 0)) {
+            // note: Scenarios of receiving data from an IN endpoint, and the usb device sends less data than the bufferSizeBytes are
+            //       specifically handled. An example is getLibusbDeviceMxId(). Older code call this function would send a too large
+            //       buffer which causes this scenario. When too large then this while loop would keep looping until LIBUSB_ERROR_TIMEOUT.
+            //       However, if the caller provides a buffer that is exactly the size needed, (getLibusbDeviceMxId() does know this size,
+            //       then this loop will quickly exit.
+            // note: previous logic ORd (iterationTransferredBytes != iterationBytesToTransfer) with (rcNum < 0)
+            if(transferredBytes != completeSizeBytes /* logic is superset of ZLP: (iterationBytesToTransfer != 0) */ && rcNum < 0) {
                 mvLog(Loglevel, FAIL_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], transferredBytes, completeSizeBytes, libusb_strerror(static_cast<int>(rcNum)));
                 throw_conditional_transfer_error(static_cast<int>(rcNum), transferredBytes, std::integral_constant<bool, Throw>{});
                 break;
@@ -639,7 +662,7 @@ inline std::pair<device_handle::bulk_transfer_return, ptrdiff_t> device_handle::
             // calculate the transfer rate (MB/s) and log the result
             using double_msec = std::chrono::duration<double, std::chrono::milliseconds::period>;
             const double elapsedMs = std::chrono::duration_cast<double_msec>(std::chrono::steady_clock::now() - t1).count();
-            const double MBpS = (static_cast<double>(transferredBytes) / 1048576.) / (elapsedMs / 1000.);
+            const double MBpS = (static_cast<double>(transferredBytes) / 1048576.) / (elapsedMs * 0.001);
             mvLog(MVLOG_DEBUG, SUCCESS_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], transferredBytes, completeSizeBytes, elapsedMs, MBpS);
         }
 #endif
