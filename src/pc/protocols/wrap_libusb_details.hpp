@@ -27,24 +27,40 @@
 #endif
 
 #include <cassert>
+#include <type_traits>
+#include <utility>
 
 namespace dai {
     // subset of WIL that defines out parameters for smart pointers
     // https://github.com/microsoft/wil/wiki/RAII-resource-wrappers#wilout_param
 
-    //! Type traits class that identifies the inner type of any smart pointer.
-    template <typename Ptr>
-    struct smart_pointer_details
-    {
-        typedef typename Ptr::pointer pointer;
-    };
-
     namespace details
     {
+        // checks for C++14, when not available then include definitions
+        #if WRAP_CPLUSPLUS >= 201402L
+            using std::exchange;
+        #else
+            // implements std::exchange for compilers older than C++14
+            template <class _Ty, class _Other = _Ty>
+            _Ty exchange(_Ty& _Val, _Other&& _New_val) noexcept(
+                std::is_nothrow_move_constructible<_Ty>::value && std::is_nothrow_assignable<_Ty&, _Other>::value) {
+                _Ty _Old_val = static_cast<_Ty&&>(_Val);
+                _Val         = static_cast<_Other&&>(_New_val);
+                return _Old_val;
+            }
+        #endif
+
+        //! Type traits class that identifies the inner type of any smart pointer.
+        template <typename Ptr>
+        struct smart_pointer_details
+        {
+            typedef typename Ptr::pointer pointer;
+        };
+
         template <typename T>
         struct out_param_t
         {
-            typedef typename dai::smart_pointer_details<T>::pointer pointer;
+            typedef typename smart_pointer_details<T>::pointer pointer;
             T &wrapper;
             pointer pRaw;
             bool replace = true;
@@ -90,7 +106,7 @@ namespace dai {
         template <typename Tcast, typename T>
         struct out_param_ptr_t
         {
-            typedef typename dai::smart_pointer_details<T>::pointer pointer;
+            typedef typename smart_pointer_details<T>::pointer pointer;
             T &wrapper;
             pointer pRaw;
             bool replace = true;
@@ -148,5 +164,6 @@ namespace dai {
 
 }
 
+#undef WRAP_CPLUSPLUS
 #undef WRAP_NODISCARD
 #endif // _WRAP_LIBUSB_DETAILS_HPP_

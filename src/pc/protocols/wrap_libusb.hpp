@@ -13,7 +13,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
+#include <chrono>
+#include <cstdint>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -29,21 +33,6 @@ namespace dai {
 ///////////////////////////////
 // Helper functions and macros
 ///////////////////////////////
-
-// checks for C++14, when not available then include definitions
-#if WRAP_CPLUSPLUS >= 201402L
-    #define WRAP_EXCHANGE std::exchange
-#else
-    // older than C++14
-    #define WRAP_EXCHANGE exchange11
-    template <class _Ty, class _Other = _Ty>
-    _Ty exchange11(_Ty& _Val, _Other&& _New_val) noexcept(
-        std::is_nothrow_move_constructible<_Ty>::value && std::is_nothrow_assignable<_Ty&, _Other>::value) {
-        _Ty _Old_val = static_cast<_Ty&&>(_Val);
-        _Val         = static_cast<_Other&&>(_New_val);
-        return _Old_val;
-    }
-#endif
 
 // base implementation wrapper
 template<typename Resource, void(*Dispose)(Resource*)>
@@ -66,31 +55,57 @@ namespace libusb {
 // exception error class for libusb errors
 class usb_error : public std::system_error {
 public:
-    explicit usb_error(const int libusbErrorCode) noexcept :
+    explicit usb_error(int libusbErrorCode) noexcept :
         std::system_error{std::error_code(libusbErrorCode, std::system_category()), libusb_strerror(libusbErrorCode)} {}
-    usb_error(const int libusbErrorCode, const std::string& what) noexcept :
+    usb_error(int libusbErrorCode, const std::string& what) noexcept :
         std::system_error{std::error_code(libusbErrorCode, std::system_category()), what} {}
-    usb_error(const int libusbErrorCode, const char* what) noexcept :
+    usb_error(int libusbErrorCode, const char* what) noexcept :
         std::system_error{std::error_code(libusbErrorCode, std::system_category()), what} {}
 };
 
+// exception error class for libusb transfer errors
+class transfer_error : public usb_error {
+public:
+    explicit transfer_error(int libusbErrorCode, ptrdiff_t transferred) noexcept :
+        usb_error{libusbErrorCode}, transferred{transferred} {}
+    transfer_error(int libusbErrorCode, const std::string& what, ptrdiff_t transferred) noexcept :
+        usb_error{libusbErrorCode, what}, transferred{transferred} {}
+    transfer_error(int libusbErrorCode, const char* what, ptrdiff_t transferred) noexcept :
+        usb_error{libusbErrorCode, what}, transferred{transferred} {}
+private:
+    ptrdiff_t transferred; // number of bytes transferred
+};
+
 // tag dispatch for throwing or not throwing exceptions
-inline void throw_conditional(int errCode, std::true_type) noexcept(false) {
-    throw usb_error(errCode);
+inline void throw_conditional_usb_error(int libusbErrorCode, std::true_type) noexcept(false) {
+    throw usb_error(libusbErrorCode);
 }
-inline void throw_conditional(int, std::false_type) noexcept(true) {
+inline void throw_conditional_usb_error(int, std::false_type) noexcept(true) {
+    // do nothing
+}
+inline void throw_conditional_transfer_error(int libusbErrorCode, ptrdiff_t transferred, std::true_type) noexcept(false) {
+    throw transfer_error(libusbErrorCode, transferred);
+}
+inline void throw_conditional_transfer_error(int, ptrdiff_t, std::false_type) noexcept(true) {
     // do nothing
 }
 
 // template function that can call any libusb function passed to it
 // function parameters are passed as variadic template arguments
 // caution: when Throw=false, a negative return code can be returned on error; always handle such scenarios
-template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, typename Func, typename... Args>
-inline auto call_log_throw(const char* func_within, const int line_number, Func&& func, Args&&... args) noexcept(!Throw) -> decltype(func(std::forward<Args>(args)...)) {
+template <mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, typename Func, typename... Args>
+inline auto call_log_throw(const char* funcWithin, const int lineNumber, Func&& func, Args&&... args) noexcept(!Throw)
+    -> decltype(func(std::forward<Args>(args)...)) {
     const auto rcNum = func(std::forward<Args>(args)...);
     if (rcNum < 0) {
-        logprintf(MVLOGLEVEL(MVLOG_UNIT_NAME), Loglevel, func_within, line_number, "dai::libusb failed %s(): %s", func_within, libusb_strerror(static_cast<int>(rcNum)));
-        throw_conditional(static_cast<int>(rcNum), std::integral_constant<bool, Throw>{});
+        logprintf(MVLOGLEVEL(MVLOG_UNIT_NAME),
+                  Loglevel,
+                  funcWithin,
+                  lineNumber,
+                  "dai::libusb failed %s(): %s",
+                  funcWithin,
+                  libusb_strerror(static_cast<int>(rcNum)));
+        throw_conditional_usb_error(static_cast<int>(rcNum), std::integral_constant<bool, Throw>{});
     }
     return rcNum;
 }
@@ -121,13 +136,13 @@ public:
     device_list(const device_list&) = delete;
     device_list& operator=(const device_list&) = delete;
     device_list(device_list&& other) noexcept :
-        countDevices{WRAP_EXCHANGE(other.countDevices, 0)},
-        deviceList{WRAP_EXCHANGE(other.deviceList, nullptr)} {};
+        countDevices{details::exchange(other.countDevices, 0)},
+        deviceList{details::exchange(other.deviceList, nullptr)} {};
     device_list& operator=(device_list&& other) noexcept {
         if (this == &other)
             return *this;
-        countDevices = WRAP_EXCHANGE(other.countDevices, 0);
-        deviceList = WRAP_EXCHANGE(other.deviceList, nullptr);
+        countDevices = details::exchange(other.countDevices, 0);
+        deviceList = details::exchange(other.deviceList, nullptr);
         return *this;
     }
 
@@ -244,8 +259,8 @@ class config_descriptor : public unique_resource_ptr<libusb_config_descriptor, l
 public:
     using unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>::unique_resource_ptr;
 
-    config_descriptor(libusb_device* dev, uint8_t config_index) noexcept(false) {
-        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, dev, config_index, dai::out_param(*this));
+    config_descriptor(libusb_device* dev, uint8_t configIndex) noexcept(false) {
+        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, dev, configIndex, dai::out_param(*this));
     }
 };
 
@@ -254,8 +269,27 @@ public:
 class device_handle : public unique_resource_ptr<libusb_device_handle, libusb_close> {
 private:
     using _base = unique_resource_ptr<libusb_device_handle, libusb_close>;
+    using bulk_transfer_return = decltype(libusb_bulk_transfer(nullptr, 0, nullptr, 0, nullptr, 0));
+
+    static constexpr decltype(libusb_endpoint_descriptor::wMaxPacketSize) DEFAULT_MAX_PACKET_SIZE = 512;
+
+    std::array<decltype(libusb_endpoint_descriptor::wMaxPacketSize), 32> maxPacketSize{
+        DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
+        DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
+        DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
+        DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
+        DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
+        DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
+        DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
+        DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
+    };
     std::vector<int> claimedInterfaces{};
-    std::array<decltype(libusb_endpoint_descriptor::wMaxPacketSize), 32> maxPacketSize{};
+
+    // endpoint bit 7 = 0 is OUT host to device, bit 7 = 1 is IN device to host (Ignored for Control Endpoints)
+    static bool is_direction_in(uint8_t endpoint) noexcept {
+        // (endpoint >> 7) & 0x01
+        return static_cast<bool>(endpoint & 0x80);
+    }
 
 public:
     using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
@@ -266,21 +300,21 @@ public:
 
     // wrap a platform-specific system device handle and get a libusb device_handle for it
     // never use libusb_open() on this wrapped handle's underlying device
-    device_handle(libusb_context *ctx, intptr_t sys_dev_handle) noexcept(false) {
-        CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sys_dev_handle, dai::out_param(*static_cast<_base*>(this)));
+    device_handle(libusb_context* ctx, intptr_t sysDevHandle) noexcept(false) {
+        CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sysDevHandle, dai::out_param(*static_cast<_base*>(this)));
     }
 
     // copy and move constructors and assignment operators
     device_handle(const device_handle&) = delete;
     device_handle& operator=(const device_handle&) = delete;
     device_handle(device_handle &&other) noexcept :
-        _base{WRAP_EXCHANGE<_base, _base>(other, {})},
-        claimedInterfaces{WRAP_EXCHANGE(other.claimedInterfaces, {})}
+        _base{details::exchange<_base, _base>(other, {})},
+        claimedInterfaces{details::exchange(other.claimedInterfaces, {})}
     {}
     device_handle &operator=(device_handle &&other) noexcept {
         if (this != &other) {
-            *static_cast<_base*>(this) = WRAP_EXCHANGE<_base, _base>(other, {});
-            claimedInterfaces = WRAP_EXCHANGE(other.claimedInterfaces, {});
+            *static_cast<_base*>(this) = details::exchange<_base, _base>(other, {});
+            claimedInterfaces = details::exchange(other.claimedInterfaces, {});
         }
         return *this;
     }
@@ -304,20 +338,22 @@ public:
         return static_cast<_base*>(this)->release();
     }
 
+    // wrap libusb_get_device() and return a ref counted usb_device
+    usb_device get_device() const noexcept;
+
     // wrapper for libusb_claim_interface()
-    void claim_interface(int interface_number) noexcept(false) {
-        if (std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interface_number) != claimedInterfaces.end())
-            return;
-        CALL_LOG_ERROR_THROW(libusb_claim_interface, get(), interface_number);
-        claimedInterfaces.emplace_back(interface_number);
+    void claim_interface(int interfaceNumber) noexcept(false) {
+        if(std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interfaceNumber) != claimedInterfaces.end()) return;
+        CALL_LOG_ERROR_THROW(libusb_claim_interface, get(), interfaceNumber);
+        claimedInterfaces.emplace_back(interfaceNumber);
     }
 
     // wrapper for libusb_release_interface()
-    void release_interface(int interface_number) noexcept(false) {
-        auto candidate = std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interface_number);
+    void release_interface(int interfaceNumber) noexcept(false) {
+        auto candidate = std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interfaceNumber);
         if (candidate == claimedInterfaces.end())
             return;
-        CALL_LOG_ERROR_THROW(libusb_release_interface, get(), interface_number);
+        CALL_LOG_ERROR_THROW(libusb_release_interface, get(), interfaceNumber);
         claimedInterfaces.erase(candidate);
     }
 
@@ -331,9 +367,9 @@ public:
 
     // wrapper for libusb_set_configuration()
     // if skip_active_check = true, the current configuration is not checked before setting the new one
-    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
-    void set_configuration(int configuration, bool skip_active_check = false) noexcept(!Throw) {
-        if (!skip_active_check) {
+    template <mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, bool Force = false>
+    void set_configuration(int configuration) noexcept(!Throw) {
+        if(!Force) {
             const auto active = get_configuration<Loglevel, Throw>();
             if(active == configuration)
                 return;
@@ -345,10 +381,11 @@ public:
     // wrapper for libusb_get_string_descriptor_ascii()
     // template param Len is the maximum possible number of chars (without null terminator) read from the descriptor
     // the return string is resized to the actual number of chars read
-    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, int Len = 31>
-    std::string get_string_descriptor_ascii(uint8_t desc_index) const noexcept(!Throw) {
+    template <mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, int Len = 31>
+    std::string get_string_descriptor_ascii(uint8_t descriptorIndex) const noexcept(!Throw) {
         std::string descriptor(Len + 1, 0);
-        const auto result = call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_string_descriptor_ascii, get(), desc_index, (unsigned char*)descriptor.data(), Len + 1);
+        const auto result = call_log_throw<Loglevel, Throw>(
+            __func__, __LINE__, libusb_get_string_descriptor_ascii, get(), descriptorIndex, (unsigned char*)descriptor.data(), Len + 1);
         if (Throw || result >= 0) {
             // when throwing enabled, then throw occurs on negative/error results before this resize(),
             // so don't need to check result and compiler can optimize this away.
@@ -376,8 +413,32 @@ public:
         return maxPacketSize[(endpoint & 0x0F) | ((endpoint & 0x80) >> 3)];
     }
 
-    // wrap libusb_get_device()
-    usb_device get_device() const noexcept;
+    // wrapper for libusb_get_device_descriptor(libusb_get_device())
+    // faster than calling get_device().get_device_descriptor()
+    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
+    libusb_device_descriptor get_device_descriptor() const noexcept(!Throw) {
+        libusb_device_descriptor descriptor{};
+        call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_device_descriptor, libusb_get_device(get()), &descriptor);
+        return descriptor;
+    }
+
+    //template <int ChunkTimeoutMs, int TimeoutMs>
+    //static constexpr unsigned int calculate_chunk_timeout() {
+    //    return (TimeoutMs == 0) ? ChunkTimeoutMs : std::min(ChunkTimeoutMs, TimeoutMs);
+    //}
+
+    // wrapper for libusb_bulk_transfer(); returns std::pair with error code and number of bytes actually transferred
+    // Transfers on IN endpoints will continue until the requested number of bytes has been transferred
+    // TODO should a short packet on IN endpoint indicate the device is finished and this function return?
+    template <mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, unsigned int ChunkTimeoutMs = 0 /* unlimited */, bool ZeroLengthPacketEnding = false, unsigned int TimeoutMs = 0 /* unlimited */, typename BufferValueType>
+    std::pair<bulk_transfer_return, ptrdiff_t> bulk_transfer(const unsigned char endpoint,
+                                                             BufferValueType* buffer,
+                                                             intmax_t bufferSizeBytes) const noexcept(!Throw);
+
+    // basic wrapper for libusb_bulk_transfer()
+    int bulk_transfer(unsigned char endpoint, void *data, int length, int *transferred, std::chrono::milliseconds timeout) const noexcept {
+        return libusb_bulk_transfer(get(), endpoint, static_cast<unsigned char*>(data), length, transferred, static_cast<unsigned int>(timeout.count()));
+    }
 };
 
 class usb_device : public unique_resource_ptr<libusb_device, libusb_unref_device> {
@@ -389,11 +450,11 @@ public:
     using unique_resource_ptr<libusb_device, libusb_unref_device>::unique_resource_ptr;
 
     // stores a raw libusb_device* pointer, increments its refcount with libusb_ref_device()
-    explicit usb_device(pointer p) noexcept : _base{libusb_ref_device(p)} {}
+    explicit usb_device(pointer ptr) noexcept : _base{libusb_ref_device(ptr)} {}
 
     // delete base constructors that conflict with libusb ref counts
-    usb_device(pointer p, const deleter_type &d) = delete;
-    usb_device(pointer p, deleter_type &&d) = delete;
+    usb_device(pointer, const deleter_type &) = delete;
+    usb_device(pointer, deleter_type &&) = delete;
 
     // generate a device_handle with libusb_open() to enable i/o on the device
     device_handle open() const noexcept(false) {
@@ -405,14 +466,14 @@ public:
     // start managing the new libusb_device* with libusb_ref_device()
     // then remove the old libusb_device* and decrement its ref count
     // No exceptions are thrown. No errors are logged.
-    void reset(pointer p = pointer{}) noexcept {
-        static_cast<_base*>(this)->reset(libusb_ref_device(p));
+    void reset(pointer ptr = pointer{}) noexcept {
+        static_cast<_base*>(this)->reset(libusb_ref_device(ptr));
     }
 
     // wrapper for libusb_get_config_descriptor()
-    config_descriptor get_config_descriptor(uint8_t config_index) const noexcept(false) {
+    config_descriptor get_config_descriptor(uint8_t configIndex) const noexcept(false) {
         config_descriptor descriptor;
-        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, get(), config_index, dai::out_param(descriptor));
+        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, get(), configIndex, dai::out_param(descriptor));
         return descriptor;
     }
 
@@ -446,14 +507,148 @@ public:
     }
 };
 
-// wrap libusb_get_device()
+// wrap libusb_get_device() to return a ref counted usb_device
 inline usb_device device_handle::get_device() const noexcept {
     return usb_device{libusb_get_device(get())};
 }
 
+template <mvLog_t Loglevel, bool Throw, unsigned int ChunkTimeoutMs, bool ZeroLengthPacketEnding, unsigned int TimeoutMs, typename BufferValueType>
+inline std::pair<device_handle::bulk_transfer_return, ptrdiff_t> device_handle::bulk_transfer(const unsigned char endpoint,
+                                                                                              BufferValueType* buffer, // TODO make this const
+                                                                                              intmax_t bufferSizeBytes) const noexcept(!Throw) {
+    static constexpr auto FAIL_FORMAT =    "dai::libusb failed bulk_transfer(%u %s): %td/%jd bytes transmit; %s";
+    static constexpr auto START_FORMAT =   "dai::libusb starting bulk_transfer(%u %s): 0/%jd bytes transmit";
+    static constexpr auto ZLP_FORMAT =     "dai::libusb zerolp bulk_transfer(%u %s): %td/%jd bytes transmit";
+    static constexpr auto SUCCESS_FORMAT = "dai::libusb success bulk_transfer(%u %s): %td/%jd bytes transmit in %lf ms (%lf MB/s)";
+    static constexpr std::array<const char*, 2> DIRECTION_TEXT{"out", "in"};
+    static constexpr int DEFAULT_CHUNK_SIZE = 1024 * 1024;  // must be multiple of endpoint max packet size
+    static constexpr int DEFAULT_CHUNK_SIZE_USB1 = 64;      // must be multiple of endpoint max packet size
+    static constexpr bool BUFFER_IS_CONST = static_cast<bool>(std::is_const<BufferValueType>::value);
+    static constexpr auto CHUNK_TIMEOUT = (TimeoutMs == 0) ? ChunkTimeoutMs : std::min(ChunkTimeoutMs, TimeoutMs);
+
+    std::pair<bulk_transfer_return, ptrdiff_t> result{LIBUSB_ERROR_INVALID_PARAM, 0};
+
+    // verify parameters and that buffer for specific endpoint is non-const for IN endpoints
+    if((BUFFER_IS_CONST && is_direction_in(endpoint)) || buffer == nullptr || bufferSizeBytes < 0) {
+        mvLog(MVLOG_FATAL, FAIL_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], 0, bufferSizeBytes, "invalid buffer const, pointer, or size");
+        throw_conditional_transfer_error(LIBUSB_ERROR_INVALID_PARAM, 0, std::integral_constant<bool, Throw>{});
+    }
+
+    // start transfer
+    // BUGBUG how handle scenario of receiving data from an IN endpoint, and the device sends less data than the bufferSizeBytes?
+    // This is getLibusbDeviceMxId() scenaro. How does the code below know to exit the loop? Will an error eventually occur
+    // and that cause the exit?
+    else {
+        const bool transmitZeroLengthPacket = ZeroLengthPacketEnding && (bufferSizeBytes % get_max_packet_size(endpoint) == 0);
+        const auto chunkSize = get_device_descriptor().bcdUSB >= 0x200 ? DEFAULT_CHUNK_SIZE : DEFAULT_CHUNK_SIZE_USB1;
+        const auto completeSizeBytes = bufferSizeBytes;
+        auto& rcNum = result.first;
+        auto& transferredBytes = result.second;
+        mvLog(MVLOG_DEBUG, START_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], bufferSizeBytes);
+
+        // loop until all data is transferred
+        const auto t1 = std::chrono::steady_clock::now();
+        auto iterationBuffer = reinterpret_cast<unsigned char*>(const_cast<typename std::remove_cv<BufferValueType>::type*>(buffer));
+        std::vector<unsigned char> overflowBuffer(get_max_packet_size(endpoint));
+        while(bufferSizeBytes || transmitZeroLengthPacket) {
+            // calculate the number of bytes to transfer in this iteration; never more than chunkSize
+            int iterationBytesToTransfer = static_cast<int>(std::min<intmax_t>(bufferSizeBytes, chunkSize));
+
+            // Low-level usb packets sized at the endpoint's max packet size will prevent overflow errors.
+            // This must be handled during the last chunk. If that chunk isn't exactly a multiple of the
+            // endpoint's max packet size, then need to transfer the largest multiple of max packet size
+            // and then create a local buffer to receive the final "partial" packet of that final chunk
+            // and then copy that into the outgoing buffer.
+            if (is_direction_in(endpoint) && (iterationBytesToTransfer % get_max_packet_size(endpoint) != 0)) {
+                // adjust down the iterationBytesToTransfer to the largest multiple of max packet size
+                // which lets this iteration complete without overflow errors, and setup the next
+                // iteration to handle the final "partial" packet
+                iterationBytesToTransfer -= iterationBytesToTransfer % get_max_packet_size(endpoint);
+
+                // if this is the final packet, then use the local overflow buffer to receive
+                // the final "partial" packet and copy the transmitted bytes into the outgoing buffer
+                if (iterationBytesToTransfer == 0) {
+                    iterationBuffer = overflowBuffer.data();
+                    iterationBytesToTransfer = static_cast<int>(overflowBuffer.size());
+                }
+            }
+
+            // transfer the data
+            int iterationTransferredBytes{0};
+            rcNum = libusb_bulk_transfer(get(), endpoint, iterationBuffer, iterationBytesToTransfer, &iterationTransferredBytes, CHUNK_TIMEOUT);
+
+            // validate if too much data received; likely corrupts memory
+            // caution: libusb docs writes when error is LIBUSB_ERROR_OVERFLOW
+            // then behaviour is largely undefined: actual_length out variable may or may
+            // not be accurate, the chunk of data that can fit in the buffer (before overflow)
+            // may or may not have been transferred.
+            // http://billauer.co.il/blog/2019/12/usb-bulk-overflow-halt-reset/
+            assert(iterationTransferredBytes <= iterationBytesToTransfer);
+
+            // update the transferred bytes except for LIBUSB_ERROR_OVERFLOW because other
+            // result codes can still transfer data
+            if(rcNum != LIBUSB_ERROR_OVERFLOW) {
+                // did the transfer happen from the overflow buffer?
+                if(iterationBuffer == overflowBuffer.data()) {
+                    // validate the data transmitted into the overflow buffer is not larger than remaining space in outgoing buffer
+                    if(iterationTransferredBytes > bufferSizeBytes) {
+                        rcNum = LIBUSB_ERROR_OVERFLOW;
+                        mvLog(Loglevel, FAIL_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], transferredBytes, completeSizeBytes, "final packet won't fit into outgoing buffer");
+                        throw_conditional_transfer_error(LIBUSB_ERROR_OVERFLOW, transferredBytes, std::integral_constant<bool, Throw>{});
+                        break;
+                    }
+
+                    // copy the final "partial" packet from the overflow buffer into the outgoing buffer
+                    std::copy_n(overflowBuffer.data(),
+                                iterationTransferredBytes,
+                                reinterpret_cast<unsigned char*>(const_cast<typename std::remove_cv<BufferValueType>::type*>(buffer)) + transferredBytes);
+                }
+                transferredBytes += iterationTransferredBytes;
+            }
+
+            // handle error codes, or if the number of bytes transferred != number bytes requested
+            // except...don't check either when is a zero length packet
+            if(((rcNum < 0) || (iterationTransferredBytes != iterationBytesToTransfer)) && (iterationBytesToTransfer != 0)) {
+                mvLog(Loglevel, FAIL_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], transferredBytes, completeSizeBytes, libusb_strerror(static_cast<int>(rcNum)));
+                throw_conditional_transfer_error(static_cast<int>(rcNum), transferredBytes, std::integral_constant<bool, Throw>{});
+                break;
+            }
+
+            // handle zero length packet transfer (the last packet)
+            if(iterationBytesToTransfer == 0) {
+                mvLog(MVLOG_DEBUG, ZLP_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], transferredBytes, completeSizeBytes);
+                rcNum = LIBUSB_SUCCESS;  // simulating behavior in previous send_file() function
+                break;
+            }
+
+            // successfully and fully transferred this iteration's buffer
+            bufferSizeBytes -= iterationTransferredBytes;
+            iterationBuffer += iterationTransferredBytes;
+
+            // check for timeout; when TimeoutMs is non-zero, and bufferSizeBytes is non-zero (all bytes not yet transferred),
+            // and the duration since started has exceeded TimeoutMs milliseconds
+            if(static_cast<bool>(TimeoutMs) && bufferSizeBytes && (std::chrono::steady_clock::now() - t1 > std::chrono::milliseconds{TimeoutMs})) {
+                rcNum = LIBUSB_ERROR_TIMEOUT;
+                mvLog(Loglevel, FAIL_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], transferredBytes, completeSizeBytes, libusb_strerror(static_cast<int>(rcNum)));
+                throw_conditional_transfer_error(static_cast<int>(rcNum), transferredBytes, std::integral_constant<bool, Throw>{});
+                break;
+            }
+        }
+#ifndef NDEBUG
+        if(rcNum == LIBUSB_SUCCESS) {
+            // calculate the transfer rate (MB/s) and log the result
+            using double_msec = std::chrono::duration<double, std::chrono::milliseconds::period>;
+            const double elapsedMs = std::chrono::duration_cast<double_msec>(std::chrono::steady_clock::now() - t1).count();
+            const double MBpS = (static_cast<double>(transferredBytes) / 1048576.) / (elapsedMs / 1000.);
+            mvLog(MVLOG_DEBUG, SUCCESS_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], transferredBytes, completeSizeBytes, elapsedMs, MBpS);
+        }
+#endif
+    }
+    return result;
+}
+
 } // namespace libusb
 
-#undef WRAP_EXCHANGE
 #undef CALL_LOG_ERROR_THROW
 
 } // namespace dai

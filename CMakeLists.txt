@@ -82,7 +82,7 @@ else()
 endif()
 
 if(WIN32)
-    target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN)
+    target_compile_definitions(${TARGET_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 else()
     find_package(Threads REQUIRED)
     target_link_libraries(${TARGET_NAME} PRIVATE Threads::Threads)
