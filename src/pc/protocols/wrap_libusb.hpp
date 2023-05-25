@@ -448,6 +448,12 @@ public:
     int bulk_transfer(unsigned char endpoint, void *data, int length, int *transferred, std::chrono::milliseconds timeout) const noexcept {
         return libusb_bulk_transfer(get(), endpoint, static_cast<unsigned char*>(data), length, transferred, static_cast<unsigned int>(timeout.count()));
     }
+
+    // wrapper for libusb_control_transfer()
+    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
+    int control_transfer(uint8_t requestType, uint8_t request, uint16_t value, uint16_t index, void *data, uint16_t length, std::chrono::milliseconds timeout) const noexcept(!Throw) {
+        return call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_control_transfer, get(), requestType, request, value, index, static_cast<unsigned char*>(data), length, static_cast<unsigned int>(timeout.count()));
+    }
 };
 
 class usb_device : public unique_resource_ptr<libusb_device, libusb_unref_device> {
@@ -533,7 +539,7 @@ inline std::pair<libusb_error, ptrdiff_t> device_handle::bulk_transfer(const uns
     static constexpr int DEFAULT_CHUNK_SIZE = 1024 * 1024;  // must be multiple of endpoint max packet size
     static constexpr int DEFAULT_CHUNK_SIZE_USB1 = 64;      // must be multiple of endpoint max packet size
     static constexpr bool BUFFER_IS_CONST = static_cast<bool>(std::is_const<BufferValueType>::value);
-    static constexpr auto CHUNK_TIMEOUT = (TimeoutMs == 0) ? ChunkTimeoutMs : std::min(ChunkTimeoutMs, TimeoutMs);
+    static constexpr auto CHUNK_TIMEOUT = (TimeoutMs == 0) ? ChunkTimeoutMs : details::min(ChunkTimeoutMs, TimeoutMs);
 
     std::pair<libusb_error, ptrdiff_t> result{LIBUSB_ERROR_INVALID_PARAM, 0};
 

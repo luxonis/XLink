@@ -35,14 +35,20 @@ namespace details {
 // checks for C++14, when not available then include definitions
 #if WRAP_CPLUSPLUS < 201402L
 // implements std::exchange for compilers older than C++14
-template <class _Ty, class _Other = _Ty>
-_Ty exchange(_Ty& _Val, _Other&& _New_val) noexcept(std::is_nothrow_move_constructible<_Ty>::value&& std::is_nothrow_assignable<_Ty&, _Other>::value) {
-    _Ty _Old_val = static_cast<_Ty&&>(_Val);
-    _Val = static_cast<_Other&&>(_New_val);
-    return _Old_val;
+template <class T, class Other = T>
+T exchange(T& val, Other&& newVal) noexcept(std::is_nothrow_move_constructible<T>::value&& std::is_nothrow_assignable<T&, Other>::value) {
+    T oldVal = static_cast<T&&>(val);
+    val = static_cast<Other&&>(newVal);
+    return oldVal;
+}
+template <typename T>
+constexpr const T& min(const T& left, const T& right) noexcept(noexcept(right < left)) {
+    return right < left ? right : left;
 }
 #else
 using std::exchange;
+#include <algorithm>
+using std::min;
 #endif
 
 //! Type traits class that identifies the inner type of any smart pointer.

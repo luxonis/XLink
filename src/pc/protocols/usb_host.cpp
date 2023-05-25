@@ -543,44 +543,29 @@ xLinkPlatformErrorCode_t usbLinkOpen(const char *path, device_handle& handle) {
     return parseLibusbError(usbSharedOpen(path, DEFAULT_OPEN_TIMEOUT, false, endpoint, handle));
 }
 
-xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
-    usb_device dev;
-    auto refErr = refLibusbDeviceByName(path, dev);
-    if(refErr != X_LINK_PLATFORM_SUCCESS) {
-        return refErr;
-    }
-    if(!dev){
-        return X_LINK_PLATFORM_ERROR;
-    }
-
-    device_handle handle;
+xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* const pathName) {
     try {
-        handle = device_handle{dev.get()};
-    }
-    catch(const usb_error& e) {
-        if(e.code().value() == LIBUSB_ERROR_ACCESS) {
-            return X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
-        }
-        return X_LINK_PLATFORM_ERROR;
-    }
-    catch(const std::exception&) {
-        return X_LINK_PLATFORM_ERROR;
-    }
+        // Get device by path
+        usb_device device;
+        const auto refErr = refLibusbDeviceByName(pathName, device);
+        if(refErr != X_LINK_PLATFORM_SUCCESS) return refErr;
+        if(!device) return X_LINK_PLATFORM_ERROR;
 
-    // Make control transfer
-    // Ignore errors then do normal unref+close device
-    if(0 > libusb_control_transfer(handle.get(),
-        bootBootloaderPacket.requestType,   // bmRequestType: device-directed
-        bootBootloaderPacket.request,   // bRequest: custom
-        bootBootloaderPacket.value, // wValue: custom
-        bootBootloaderPacket.index, // wIndex
-        NULL,   // data pointer
-        0,      // data size
-        1000    // timeout [ms]
-    )) {
+        // Open device to get an i/o device handle
+        // Make control transfer and take no action if errors occur
+        device_handle{device.get()}.control_transfer(bootBootloaderPacket.requestType,  // bmRequestType: device-directed
+                                                     bootBootloaderPacket.request,      // bRequest: custom
+                                                     bootBootloaderPacket.value,        // wValue: custom
+                                                     bootBootloaderPacket.index,        // wIndex
+                                                     nullptr,                           // data pointer
+                                                     0,                                 // data size
+                                                     std::chrono::milliseconds(1000));
+        return X_LINK_PLATFORM_SUCCESS;
+    } catch(const usb_error& e) {
+        return parseLibusbError(static_cast<libusb_error>(e.code().value()));
+    } catch(const std::exception&) {
         return X_LINK_PLATFORM_ERROR;
     }
-    return X_LINK_PLATFORM_SUCCESS;
 }
 
 void usbLinkClose(libusb_device_handle *h)
