@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <chrono>
 #include <cstring>
 
@@ -46,7 +47,6 @@ static constexpr int USB_ENDPOINT_OUT = 0x01;
 
 static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
 
-static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int initialized;
 
 struct UsbSetupPacket {
@@ -65,7 +65,7 @@ static UsbSetupPacket bootBootloaderPacket{
     0 // not used
 };
 
-
+xLinkPlatformErrorCode_t parseLibusbError(libusb_error) noexcept;
 
 static std::mutex mutex; // Also protects usb_mx_id_cache
 static usb_context context;
@@ -373,44 +373,22 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
                 // ///////////////////////
                 // Start
                 // ///////////////////////
-                const int send_ep = 0x01;
-                int transferred = 0;
+                static constexpr int send_ep = 0x01;
+                static constexpr int recv_ep = 0x81;
+                static constexpr int expectedMxIdReadSize = 9;
+                std::array<uint8_t, expectedMxIdReadSize> rbuf;
 
-                // WD Protection & MXID Retrieval Command
-                transferred = 0;
-                libusb_rc = libusb_bulk_transfer(handle.get(), send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT_MS);
-                if (libusb_rc < 0 || usb_mx_id_get_payload_size() != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_size());
-                    // Mark as error and retry
-                    libusb_rc = -1;
-                    // retry
-                    std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
-                    continue;
+                try {
+                    // WD Protection & MXID Retrieval Command
+                    handle.bulk_transfer<MVLOG_FATAL, true, MX_ID_TIMEOUT_MS>(send_ep, usb_mx_id_get_payload(), usb_mx_id_get_payload_size());
+                    // MXID Read
+                    handle.bulk_transfer<MVLOG_FATAL, true, MX_ID_TIMEOUT_MS>(recv_ep, rbuf);
+                    // WD Protection end
+                    handle.bulk_transfer<MVLOG_FATAL, true, MX_ID_TIMEOUT_MS>(send_ep, usb_mx_id_get_payload_end(), usb_mx_id_get_payload_end_size());
                 }
-
-                // MXID Read
-                const int recv_ep = 0x81;
-                const int expectedMxIdReadSize = 9;
-                uint8_t rbuf[128];
-                transferred = 0;
-                libusb_rc = libusb_bulk_transfer(handle.get(), recv_ep, rbuf, sizeof(rbuf), &transferred, MX_ID_TIMEOUT_MS);
-                if (libusb_rc < 0 || expectedMxIdReadSize != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, expectedMxIdReadSize);
+                catch(const usb_error& e) {
                     // Mark as error and retry
-                    libusb_rc = -1;
-                    // retry
-                    std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
-                    continue;
-                }
-
-                // WD Protection end
-                transferred = 0;
-                libusb_rc = libusb_bulk_transfer(handle.get(), send_ep, ((uint8_t*) usb_mx_id_get_payload_end()), usb_mx_id_get_payload_end_size(), &transferred, MX_ID_TIMEOUT_MS);
-                if (libusb_rc < 0 || usb_mx_id_get_payload_end_size() != transferred) {
-                    mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_end_size());
-                    // Mark as error and retry
-                    libusb_rc = -1;
-                    // retry
+                    libusb_rc = e.code().value();
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                     continue;
                 }
@@ -495,24 +473,21 @@ static libusb_error usb_open_device(const usb_device& dev, uint8_t& endpoint, de
         // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
         candidate.set_auto_detach_kernel_driver<MVLOG_INFO, false>(true);
 
-        // claim interface 0
+        // claim interface 0; it is automatically released when handle is destructed
         candidate.claim_interface(0);
 
         // Get device config descriptor
         const auto cdesc = dev.get_config_descriptor(0);
 
-        // TODO add endpoint pointer boundary checks
-        const struct libusb_interface_descriptor *ifdesc = cdesc->interface->altsetting;
-        for(int i=0; i<ifdesc->bNumEndpoints; ++i)
-        {
-            mvLog(MVLOG_DEBUG, "Found EP 0x%02x : max packet size is %u bytes",
-                ifdesc->endpoint[i].bEndpointAddress, ifdesc->endpoint[i].wMaxPacketSize);
-            if((ifdesc->endpoint[i].bmAttributes & LIBUSB_TRANSFER_TYPE_MASK) != LIBUSB_TRANSFER_TYPE_BULK)
-                continue;
-            if( !(ifdesc->endpoint[i].bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK) )
-            {
-                endpoint = ifdesc->endpoint[i].bEndpointAddress;
-                candidate.set_max_packet_size(endpoint, ifdesc->endpoint[i].wMaxPacketSize);
+        // find the first bulk OUT endpoint, persist its max packet size, then return the endpoint number and candidate handle
+        const dai::details::span<const libusb_endpoint_descriptor> endpoints{cdesc->interface->altsetting->endpoint,
+                                                                             cdesc->interface->altsetting->bNumEndpoints};
+        for(const auto& endpointDesc : endpoints) {
+            mvLog(MVLOG_DEBUG, "Found EP 0x%02x : max packet size is %u bytes", endpointDesc.bEndpointAddress, endpointDesc.wMaxPacketSize);
+            if((endpointDesc.bmAttributes & LIBUSB_TRANSFER_TYPE_MASK) == LIBUSB_TRANSFER_TYPE_BULK
+               && !(endpointDesc.bEndpointAddress & LIBUSB_ENDPOINT_DIR_MASK)) {
+                endpoint = endpointDesc.bEndpointAddress;
+                candidate.set_max_packet_size(endpoint, endpointDesc.wMaxPacketSize);
                 handle = std::move(candidate);
                 return LIBUSB_SUCCESS;
             }
@@ -527,75 +502,17 @@ static libusb_error usb_open_device(const usb_device& dev, uint8_t& endpoint, de
     }
 }
 
-static int send_file(const device_handle& h, uint8_t endpoint, const void* tx_buf, unsigned filesize, uint16_t bcdusb)
-{
-    using namespace std::chrono;
-
-    uint8_t *p;
-    int rc;
-    int wb, twb, wbr;
-    int bulk_chunklen = DEFAULT_CHUNKSZ;
-    twb = 0;
-    p = const_cast<uint8_t*>((const uint8_t*)tx_buf);
-    int send_zlp = ((filesize % 512) == 0);
-
-    /*
-    // adjust chunklen with endpoint max packet size
-    if (h.get_max_packet_size(endpoint) < bulk_chunklen) {
-        mvLog(MVLOG_FATAL, "bulk_chunklen %d is too big for endpoint %02x, reducing to %d",
-              bulk_chunklen, endpoint, h.get_max_packet_size(endpoint));
-        bulk_chunklen = h.get_max_packet_size(endpoint);
-    }
-    */
-
-    if(bcdusb < 0x200) {
-        bulk_chunklen = USB1_CHUNKSZ;
-    }
-
-    auto t1 = steady_clock::now();
-    mvLog(MVLOG_DEBUG, "Performing bulk write of %u bytes...", filesize);
-    while(((unsigned)twb < filesize) || send_zlp)
-    {
-        wb = filesize - twb;
-        if(wb > bulk_chunklen)
-            wb = bulk_chunklen;
-        wbr = 0;
-        rc = libusb_bulk_transfer(h.get(), endpoint, p, wb, &wbr, write_timeout);
-        if((rc || (wb != wbr)) && (wb != 0)) // Don't check the return code for ZLP
-        {
-            if(rc == LIBUSB_ERROR_NO_DEVICE)
-                break;
-            mvLog(MVLOG_WARN, "bulk write: %s (%d bytes written, %d bytes to write)", xlink_libusb_strerror(rc), wbr, wb);
-            if(rc == LIBUSB_ERROR_TIMEOUT)
-                return USB_BOOT_TIMEOUT;
-            else return USB_BOOT_ERROR;
-        }
-        if (steady_clock::now() - t1 > DEFAULT_SEND_FILE_TIMEOUT) {
-            return USB_BOOT_TIMEOUT;
-        }
-        if(wb == 0) // ZLP just sent, last packet
-            break;
-        twb += wbr;
-        p += wbr;
-    }
-
-#ifndef NDEBUG
-    double MBpS = ((double)filesize / 1048576.) / (duration_cast<duration<float>>(steady_clock::now() - t1)).count();
-    mvLog(MVLOG_DEBUG, "Successfully sent %u bytes of data in %lf ms (%lf MB/s)", filesize, duration_cast<milliseconds>(steady_clock::now() - t1).count(), MBpS);
-#endif
-
-    return 0;
-}
-
+// upcoming refactor fixes a silent bug in this function
+// send_file() returns a `enum usbBootError`. usb_boot() saves it into an `int` variable
+// and then returns that variable as an `int` error code. Yet, another clause in this same
+// function returns a X_LINK_PLATFORM_ error code which has different negative number error
+// values Then further back the call chain the error types are confused between USB_BOOT_,
+// LIBUSB_ERROR_, and X_LINK_PLATFORM_.
 int usb_boot(const char *addr, const void *mvcmd, unsigned size)
 {
     using namespace std::chrono;
 
     usb_device dev;
-    device_handle handle;
-    uint16_t bcdusb = -1; // -1 has all bits set to 1, therefore the highest possible USB version
-    libusb_error res = LIBUSB_ERROR_ACCESS;
-
     auto t1 = steady_clock::now();
     do {
         if(refLibusbDeviceByName(addr, dev) == X_LINK_PLATFORM_SUCCESS){
@@ -608,32 +525,24 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
-    int rc = 0;
     uint8_t endpoint = 0;
+    device_handle handle;
+    libusb_error usbResult = LIBUSB_ERROR_ACCESS;
     auto t2 = steady_clock::now();
     do {
-        if((res = usb_open_device(dev, endpoint, handle)) == LIBUSB_SUCCESS){
+        usbResult = usb_open_device(dev, endpoint, handle);
+        if(usbResult == LIBUSB_SUCCESS){
             break;
         }
         std::this_thread::sleep_for(milliseconds(100));
     } while(steady_clock::now() - t2 < DEFAULT_CONNECT_TIMEOUT);
 
-    if(res == LIBUSB_SUCCESS) {
-        // get USB specification number from device descriptor
-        bcdusb = dev.get_device_descriptor().bcdUSB;
-        mvLog(MVLOG_DEBUG, "USB specification version: %x.%02x", bcdusb >> 8, bcdusb & 0xff);
-
-        rc = send_file(handle, endpoint, mvcmd, size, bcdusb);
-    } else {
-        if(res == LIBUSB_ERROR_ACCESS) {
-            rc = X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
-        } else if(res == LIBUSB_ERROR_BUSY) {
-            rc = X_LINK_PLATFORM_DEVICE_BUSY;
-        } else {
-            rc = X_LINK_PLATFORM_ERROR;
-        }
+    if(usbResult == LIBUSB_SUCCESS) {
+        // transfer boot binary
+        static constexpr auto MILLISEC_COUNT = DEFAULT_SEND_FILE_TIMEOUT.count();
+        std::tie(usbResult, std::ignore) = handle.bulk_transfer<MVLOG_FATAL, false, DEFAULT_WRITE_TIMEOUT, true, MILLISEC_COUNT>(endpoint, mvcmd, size);
     }
-    return rc;
+    return static_cast<int>(parseLibusbError(usbResult));
 }
 
 
@@ -889,40 +798,52 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
     return rc;
 }
 
-
-
-int usb_read(libusb_device_handle *f, void *data, size_t size)
-{
-    const int chunk_size = DEFAULT_CHUNKSZ;
-    while(size > 0)
+xLinkPlatformErrorCode_t parseLibusbError(libusb_error rc) noexcept {
+    xLinkPlatformErrorCode_t platformResult{X_LINK_PLATFORM_SUCCESS};
+    switch (rc)
     {
-        int bt, ss = (int)size;
-        if(ss > chunk_size)
-            ss = chunk_size;
-        int rc = libusb_bulk_transfer(f, USB_ENDPOINT_IN,(unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
-        if(rc)
-            return rc;
-        data = ((char *)data) + bt;
-        size -= bt;
+    case LIBUSB_SUCCESS:
+        break;
+    case LIBUSB_ERROR_INVALID_PARAM:
+        platformResult = X_LINK_PLATFORM_INVALID_PARAMETERS;
+        break;
+    case LIBUSB_ERROR_ACCESS:
+        platformResult = X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
+        break;
+    case LIBUSB_ERROR_NO_DEVICE:
+        platformResult = X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        break;
+    case LIBUSB_ERROR_NOT_FOUND:
+        platformResult = X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        break;
+    case LIBUSB_ERROR_BUSY:
+        platformResult = X_LINK_PLATFORM_DEVICE_BUSY;
+        break;
+    case LIBUSB_ERROR_TIMEOUT:
+        platformResult = X_LINK_PLATFORM_TIMEOUT;
+        break;
+    case LIBUSB_ERROR_IO:
+    case LIBUSB_ERROR_OVERFLOW:
+    case LIBUSB_ERROR_PIPE:
+    case LIBUSB_ERROR_INTERRUPTED:
+    case LIBUSB_ERROR_NO_MEM:
+    case LIBUSB_ERROR_NOT_SUPPORTED:
+    case LIBUSB_ERROR_OTHER:
+    default:
+        platformResult = X_LINK_PLATFORM_ERROR;
+        break;
     }
-    return 0;
+    return platformResult;
 }
 
-int usb_write(libusb_device_handle *f, const void *data, size_t size)
+int usb_read(const device_handle& f, void *data, size_t size)
 {
-    const int chunk_size = DEFAULT_CHUNKSZ;
-    while(size > 0)
-    {
-        int bt, ss = (int)size;
-        if(ss > chunk_size)
-            ss = chunk_size;
-        int rc = libusb_bulk_transfer(f, USB_ENDPOINT_OUT, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
-        if(rc)
-            return rc;
-        data = (char *)data + bt;
-        size -= bt;
-    }
-    return 0;
+    return f.bulk_transfer<MVLOG_ERROR, false, XLINK_USB_DATA_TIMEOUT>(USB_ENDPOINT_IN, data, size).first;
+}
+
+int usb_write(const device_handle& f, const void *data, size_t size)
+{
+    return f.bulk_transfer<MVLOG_ERROR, false, XLINK_USB_DATA_TIMEOUT>(USB_ENDPOINT_OUT, data, size).first;
 }
 
 int usbPlatformRead(void* fdKey, void* data, int size)
@@ -971,9 +892,9 @@ int usbPlatformRead(void* fdKey, void* data, int size)
         mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
         return -1;
     }
-    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
-
-    rc = usb_read(usbHandle, data, size);
+    device_handle handle{(libusb_device_handle*)tmpUsbHandle};
+    rc = usb_read(handle, data, size);
+    handle.release();
 #endif  /*USE_USB_VSC*/
     return rc;
 }
@@ -1027,9 +948,9 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
         mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
         return -1;
     }
-    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
-
-    rc = usb_write(usbHandle, data, size);
+    device_handle handle{(libusb_device_handle*)tmpUsbHandle};
+    rc = usb_write(handle, data, size);
+    handle.release();
 #endif  /*USE_USB_VSC*/
     return rc;
 }

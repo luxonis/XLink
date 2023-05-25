@@ -421,11 +421,6 @@ public:
         return descriptor;
     }
 
-    //template <int ChunkTimeoutMs, int TimeoutMs>
-    //static constexpr unsigned int calculate_chunk_timeout() {
-    //    return (TimeoutMs == 0) ? ChunkTimeoutMs : std::min(ChunkTimeoutMs, TimeoutMs);
-    //}
-
     // wrapper for libusb_bulk_transfer(); returns std::pair with error code and number of bytes actually transferred
     // Transfers on IN endpoints will continue until the requested number of bytes has been transferred
     // TODO should a short packet on IN endpoint indicate the device is finished and this function return?
@@ -589,18 +584,18 @@ inline std::pair<libusb_error, ptrdiff_t> device_handle::bulk_transfer(const uns
             int iterationTransferredBytes{0};
             rcNum = static_cast<libusb_error>(libusb_bulk_transfer(get(), endpoint, iterationBuffer, iterationBytesToTransfer, &iterationTransferredBytes, CHUNK_TIMEOUT));
 
-            // validate if too much data received; likely corrupts memory
-            // caution: libusb docs writes when error is LIBUSB_ERROR_OVERFLOW
-            // then behaviour is largely undefined: actual_length out variable may or may
-            // not be accurate, the chunk of data that can fit in the buffer (before overflow)
-            // may or may not have been transferred.
+            // update the transferred bytes in most cases since some error codes can still transfer data.
+            // LIBUSB_ERROR_OVERFLOW is special case and libusb docs writes behavior is undefined and
+            // actual_length out variable is unreliable, data may or may not have been transferred.
             // http://billauer.co.il/blog/2019/12/usb-bulk-overflow-halt-reset/
-            assert(iterationTransferredBytes <= iterationBytesToTransfer);
-
-            // update the transferred bytes except for LIBUSB_ERROR_OVERFLOW because other
-            // result codes can still transfer data
             if(rcNum != LIBUSB_ERROR_OVERFLOW) {
-                // did the transfer happen from the overflow buffer?
+
+                // adjust this iteration's transferred bytes to minimum of:
+                // * number of bytes actually transmitted (IN transfers often larger than requested, overflow buffer use, etc.)
+                // * number of bytes remining for storage in the outgoing buffer
+                iterationTransferredBytes = static_cast<int>(std::min<intmax_t>(iterationTransferredBytes, bufferSizeBytes));
+
+                // did the transfer happen with the overflow buffer? Possible only on IN transfers (device to host)
                 if(iterationBuffer == overflowBuffer.data()) {
                     // validate the data transmitted into the overflow buffer is not larger than remaining space in outgoing buffer
                     // However in testing, if I start an 84 byte incoming transfer, so it is all in one packet, so I use the overflow buffer to receive
@@ -615,12 +610,13 @@ inline std::pair<libusb_error, ptrdiff_t> device_handle::bulk_transfer(const uns
                     //    break;
                     //}
 
-                    // copy the final "partial" packet from the overflow buffer into the outgoing buffer
+                    // copy the "partial" packet from the overflow buffer into the outgoing buffer
                     std::copy_n(overflowBuffer.data(),
-                                bufferSizeBytes,
+                                iterationTransferredBytes,
                                 reinterpret_cast<unsigned char*>(const_cast<typename std::remove_cv<BufferValueType>::type*>(buffer)) + transferredBytes);
-                    iterationTransferredBytes = bufferSizeBytes;
                 }
+
+                // increment the total count of transferred bytes
                 transferredBytes += iterationTransferredBytes;
             }
 
