@@ -18,7 +18,7 @@
 
 // std
 #include <mutex>
-#include <unordered_map>
+#include <array>
 #include <algorithm>
 #include <string>
 #include <thread>
@@ -95,19 +95,16 @@ int usbInitialize(void* options){
     #endif
 }
 
-struct pair_hash {
-    template <class T1, class T2>
-    std::size_t operator() (const std::pair<T1, T2> &pair) const {
-        return std::hash<T1>()(pair.first) ^ std::hash<T2>()(pair.second);
-    }
-};
+static bool operator==(const std::pair<VidPid, XLinkDeviceState_t>& entry, const VidPid& vidpid) noexcept {
+    return entry.first.first == vidpid.first && entry.first.second == vidpid.second;
+}
 
-static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceState = {
+static constexpr std::array<std::pair<VidPid, XLinkDeviceState_t>, 4> VID_PID_TO_DEVICE_STATE = {{
     {{0x03E7, 0x2485}, X_LINK_UNBOOTED},
     {{0x03E7, 0xf63b}, X_LINK_BOOTED},
     {{0x03E7, 0xf63c}, X_LINK_BOOTLOADER},
     {{0x03E7, 0xf63d}, X_LINK_FLASH_BOOTED},
-};
+}};
 
 static std::string getLibusbDevicePath(const usb_device& dev);
 static libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, const std::string& devicePath, const libusb_device_descriptor* pDesc, const usb_device& dev, std::string& outMxId);
@@ -141,8 +138,8 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                 const auto desc = usbDevice.get_device_descriptor<MVLOG_DEBUG>();
 
                 // Filter device by known vid/pid pairs
-                const auto vidpid = vidPidToDeviceState.find(VidPid{desc.idVendor, desc.idProduct});
-                if(vidpid == vidPidToDeviceState.end()){
+                const auto vidpid = std::find(VID_PID_TO_DEVICE_STATE.begin(), VID_PID_TO_DEVICE_STATE.end(), VidPid{desc.idVendor, desc.idProduct});
+                if(vidpid == VID_PID_TO_DEVICE_STATE.end()) {
                     // Not a known vid/pid pair
                     continue;
                 }
