@@ -1,4 +1,6 @@
 /*
+    dp::libusb - C++ wrapper for libusb-1.0 (focused on use with the XLink protocol)
+
     Copyright 2023 Dale Phurrough
 
     Licensed under the Apache License, Version 2.0 (the "License");
