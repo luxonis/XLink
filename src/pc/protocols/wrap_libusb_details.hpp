@@ -32,24 +32,6 @@ namespace dai {
 // https://github.com/microsoft/wil/wiki/RAII-resource-wrappers#wilout_param
 
 namespace details {
-// checks for C++14, when not available then include definitions
-#if WRAP_CPLUSPLUS < 201402L
-// implements std::exchange for compilers older than C++14
-template <class T, class Other = T>
-T exchange(T& val, Other&& newVal) noexcept(std::is_nothrow_move_constructible<T>::value&& std::is_nothrow_assignable<T&, Other>::value) {
-    T oldVal = static_cast<T&&>(val);
-    val = static_cast<Other&&>(newVal);
-    return oldVal;
-}
-template <typename T>
-constexpr const T& min(const T& left, const T& right) noexcept(noexcept(right < left)) {
-    return right < left ? right : left;
-}
-#else
-using std::exchange;
-#include <algorithm>
-using std::min;
-#endif
 
 //! Type traits class that identifies the inner type of any smart pointer.
 template <typename Ptr>
@@ -148,11 +130,11 @@ class span {
         size_ = other.size_;
         return *this;
     }
-    span(span&& other) noexcept : ptr_{details::exchange(other.ptr_, nullptr)}, size_{details::exchange(other.size_, 0)} {};
+    span(span&& other) noexcept : ptr_{std::exchange(other.ptr_, nullptr)}, size_{std::exchange(other.size_, 0)} {};
     span& operator=(span&& other) noexcept {
         if(this == &other) return *this;
-        ptr_ = details::exchange(other.ptr_, nullptr);
-        size_ = details::exchange(other.size_, 0);
+        ptr_ = std::exchange(other.ptr_, nullptr);
+        size_ = std::exchange(other.size_, 0);
         return *this;
     }
 

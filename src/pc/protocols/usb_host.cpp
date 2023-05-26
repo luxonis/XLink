@@ -108,6 +108,8 @@ static constexpr std::array<std::pair<VidPid, XLinkDeviceState_t>, 4> VID_PID_TO
     {{0x03E7, 0xf63d}, X_LINK_FLASH_BOOTED},
 }};
 
+static_assert(VID_PID_TO_DEVICE_STATE.size() == 4, "VID_PID_TO_DEVICE_STATE size mismatch");
+
 static std::string getLibusbDevicePath(const usb_device&);
 static libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, const std::string& devicePath, const libusb_device_descriptor* pDesc, const usb_device& device, std::string& outMxId);
 static const char* xlink_libusb_strerror(ssize_t);

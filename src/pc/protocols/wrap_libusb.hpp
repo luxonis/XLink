@@ -136,13 +136,13 @@ public:
     device_list(const device_list&) = delete;
     device_list& operator=(const device_list&) = delete;
     device_list(device_list&& other) noexcept :
-        countDevices{details::exchange(other.countDevices, 0)},
-        deviceList{details::exchange(other.deviceList, nullptr)} {};
+        countDevices{std::exchange(other.countDevices, 0)},
+        deviceList{std::exchange(other.deviceList, nullptr)} {};
     device_list& operator=(device_list&& other) noexcept {
         if (this == &other)
             return *this;
-        countDevices = details::exchange(other.countDevices, 0);
-        deviceList = details::exchange(other.deviceList, nullptr);
+        countDevices = std::exchange(other.countDevices, 0);
+        deviceList = std::exchange(other.deviceList, nullptr);
         return *this;
     }
 
@@ -310,13 +310,13 @@ public:
     device_handle(const device_handle&) = delete;
     device_handle& operator=(const device_handle&) = delete;
     device_handle(device_handle &&other) noexcept :
-        _base{details::exchange<_base, _base>(other, {})},
-        claimedInterfaces{details::exchange(other.claimedInterfaces, {})}
+        _base{std::exchange<_base, _base>(other, {})},
+        claimedInterfaces{std::exchange(other.claimedInterfaces, {})}
     {}
     device_handle &operator=(device_handle &&other) noexcept {
         if (this != &other) {
-            *static_cast<_base*>(this) = details::exchange<_base, _base>(other, {});
-            claimedInterfaces = details::exchange(other.claimedInterfaces, {});
+            *static_cast<_base*>(this) = std::exchange<_base, _base>(other, {});
+            claimedInterfaces = std::exchange(other.claimedInterfaces, {});
         }
         return *this;
     }
@@ -544,7 +544,7 @@ inline std::pair<libusb_error, ptrdiff_t> device_handle::bulk_transfer(const uns
     static constexpr int DEFAULT_CHUNK_SIZE = 1024 * 1024;  // must be multiple of endpoint max packet size
     static constexpr int DEFAULT_CHUNK_SIZE_USB1 = 64;      // must be multiple of endpoint max packet size
     static constexpr bool BUFFER_IS_CONST = static_cast<bool>(std::is_const<BufferValueType>::value);
-    static constexpr auto CHUNK_TIMEOUT = (TimeoutMs == 0) ? ChunkTimeoutMs : details::min(ChunkTimeoutMs, TimeoutMs);
+    static constexpr auto CHUNK_TIMEOUT = (TimeoutMs == 0) ? ChunkTimeoutMs : std::min(ChunkTimeoutMs, TimeoutMs);
 
     std::pair<libusb_error, ptrdiff_t> result{LIBUSB_ERROR_INVALID_PARAM, 0};
 
