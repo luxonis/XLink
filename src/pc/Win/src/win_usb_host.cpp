@@ -18,7 +18,8 @@
 #include <array>
 #include <pathcch.h>
 
-int usbInitialize_customdir(void** hContext) {
+// support Visual C++ compiler for Windows to load libusb DLL from the same directory as the XLink code
+libusb_error usbInitializeCustomdir(libusb_context ** hContext) noexcept {
     // get handle to the module containing a XLink static function/var
     // can not use GetModuleFileNameW(nullptr) because when the main depthai app is a DLL (e.g. plugin),
     // then it returns the main EXE which is usually wrong
@@ -57,9 +58,9 @@ int usbInitialize_customdir(void** hContext) {
     }
 
     // initialize libusb
-    int initResult = LIBUSB_SUCCESS;
+    libusb_error initResult = LIBUSB_SUCCESS;
     __try {
-        initResult = libusb_init((libusb_context**)hContext);
+        initResult = static_cast<libusb_error>(libusb_init(hContext));
     }
     __except (EXCEPTION_EXECUTE_HANDLER) {
         initResult = LIBUSB_ERROR_OVERFLOW;

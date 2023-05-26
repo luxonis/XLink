@@ -68,33 +68,45 @@ static UsbSetupPacket bootBootloaderPacket{
 // transform a libusb error code into a XLinkPlatformErrorCode_t
 xLinkPlatformErrorCode_t parseLibusbError(libusb_error) noexcept;
 
-static std::mutex cache_mutex; // protects usb_mx_id_cache_* functions
+#if defined(_WIN32) && defined(_MSC_VER)
+// support Visual C++ compiler for Windows to load libusb DLL from the same directory as the XLink code
+libusb_error usbInitializeCustomdir(libusb_context** hContext) noexcept;
+#endif
+
+static std::mutex cacheMutex; // protects usb_mx_id_cache_* functions
 static usb_context context;
 
-int usbInitialize(void* options){
-    #ifdef __ANDROID__
-        // If Android, set the options as JavaVM (to default context)
-        if(options != nullptr){
-            libusb_set_option(nullptr, libusb_option::LIBUSB_OPTION_ANDROID_JAVAVM, options);
+// initialize libusb and set the context
+// the return is a xLinkPlatformErrorCode_t cast to an int
+int usbInitialize(void* options) noexcept {
+    try {
+        #ifdef __ANDROID__
+            // If Android, set the options as JavaVM (to default context)
+            if(options != nullptr){
+                libusb_set_option(nullptr, libusb_option::LIBUSB_OPTION_ANDROID_JAVAVM, options);
+            }
+        #else
+            (void)options;
+        #endif
+
+        // // Debug
+        // mvLogLevelSet(MVLOG_DEBUG);
+
+        // Initialize mx id cache
+        {
+            std::lock_guard<std::mutex> l(cacheMutex);
+            usb_mx_id_cache_init();
         }
-    #else
-        (void)options;
-    #endif
 
-    // // Debug
-    // mvLogLevelSet(MVLOG_DEBUG);
-
-    // Initialize mx id cache
-    {
-        std::lock_guard<std::mutex> l(cache_mutex);
-        usb_mx_id_cache_init();
+        #if defined(_WIN32) && defined(_MSC_VER)
+            return parseLibusbError(usbInitializeCustomdir(dai::out_param(context)));
+        #else
+            return parseLibusbError(static_cast<libusb_error>(libusb_init(dai::out_param(context))));
+        #endif
+    } catch (const std::exception& ex) {
+        mvLog(MVLOG_FATAL, "usbInitialize() failed: %s", ex.what());
+        return X_LINK_PLATFORM_ERROR;
     }
-
-    #if defined(_WIN32) && defined(_MSC_VER)
-        return usbInitialize_customdir(dai::out_param_ptr<void**>(context));
-    #else
-        return libusb_init(dai::out_param(context));
-    #endif
 }
 
 static bool operator==(const std::pair<VidPid, XLinkDeviceState_t>& entry, const VidPid& vidpid) noexcept {
@@ -232,8 +244,7 @@ usb_device acquireDeviceByName(const char* const path) {
         // Get list of usb devices
         device_list deviceList{context};
 
-        // Loop over all usb devices, increase count only if myriad device that matches the name
-        // TODO does not filter by myriad devices, investigate if needed
+        // Loop over all usb devices
         const std::string requiredPath(path);
         for(auto* const candidate : deviceList) {
             if(candidate == nullptr) continue;
@@ -274,13 +285,13 @@ std::string getLibusbDevicePath(const usb_device& device) {
 
 // get mxId for device path from cache with thread-safety
 inline bool safeGetCachedMxid(const char* devicePath, char* mxId) {
-    std::lock_guard<std::mutex> l(cache_mutex);
+    std::lock_guard<std::mutex> l(cacheMutex);
     return usb_mx_id_cache_get_entry(devicePath, mxId);
 }
 
 // store mxID for device path to cache with thread-safety
 inline int safeStoreCachedMxid(const char* devicePath, const char* mxId) {
-    std::lock_guard<std::mutex> l(cache_mutex);
+    std::lock_guard<std::mutex> l(cacheMutex);
     return usb_mx_id_cache_store_entry(mxId, devicePath);
 }
 
