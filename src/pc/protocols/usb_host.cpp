@@ -26,12 +26,15 @@
 #include <chrono>
 #include <cstring>
 
-using dai::libusb::config_descriptor;
-using dai::libusb::device_handle;
-using dai::libusb::device_list;
-using dai::libusb::usb_context;
-using dai::libusb::usb_device;
-using dai::libusb::usb_error;
+using dp::libusb::config_descriptor;
+using dp::libusb::device_handle;
+using dp::libusb::device_list;
+using dp::libusb::out_param;
+using dp::libusb::out_param_ptr;
+using dp::libusb::span;
+using dp::libusb::usb_context;
+using dp::libusb::usb_device;
+using dp::libusb::usb_error;
 using VidPid = std::pair<uint16_t, uint16_t>;
 
 static constexpr int MAXIMUM_PORT_NUMBERS = 7;
@@ -99,9 +102,9 @@ int usbInitialize(void* options) noexcept {
         }
 
         #if defined(_WIN32) && defined(_MSC_VER)
-            return parseLibusbError(usbInitializeCustomdir(dai::out_param(context)));
+            return parseLibusbError(usbInitializeCustomdir(out_param(context)));
         #else
-            return parseLibusbError(static_cast<libusb_error>(libusb_init(dai::out_param(context))));
+            return parseLibusbError(static_cast<libusb_error>(libusb_init(out_param(context))));
         #endif
     } catch (const std::exception& ex) {
         mvLog(MVLOG_FATAL, "usbInitialize() failed: %s", ex.what());
@@ -129,23 +132,26 @@ static const char* xlink_libusb_strerror(ssize_t);
 std::string getWinUsbMxId(const VidPid&, const usb_device&);
 #endif
 
-extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
-                                                     deviceDesc_t* out_foundDevices, const int sizeFoundDevices,
-                                                     unsigned int *out_amountOfFoundDevices) noexcept {
+extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t deviceRequirements,
+                                                  deviceDesc_t* const foundDevicesBuffer, const int sizeFoundDevicesBufferEntities,
+                                                  unsigned int* const resultCountFoundDevices) noexcept {
     try {
+        // validate parameters
+        if (foundDevicesBuffer == nullptr || resultCountFoundDevices == nullptr || sizeFoundDevicesBufferEntities <= 0) {
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+        }
+
         // Get list of usb devices; e.g. size() == 10 when 3 xlink devices attached to three separate USB controllers
         device_list deviceList{context};
 
         // Loop over all usb devices, persist devices only if they are known/myriad devices
-        const std::string requiredName(in_deviceRequirements.name);
-        const std::string requiredMxId(in_deviceRequirements.mxid);
-        int numDevicesFound = 0;
+        const std::string requiredName(deviceRequirements.name);
+        const std::string requiredMxId(deviceRequirements.mxid);
+        span<deviceDesc_t> foundDevices{foundDevicesBuffer, static_cast<size_t>(sizeFoundDevicesBufferEntities)};
+        auto* foundDevice = foundDevices.begin();
         for (auto* const candidate : deviceList) {
             // validate conditions
             if(candidate == nullptr) continue;
-            if(numDevicesFound >= sizeFoundDevices){
-                break;
-            }
 
             // setup device i/o and query device
             try {
@@ -162,7 +168,7 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
 
                 // Get device state, compare with requirement state
                 const XLinkDeviceState_t state = vidpid->second;
-                if(in_deviceRequirements.state != X_LINK_ANY_STATE && state != in_deviceRequirements.state){
+                if(deviceRequirements.state != X_LINK_ANY_STATE && state != deviceRequirements.state) {
                     // Current device doesn't match the requirement state "filter"
                     continue;
                 }
@@ -171,8 +177,8 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                 const std::string devicePath = getLibusbDevicePath(usbDevice);
 
                 // Compare with name. If name is only a hint then don't filter
-                if(!in_deviceRequirements.nameHintOnly){
-                    if(!requiredName.empty() && requiredName != devicePath){
+                if(!deviceRequirements.nameHintOnly) {
+                    if(!requiredName.empty() && requiredName != devicePath) {
                         // Current device doesn't match the "filter"
                         continue;
                     }
@@ -210,25 +216,29 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                 // TODO(themarpe) - check platform
 
                 // Everything passed, fillout details of found device
-                out_foundDevices[numDevicesFound].status = status;
-                out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
-                out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
-                out_foundDevices[numDevicesFound].state = state;
-                out_foundDevices[numDevicesFound].nameHintOnly = false;
-                strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
-                strncpy(out_foundDevices[numDevicesFound].mxid, mxId.c_str(), sizeof(out_foundDevices[numDevicesFound].mxid));
-                ++numDevicesFound;
+                foundDevice->status = status;
+                foundDevice->platform = X_LINK_MYRIAD_X;
+                foundDevice->protocol = X_LINK_USB_VSC;
+                foundDevice->state = state;
+                foundDevice->nameHintOnly = false;
+                strncpy(foundDevice->name, devicePath.c_str(), sizeof(foundDevice->name));
+                strncpy(foundDevice->mxid, mxId.c_str(), sizeof(foundDevice->mxid));
+
+                // increment to the next available device entry and check if we have enough space
+                if(++foundDevice == foundDevices.end()) break;
             }
             catch(const usb_error&) {
                 continue;
             }
         }
 
-        // Write the number of found devices
-        *out_amountOfFoundDevices = numDevicesFound;
+        // Write the number of found devices to the out parameter
+        *resultCountFoundDevices = static_cast<unsigned int>(foundDevice - foundDevices.begin());
         return X_LINK_PLATFORM_SUCCESS;
-    }
-    catch(const std::exception& e) {
+
+    } catch(const usb_error& e) {
+        return parseLibusbError(static_cast<libusb_error>(e.code().value()));
+    } catch(const std::exception& e) {
         mvLog(MVLOG_ERROR, "Unexpected exception: %s", e.what());
         return X_LINK_PLATFORM_ERROR;
     }
@@ -492,8 +502,8 @@ static libusb_error openConfigClaimDevice(const usb_device& device, uint8_t& end
         const auto cdesc = device.get_config_descriptor(0);
 
         // find the first bulk OUT endpoint, persist its max packet size, then return the endpoint number and candidate handle
-        const dai::details::span<const libusb_endpoint_descriptor> endpoints{cdesc->interface->altsetting->endpoint,
-                                                                             cdesc->interface->altsetting->bNumEndpoints};
+        const span<const libusb_endpoint_descriptor> endpoints{cdesc->interface->altsetting->endpoint,
+                                                               cdesc->interface->altsetting->bNumEndpoints};
         for(const auto& endpointDesc : endpoints) {
             mvLog(MVLOG_DEBUG, "Found EP 0x%02x : max packet size is %u bytes", endpointDesc.bEndpointAddress, endpointDesc.wMaxPacketSize);
             if((endpointDesc.bmAttributes & LIBUSB_TRANSFER_TYPE_MASK) == LIBUSB_TRANSFER_TYPE_BULK
