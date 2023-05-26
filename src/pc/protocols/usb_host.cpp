@@ -67,16 +67,14 @@ static UsbSetupPacket bootBootloaderPacket{
 
 xLinkPlatformErrorCode_t parseLibusbError(libusb_error) noexcept;
 
-static std::mutex mutex; // Also protects usb_mx_id_cache
+static std::mutex cache_mutex; // protects usb_mx_id_cache_* functions
 static usb_context context;
 
 int usbInitialize(void* options){
-    std::lock_guard<std::mutex> l(mutex);
-
     #ifdef __ANDROID__
         // If Android, set the options as JavaVM (to default context)
         if(options != nullptr){
-            libusb_set_option(NULL, libusb_option::LIBUSB_OPTION_ANDROID_JAVAVM, options);
+            libusb_set_option(nullptr, libusb_option::LIBUSB_OPTION_ANDROID_JAVAVM, options);
         }
     #else
         (void)options;
@@ -86,7 +84,10 @@ int usbInitialize(void* options){
     // mvLogLevelSet(MVLOG_DEBUG);
 
     // Initialize mx id cache
-    usb_mx_id_cache_init();
+    {
+        std::lock_guard<std::mutex> l(cache_mutex);
+        usb_mx_id_cache_init();
+    }
 
     #if defined(_WIN32) && defined(_MSC_VER)
         return usbInitialize_customdir(dai::out_param_ptr<void**>(context));
@@ -117,15 +118,15 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                                                      deviceDesc_t* out_foundDevices, const int sizeFoundDevices,
                                                      unsigned int *out_amountOfFoundDevices) noexcept {
     try {
-        // Get list of usb devices
-        std::lock_guard<std::mutex> l(mutex);
-        device_list deviceList{context.get()};
+        // Get list of usb devices; e.g. size() == 10 when 3 xlink devices attached to three separate USB controllers
+        device_list deviceList{context};
 
         // Loop over all usb devices, persist devices only if they are known/myriad devices
         const std::string requiredName(in_deviceRequirements.name);
         const std::string requiredMxId(in_deviceRequirements.mxid);
         int numDevicesFound = 0;
         for (auto* const candidate : deviceList) {
+            // validate conditions
             if(candidate == nullptr) continue;
             if(numDevicesFound >= sizeFoundDevices){
                 break;
@@ -198,10 +199,8 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
                 out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
                 out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
                 out_foundDevices[numDevicesFound].state = state;
-                // TODO remove memset() because strncpy() guarantees it will fill any unused bytes with null; or change to string::copy()
-                memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
+                out_foundDevices[numDevicesFound].nameHintOnly = false;
                 strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
-                memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
                 strncpy(out_foundDevices[numDevicesFound].mxid, mxId.c_str(), sizeof(out_foundDevices[numDevicesFound].mxid));
                 ++numDevicesFound;
             }
@@ -227,7 +226,7 @@ xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, usb_device& dev
 
     try {
         // Get list of usb devices
-        device_list deviceList{context.get()};
+        device_list deviceList{context};
 
         // Loop over all usb devices, increase count only if myriad device that matches the name
         // TODO does not filter by myriad devices, investigate if needed
@@ -244,8 +243,9 @@ xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* path, usb_device& dev
             }
         }
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
-    } catch(const usb_error&) {
+    } catch(const usb_error& e) {
         // already logged
+        return parseLibusbError(static_cast<libusb_error>(e.code().value()));
     } catch(const std::exception& e) {
         mvLog(MVLOG_ERROR, "Unexpected exception: %s", e.what());
     }
@@ -271,6 +271,18 @@ std::string getLibusbDevicePath(const usb_device& dev) {
     return devicePath;
 }
 
+// get mxId for device path from cache with thread-safety
+inline bool safeGetCachedMxid(const char* devicePath, char* mxId) {
+    std::lock_guard<std::mutex> l(cache_mutex);
+    return usb_mx_id_cache_get_entry(devicePath, mxId);
+}
+
+// store mxID for device path to cache with thread-safety
+inline int safeStoreCachedMxid(const char* devicePath, const char* mxId) {
+    std::lock_guard<std::mutex> l(cache_mutex);
+    return usb_mx_id_cache_store_entry(mxId, devicePath);
+}
+
 libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::string& devicePath, const libusb_device_descriptor* const pDesc, const usb_device& dev, std::string& outMxId)
 {
     char mxId[XLINK_MAX_MX_ID_SIZE] = {0};
@@ -280,7 +292,7 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
 
     // first check if entry already exists in the list (and is still valid)
     // if found, it stores it into mx_id variable
-    bool found = usb_mx_id_cache_get_entry(devicePath.c_str(), mxId);
+    const bool found = safeGetCachedMxid(devicePath.c_str(), mxId);
 
     if(found){
         mvLog(MVLOG_DEBUG, "Found cached MX ID: %s", mxId);
@@ -298,7 +310,7 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
         auto t1 = std::chrono::steady_clock::now();
         do {
             // Open device - if not already
-            if(!handle){
+            if(!handle) {
                 try {
                     handle = dev.open();
                 }
@@ -333,7 +345,7 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
             }
 
             // if UNBOOTED state, perform mx_id retrieval procedure using small program and a read command
-            if(state == X_LINK_UNBOOTED){
+            if(state == X_LINK_UNBOOTED) {
                 try {
                     // Get configuration first (From OS cache), Check if set configuration call is needed
                     // TODO consider sharing this whole block of code with usb_open_device()
@@ -367,7 +379,6 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
                 static constexpr int recv_ep = 0x81;
                 static constexpr int expectedMxIdReadSize = 9;
                 std::array<uint8_t, expectedMxIdReadSize> rbuf;
-
                 try {
                     // WD Protection & MXID Retrieval Command
                     handle.bulk_transfer<MVLOG_FATAL, true, MX_ID_TIMEOUT_MS>(send_ep, usb_mx_id_get_payload(), usb_mx_id_get_payload_size());
@@ -383,7 +394,7 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
                     continue;
                 }
                 // End
-                ///////////////////////
+                // ///////////////////////
 
                 // Parse mxId into HEX presentation
                 // There's a bug, it should be 0x0F, but setting as in MDK
@@ -396,9 +407,10 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
 
                 // Indicate no error
                 libusb_rc = 0;
+            }
 
-            } else {
-                // when not X_LINK_UNBOOTED state, get mx_id from the device's serial number string descriptor
+            // when not X_LINK_UNBOOTED state, get mx_id from the device's serial number string descriptor
+            else {
                 try {
                     // TODO refactor try/catch broader
                     // TODO refactor to save a string directly to outMxId
@@ -430,20 +442,18 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
         // Cache the retrieved mx_id
         // Find empty space and store this entry
         // If no empty space, don't cache (possible case: >16 devices)
-        int cache_index = usb_mx_id_cache_store_entry(mxId, devicePath.c_str());
-        if(cache_index >= 0){
+        const int cacheIndex = safeStoreCachedMxid(devicePath.c_str(), mxId);
+        if(cacheIndex >= 0){
             // debug print
-            mvLog(MVLOG_DEBUG, "Cached MX ID %s at index %d", mxId, cache_index);
+            mvLog(MVLOG_DEBUG, "Cached MX ID %s at index %d", mxId, cacheIndex);
         } else {
             // debug print
             mvLog(MVLOG_DEBUG, "Couldn't cache MX ID %s", mxId);
         }
-
     }
 
     outMxId = mxId;
     return libusb_error::LIBUSB_SUCCESS;
-
 }
 
 const char* xlink_libusb_strerror(ssize_t x) {
@@ -550,13 +560,13 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* const pathName) {
 
         // Open device to get an i/o device handle
         // Make control transfer and take no action if errors occur
-        device_handle{device.get()}.control_transfer(bootBootloaderPacket.requestType,  // bmRequestType: device-directed
-                                                     bootBootloaderPacket.request,      // bRequest: custom
-                                                     bootBootloaderPacket.value,        // wValue: custom
-                                                     bootBootloaderPacket.index,        // wIndex
-                                                     nullptr,                           // data pointer
-                                                     0,                                 // data size
-                                                     std::chrono::milliseconds(1000));
+        device.open().control_transfer(bootBootloaderPacket.requestType,  // bmRequestType: device-directed
+                                       bootBootloaderPacket.request,      // bRequest: custom
+                                       bootBootloaderPacket.value,        // wValue: custom
+                                       bootBootloaderPacket.index,        // wIndex
+                                       nullptr,                           // data pointer
+                                       0,                                 // data size
+                                       std::chrono::milliseconds(1000));
         return X_LINK_PLATFORM_SUCCESS;
     } catch(const usb_error& e) {
         return parseLibusbError(static_cast<libusb_error>(e.code().value()));
@@ -574,8 +584,6 @@ void usbLinkClose(libusb_device_handle *h)
     libusb_release_interface(h, 0);
     libusb_close(h);
 }
-
-
 
 int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
@@ -691,7 +699,6 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 }
 
-
 int usbPlatformClose(void *fdKey)
 {
 
@@ -710,7 +717,7 @@ int usbPlatformClose(void *fdKey)
 #endif  /*USE_LINK_JTAG*/
 #else
 
-    void* tmpUsbHandle = NULL;
+    void* tmpUsbHandle = nullptr;
     if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
         mvLog(MVLOG_FATAL, "Cannot find USB Handle by key: %" PRIxPTR, (uintptr_t) fdKey);
         return -1;
@@ -726,10 +733,7 @@ int usbPlatformClose(void *fdKey)
     return -1;
 }
 
-
-
-int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length){
-
+int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
     // Boot it
     int rc = usb_boot(deviceDesc->name, firmware, (unsigned)length);
 
@@ -828,7 +832,7 @@ int usbPlatformRead(void* fdKey, void* data, int size)
 #endif  /*USE_LINK_JTAG*/
 #else
 
-    void* tmpUsbHandle = NULL;
+    void* tmpUsbHandle = nullptr;
     if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
         mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
         return -1;
@@ -884,7 +888,7 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
 #endif  /*USE_LINK_JTAG*/
 #else
 
-    void* tmpUsbHandle = NULL;
+    void* tmpUsbHandle = nullptr;
     if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
         mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
         return -1;
@@ -916,7 +920,7 @@ std::string getWinUsbMxId(const VidPid& vidpid, const usb_device& dev) {
     devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
 
     // get USB host controllers; each has exactly one root hub
-    hDevInfoSet = SetupDiGetClassDevsA(&GUID_DEVINTERFACE_USB_HOST_CONTROLLER, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    hDevInfoSet = SetupDiGetClassDevsA(&GUID_DEVINTERFACE_USB_HOST_CONTROLLER, nullptr, nullptr, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (hDevInfoSet == INVALID_HANDLE_VALUE) {
         return {};
     }
@@ -926,7 +930,7 @@ std::string getWinUsbMxId(const VidPid& vidpid, const usb_device& dev) {
     for(int i = 0; SetupDiEnumDeviceInfo(hDevInfoSet, i, &devInfoData); i++) {
         // get location paths as a REG_MULTI_SZ
         std::string locationPaths(1023, 0);
-        if (!SetupDiGetDeviceRegistryPropertyA(hDevInfoSet, &devInfoData, SPDRP_LOCATION_PATHS, NULL, (PBYTE)locationPaths.c_str(), (DWORD)locationPaths.size(), NULL)) {
+        if (!SetupDiGetDeviceRegistryPropertyA(hDevInfoSet, &devInfoData, SPDRP_LOCATION_PATHS, nullptr, (PBYTE)locationPaths.c_str(), (DWORD)locationPaths.size(), nullptr)) {
             continue;
         }
 
@@ -945,7 +949,7 @@ std::string getWinUsbMxId(const VidPid& vidpid, const usb_device& dev) {
     }
 
     // get USB devices
-    hDevInfoSet = SetupDiGetClassDevsA(&GUID_DEVINTERFACE_USB_DEVICE, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    hDevInfoSet = SetupDiGetClassDevsA(&GUID_DEVINTERFACE_USB_DEVICE, nullptr, nullptr, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (hDevInfoSet == INVALID_HANDLE_VALUE) {
         return {};
     }
@@ -956,7 +960,7 @@ std::string getWinUsbMxId(const VidPid& vidpid, const usb_device& dev) {
     for(int i = 0; SetupDiEnumDeviceInfo(hDevInfoSet, i, &devInfoData); i++) {
         // get device instance id
         char instanceId[128] {};
-        if(!SetupDiGetDeviceInstanceIdA(hDevInfoSet, &devInfoData, (PSTR)instanceId, sizeof(instanceId), NULL)) {
+        if(!SetupDiGetDeviceInstanceIdA(hDevInfoSet, &devInfoData, (PSTR)instanceId, sizeof(instanceId), nullptr)) {
             continue;
         }
 
@@ -974,7 +978,7 @@ std::string getWinUsbMxId(const VidPid& vidpid, const usb_device& dev) {
 
         // get location paths as a REG_MULTI_SZ
         std::string locationPaths(1023, 0);
-        if (!SetupDiGetDeviceRegistryPropertyA(hDevInfoSet, &devInfoData, SPDRP_LOCATION_PATHS, NULL, (PBYTE)locationPaths.c_str(), (DWORD)locationPaths.size(), NULL)) {
+        if (!SetupDiGetDeviceRegistryPropertyA(hDevInfoSet, &devInfoData, SPDRP_LOCATION_PATHS, nullptr, (PBYTE)locationPaths.c_str(), (DWORD)locationPaths.size(), nullptr)) {
             continue;
         }
 

@@ -153,10 +153,11 @@ public:
         // crashes occurred when libusb internally called libusb_ref_device(), XLink called libusb_unref_device(),
         // often when libusb called usbi_get_device_priv(dev) and then operated on the pointers
         // line in file libusb/os/windows_winusb.c in winusb_get_device_list() line 1741
-        std::lock_guard<std::mutex> l(mtx);
-
+        std::lock_guard<std::mutex> lock(mtx);
         countDevices = static_cast<size_type>(CALL_LOG_ERROR_THROW(libusb_get_device_list, context, &deviceList));
     }
+
+    explicit device_list(const usb_context& context) noexcept(false) : device_list{context.get()} {}
 
     // container interface
     // ideas from https://en.cppreference.com/w/cpp/named_req/SequenceContainer
@@ -293,9 +294,11 @@ private:
 public:
     using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
 
-    device_handle(libusb_device* dev) noexcept(false) {
-        CALL_LOG_ERROR_THROW(libusb_open, dev, dai::out_param(*static_cast<_base*>(this)));
+    explicit device_handle(libusb_device* device) noexcept(false) {
+        CALL_LOG_ERROR_THROW(libusb_open, device, dai::out_param(*static_cast<_base*>(this)));
     }
+
+    explicit device_handle(const usb_device& device) noexcept(false);
 
     // wrap a platform-specific system device handle and get a libusb device_handle for it
     // never use libusb_open() on this wrapped handle's underlying device
@@ -430,7 +433,7 @@ public:
               bool ZeroLengthPacketEnding = false,
               unsigned int TimeoutMs = 0 /* unlimited */,
               typename BufferValueType>
-    std::pair<libusb_error, ptrdiff_t> bulk_transfer(const unsigned char endpoint, BufferValueType* buffer, intmax_t bufferSizeBytes) const noexcept(!Throw);
+    std::pair<libusb_error, ptrdiff_t> bulk_transfer(unsigned char endpoint, BufferValueType* buffer, intmax_t bufferSizeBytes) const noexcept(!Throw);
 
     // bulk_transfer() overload for contiguous storage containers having data() and size() methods
     template <mvLog_t Loglevel = MVLOG_ERROR,
@@ -522,6 +525,8 @@ public:
     }
 };
 
+inline device_handle::device_handle(const usb_device& device) noexcept(false) : device_handle{device.get()} {}
+
 // wrap libusb_get_device() to return a ref counted usb_device
 inline usb_device device_handle::get_device() const noexcept {
     return usb_device{libusb_get_device(get())};
@@ -560,7 +565,7 @@ inline std::pair<libusb_error, ptrdiff_t> device_handle::bulk_transfer(const uns
 
         // loop until all data is transferred
         const auto t1 = std::chrono::steady_clock::now();
-        auto iterationBuffer = reinterpret_cast<unsigned char*>(const_cast<typename std::remove_cv<BufferValueType>::type*>(buffer));
+        auto *iterationBuffer = reinterpret_cast<unsigned char*>(const_cast<typename std::remove_cv<BufferValueType>::type*>(buffer));
         while(bufferSizeBytes || transmitZeroLengthPacket) {
             // calculate the number of bytes to transfer in this iteration; never more than chunkSize
             int iterationBytesToTransfer = static_cast<int>(std::min<intmax_t>(bufferSizeBytes, chunkSize));
