@@ -3,7 +3,10 @@
 //
 
 #ifdef __cplusplus
+#define NOEXCEPT noexcept
 extern "C" {
+#else
+#define NOEXCEPT
 #endif
 
 #include <stdbool.h>
@@ -38,10 +41,10 @@ typedef enum usbBootError {
 int usbInitialize(void* options);
 int usbInitialize_customdir(void** hContext);
 
-int usb_boot(const char *addr, const void *mvcmd, unsigned size);
+int usb_boot(const char *addr, const void *mvcmd, unsigned size) NOEXCEPT;
 int get_pid_by_name(const char* name);
 
-xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* path);
+xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* path) NOEXCEPT;
 int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
 int usbPlatformClose(void *fd);
 int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
