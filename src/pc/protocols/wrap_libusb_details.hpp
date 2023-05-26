@@ -1,13 +1,18 @@
-//*********************************************************
-//    Portions of this code are from the Microsoft WIL project.
-//    Copyright (c) Microsoft. All rights reserved.
-//    This code is licensed under the MIT License.
-//    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-//    ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-//    TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-//    PARTICULAR PURPOSE AND NONINFRINGEMENT.
-//
-//*********************************************************
+/*
+    Copyright 2023 Dale Phurrough
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+*/
 
 #ifndef _WRAP_LIBUSB_DETAILS_HPP_
 #define _WRAP_LIBUSB_DETAILS_HPP_
@@ -27,11 +32,24 @@
 #include <type_traits>
 #include <utility>
 
-namespace dai {
-// subset of WIL that defines out parameters for smart pointers
-// https://github.com/microsoft/wil/wiki/RAII-resource-wrappers#wilout_param
+namespace dp {
+
+namespace libusb {
 
 namespace details {
+
+//*********************************************************
+//    Portions of this code are from the Microsoft WIL project
+//    https://github.com/microsoft/wil/wiki/RAII-resource-wrappers#wilout_param
+//
+//    Copyright (c) Microsoft. All rights reserved.
+//    This code is licensed under the MIT License.
+//    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+//    ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+//    TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+//    PARTICULAR PURPOSE AND NONINFRINGEMENT.
+//
+//*********************************************************
 
 //! Type traits class that identifies the inner type of any smart pointer.
 template <typename Ptr>
@@ -102,7 +120,26 @@ struct out_param_ptr_t {
     out_param_ptr_t& operator=(out_param_ptr_t const& other) = delete;
 };
 
+}  // namespace details
+
+/** Use to retrieve raw out parameter pointers into smart pointers that do not support the '&' operator.
+This avoids multi-step handling of a raw resource to establish the smart pointer.
+Example: `GetFoo(out_param(foo));` */
+template <typename T>
+details::out_param_t<T> out_param(T& p) {
+    return details::out_param_t<T>(p);
+}
+
+/** Use to retrieve raw out parameter pointers (with a required cast) into smart pointers that do not support the '&' operator.
+Use only when the smart pointer's &handle is not equal to the output type a function requires, necessitating a cast.
+Example: `dp::out_param_ptr<PSECURITY_DESCRIPTOR*>(securityDescriptor)` */
+template <typename Tcast, typename T>
+details::out_param_ptr_t<Tcast, T> out_param_ptr(T& p) {
+    return details::out_param_ptr_t<Tcast, T>(p);
+}
+
 #if WRAP_CPLUSPLUS < 202002L
+
 // simple implementation of std::span for compilers older than C++20
 // includes non-standard bounds checking
 template <typename T>
@@ -130,13 +167,8 @@ class span {
         size_ = other.size_;
         return *this;
     }
-    span(span&& other) noexcept : ptr_{std::exchange(other.ptr_, nullptr)}, size_{std::exchange(other.size_, 0)} {};
-    span& operator=(span&& other) noexcept {
-        if(this == &other) return *this;
-        ptr_ = std::exchange(other.ptr_, nullptr);
-        size_ = std::exchange(other.size_, 0);
-        return *this;
-    }
+    span(span&& other) = delete;
+    span& operator=(span&& other) = delete;
 
     span(T* ptr, std::size_t size) noexcept : ptr_(ptr), size_(size) {}
 
@@ -252,32 +284,19 @@ class span {
 
    private:
     element_type* ptr_ = nullptr;
-    size_type size_ = 0;
+    const size_type size_ = 0;
     const char* const throwText = "span index out of range";
 };
 #else
+
 #include <span>
 using std::span;
+
 #endif
 
-}  // namespace details
+}  // namespace libusb
 
-/** Use to retrieve raw out parameter pointers into smart pointers that do not support the '&' operator.
-This avoids multi-step handling of a raw resource to establish the smart pointer.
-Example: `GetFoo(out_param(foo));` */
-template <typename T>
-details::out_param_t<T> out_param(T& p) {
-    return details::out_param_t<T>(p);
-}
-
-/** Use to retrieve raw out parameter pointers (with a required cast) into smart pointers that do not support the '&' operator.
-Use only when the smart pointer's &handle is not equal to the output type a function requires, necessitating a cast.
-Example: `dai::out_param_ptr<PSECURITY_DESCRIPTOR*>(securityDescriptor)` */
-template <typename Tcast, typename T>
-details::out_param_ptr_t<Tcast, T> out_param_ptr(T& p) {
-    return details::out_param_ptr_t<Tcast, T>(p);
-}
-}  // namespace dai
+}  // namespace dp
 
 #undef WRAP_CPLUSPLUS
 #endif  // _WRAP_LIBUSB_DETAILS_HPP_

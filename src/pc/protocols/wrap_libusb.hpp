@@ -1,3 +1,19 @@
+/*
+    Copyright 2023 Dale Phurrough
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+*/
+
 #ifndef _WRAP_LIBUSB_HPP_
 #define _WRAP_LIBUSB_HPP_
 
@@ -28,7 +44,7 @@
 #include <vector>
 #include "wrap_libusb_details.hpp"
 
-namespace dai {
+namespace dp {
 
 ///////////////////////////////
 // Helper functions and macros
@@ -102,7 +118,7 @@ inline auto call_log_throw(const char* funcWithin, const int lineNumber, Func&& 
                   Loglevel,
                   funcWithin,
                   lineNumber,
-                  "dai::libusb failed %s(): %s",
+                  "dp::libusb failed %s(): %s",
                   funcWithin,
                   libusb_strerror(static_cast<int>(rcNum)));
         throw_conditional_usb_error(static_cast<int>(rcNum), std::integral_constant<bool, Throw>{});
@@ -261,7 +277,7 @@ public:
     using unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>::unique_resource_ptr;
 
     config_descriptor(libusb_device* dev, uint8_t configIndex) noexcept(false) {
-        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, dev, configIndex, dai::out_param(*this));
+        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, dev, configIndex, out_param(*this));
     }
 };
 
@@ -295,7 +311,7 @@ public:
     using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
 
     explicit device_handle(libusb_device* device) noexcept(false) {
-        CALL_LOG_ERROR_THROW(libusb_open, device, dai::out_param(*static_cast<_base*>(this)));
+        CALL_LOG_ERROR_THROW(libusb_open, device, out_param(*static_cast<_base*>(this)));
     }
 
     explicit device_handle(const usb_device& device) noexcept(false);
@@ -303,7 +319,7 @@ public:
     // wrap a platform-specific system device handle and get a libusb device_handle for it
     // never use libusb_open() on this wrapped handle's underlying device
     device_handle(libusb_context* ctx, intptr_t sysDevHandle) noexcept(false) {
-        CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sysDevHandle, dai::out_param(*static_cast<_base*>(this)));
+        CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sysDevHandle, out_param(*static_cast<_base*>(this)));
     }
 
     // copy and move constructors and assignment operators
@@ -477,7 +493,7 @@ public:
     // generate a device_handle with libusb_open() to enable i/o on the device
     device_handle open() const noexcept(false) {
         device_handle handle;
-        CALL_LOG_ERROR_THROW(libusb_open, get(), dai::out_param(handle));
+        CALL_LOG_ERROR_THROW(libusb_open, get(), out_param(handle));
         return handle;
     }
 
@@ -491,7 +507,7 @@ public:
     // wrapper for libusb_get_config_descriptor()
     config_descriptor get_config_descriptor(uint8_t configIndex) const noexcept(false) {
         config_descriptor descriptor;
-        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, get(), configIndex, dai::out_param(descriptor));
+        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, get(), configIndex, out_param(descriptor));
         return descriptor;
     }
 
@@ -536,10 +552,10 @@ template <mvLog_t Loglevel, bool Throw, unsigned int ChunkTimeoutMs, bool ZeroLe
 inline std::pair<libusb_error, ptrdiff_t> device_handle::bulk_transfer(const unsigned char endpoint,
                                                                        BufferValueType* const buffer,
                                                                        intmax_t bufferSizeBytes) const noexcept(!Throw) {
-    static constexpr auto FAIL_FORMAT =    "dai::libusb failed bulk_transfer(%u %s): %td/%jd bytes transmit; %s";
-    static constexpr auto START_FORMAT =   "dai::libusb starting bulk_transfer(%u %s): 0/%jd bytes transmit";
-    static constexpr auto ZLP_FORMAT =     "dai::libusb zerolp bulk_transfer(%u %s): %td/%jd bytes transmit";
-    static constexpr auto SUCCESS_FORMAT = "dai::libusb success bulk_transfer(%u %s): %td/%jd bytes transmit in %lf ms (%lf MB/s)";
+    static constexpr auto FAIL_FORMAT =    "dp::libusb failed bulk_transfer(%u %s): %td/%jd bytes transmit; %s";
+    static constexpr auto START_FORMAT =   "dp::libusb starting bulk_transfer(%u %s): 0/%jd bytes transmit";
+    static constexpr auto ZLP_FORMAT =     "dp::libusb zerolp bulk_transfer(%u %s): %td/%jd bytes transmit";
+    static constexpr auto SUCCESS_FORMAT = "dp::libusb success bulk_transfer(%u %s): %td/%jd bytes transmit in %lf ms (%lf MB/s)";
     static constexpr std::array<const char*, 2> DIRECTION_TEXT{"out", "in"};
     static constexpr int DEFAULT_CHUNK_SIZE = 1024 * 1024;  // must be multiple of endpoint max packet size
     static constexpr int DEFAULT_CHUNK_SIZE_USB1 = 64;      // must be multiple of endpoint max packet size
@@ -681,5 +697,5 @@ inline std::pair<libusb_error, ptrdiff_t> device_handle::bulk_transfer(const uns
 
 #undef CALL_LOG_ERROR_THROW
 
-} // namespace dai
+} // namespace dp
 #endif // _WRAP_LIBUSB_HPP_
