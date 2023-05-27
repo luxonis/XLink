@@ -569,15 +569,8 @@ int usb_boot(const char* addr, const void* mvcmd, unsigned size) noexcept {
 }
 
 // tries one time to open a usb device by its libusb path name and returns a device handle
-xLinkPlatformErrorCode_t usbLinkOpen(const char *path, device_handle& handle) noexcept {
-    try {
-        std::tie(handle, std::ignore) = usbSharedOpen(path, DEFAULT_OPEN_TIMEOUT, false);
-        return X_LINK_PLATFORM_SUCCESS;
-    } catch(const usb_error& e) {
-        return parseLibusbError(static_cast<libusb_error>(e.code().value()));
-    } catch(const std::exception&) {
-        return X_LINK_PLATFORM_ERROR;
-    }
+device_handle usbLinkOpen(const char* const path) {
+    return usbSharedOpen(path, DEFAULT_OPEN_TIMEOUT, false).first;
 }
 
 xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* const pathName) noexcept {
@@ -613,10 +606,10 @@ void usbLinkClose(libusb_device_handle *h)
     libusb_close(h);
 }
 
-int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
+int usbPlatformConnect(const char* const devPathRead, const char* const devPathWrite, void **fd) noexcept
 {
 #if (!defined(USE_USB_VSC))
-    #ifdef USE_LINK_JTAG
+#ifdef USE_LINK_JTAG
     struct sockaddr_in serv_addr;
     usbFdWrite = socket(AF_INET, SOCK_STREAM, 0);
     usbFdRead = socket(AF_INET, SOCK_STREAM, 0);
@@ -702,36 +695,30 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     }
     return 0;
 #endif  /*USE_LINK_JTAG*/
+
 #else
     (void)devPathRead;
-    device_handle usbHandle;
-    xLinkPlatformErrorCode_t ret = usbLinkOpen(devPathWrite, usbHandle);
-
-    if (ret != X_LINK_PLATFORM_SUCCESS)
-    {
-        /* could fail due to port name change */
-        return ret;
+    try {
+        // Find, open, configure, and get the handle to the device by path
+        // Store the usb handle and create a "unique" key instead
+        // (as file descriptors are reused and can cause a clash with lookups between scheduler and link).
+        // Caution! Below must release ownership (not reset) the device_handle to keep it open. Therefore,
+        // both device interfaces and device handle must be manually released in usbLinkClose()
+        // with libusb_release_interface() and libusb_close().
+        // BUGBUG if createPlatformDeviceFdKey fails/throws, then the device handle is still open and leaked
+        *fd = createPlatformDeviceFdKey(usbLinkOpen(devPathWrite).release());
+        return X_LINK_PLATFORM_SUCCESS;
+    } catch(const usb_error& e) {
+        return parseLibusbError(static_cast<libusb_error>(e.code().value()));
+    } catch(const std::exception&) {
+        return X_LINK_PLATFORM_ERROR;
     }
-
-    // TODO consider storing the device_handle in the fdKey store with std::map<device_handle> so that
-    // it can automatically handle refcounting, interfaces, and closing
-
-    // Store the usb handle and create a "unique" key instead
-    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link).
-    // Release ownership (not reset) the device_handle. Both interfaces and handle must be released
-    // in usbLinkClose() with libusb_release_interface() and libusb_close().
-    *fd = createPlatformDeviceFdKey(usbHandle.release());
-
 #endif  /*USE_USB_VSC*/
-
-    return 0;
 }
 
-int usbPlatformClose(void *fdKey)
-{
-
+int usbPlatformClose(void* const fdKey) noexcept {
 #ifndef USE_USB_VSC
-    #ifdef USE_LINK_JTAG
+#ifdef USE_LINK_JTAG
     /*Nothing*/
 #else
     if (usbFdRead != -1){
@@ -743,31 +730,40 @@ int usbPlatformClose(void *fdKey)
         usbFdWrite = -1;
     }
 #endif  /*USE_LINK_JTAG*/
-#else
-
-    void* tmpUsbHandle = nullptr;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
-        mvLog(MVLOG_FATAL, "Cannot find USB Handle by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
-    }
-    usbLinkClose((libusb_device_handle *) tmpUsbHandle);
-
-    if(destroyPlatformDeviceFdKey(fdKey)){
-        mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
-    }
-
-#endif  /*USE_USB_VSC*/
     return -1;
+
+#else
+    try {
+        // BUGBUG During this two-step usbPlatformClose() can another thread get and use
+        // the fd or close the fd before the second step below (destroy) is completed.
+        // Is that possible with XLink? Or does the xlink pump (which is a single thread I think)
+        // prevent the possibility of another thread using this fd?
+        void* tmpUsbHandle = nullptr;
+        if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)) {
+            mvLog(MVLOG_FATAL, "Cannot find USB Handle by key: %" PRIxPTR, (uintptr_t)fdKey);
+            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        }
+        usbLinkClose((libusb_device_handle*)tmpUsbHandle);
+
+        // BUGBUG if destroyPlatformDeviceFdKey fails/throws, then the key is still in the lookup
+        // but it points to a closed handle
+        if(destroyPlatformDeviceFdKey(fdKey)) {
+            mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key: %" PRIxPTR, (uintptr_t)fdKey);
+            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        }
+        return X_LINK_PLATFORM_SUCCESS;
+    } catch(const usb_error& e) {
+        return parseLibusbError(static_cast<libusb_error>(e.code().value()));
+    } catch(const std::exception&) {
+        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+    }
+#endif  /*USE_USB_VSC*/
 }
 
-int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) {
-    // Boot it
-    int rc = usb_boot(deviceDesc->name, firmware, (unsigned)length);
-
-    if(!rc) {
-        mvLog(MVLOG_DEBUG, "Boot successful, device address %s", deviceDesc->name);
-    }
+// Boot it via USB
+int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) noexcept {
+    const int rc = usb_boot(deviceDesc->name, firmware, (unsigned)length);
+    if(!rc) mvLog(MVLOG_DEBUG, "Boot successful, device address %s", deviceDesc->name);
     return rc;
 }
 
@@ -785,8 +781,6 @@ xLinkPlatformErrorCode_t parseLibusbError(libusb_error rc) noexcept {
         platformResult = X_LINK_PLATFORM_INSUFFICIENT_PERMISSIONS;
         break;
     case LIBUSB_ERROR_NO_DEVICE:
-        platformResult = X_LINK_PLATFORM_DEVICE_NOT_FOUND;
-        break;
     case LIBUSB_ERROR_NOT_FOUND:
         platformResult = X_LINK_PLATFORM_DEVICE_NOT_FOUND;
         break;
@@ -810,20 +804,18 @@ xLinkPlatformErrorCode_t parseLibusbError(libusb_error rc) noexcept {
     return platformResult;
 }
 
-int usb_read(const device_handle& f, void *data, size_t size)
-{
-    return f.bulk_transfer<MVLOG_ERROR, false, XLINK_USB_DATA_TIMEOUT>(USB_ENDPOINT_IN, data, size).first;
+inline intmax_t usb_read(const device_handle& f, void* const data, const size_t size) {
+    return f.bulk_transfer<MVLOG_ERROR, true, XLINK_USB_DATA_TIMEOUT>(USB_ENDPOINT_IN, data, size).second;
 }
 
-int usb_write(const device_handle& f, const void *data, size_t size)
-{
-    return f.bulk_transfer<MVLOG_ERROR, false, XLINK_USB_DATA_TIMEOUT>(USB_ENDPOINT_OUT, data, size).first;
+inline intmax_t usb_write(const device_handle& f, const void* const data, const size_t size) {
+    return f.bulk_transfer<MVLOG_ERROR, true, XLINK_USB_DATA_TIMEOUT>(USB_ENDPOINT_OUT, data, size).second;
 }
 
-int usbPlatformRead(void* fdKey, void* data, int size)
+int usbPlatformRead(void* const fdKey, void* data, int size) noexcept
 {
-    int rc = 0;
 #ifndef USE_USB_VSC
+    int rc = 0;
     int nread =  0;
 #ifdef USE_LINK_JTAG
     while (nread < size){
@@ -859,24 +851,30 @@ int usbPlatformRead(void* fdKey, void* data, int size)
         }
     }
 #endif  /*USE_LINK_JTAG*/
-#else
+return rc;
 
-    void* tmpUsbHandle = nullptr;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
+#else
+    try {
+        device_handle handle;
+        if(getPlatformDeviceFdFromKey(fdKey, out_param_ptr<void**>(handle))) {
+            mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        }
+        usb_read(handle, data, size);
+        handle.release();
+        return X_LINK_PLATFORM_SUCCESS;
+    } catch(const usb_error& e) {
+        return parseLibusbError(static_cast<libusb_error>(e.code().value()));
+    } catch(const std::exception&) {
+        return X_LINK_PLATFORM_ERROR;
     }
-    device_handle handle{(libusb_device_handle*)tmpUsbHandle};
-    rc = usb_read(handle, data, size);
-    handle.release();
 #endif  /*USE_USB_VSC*/
-    return rc;
 }
 
-int usbPlatformWrite(void *fdKey, void *data, int size)
+int usbPlatformWrite(void* const fdKey, void *data, int size) noexcept
 {
-    int rc = 0;
 #ifndef USE_USB_VSC
+    int rc = 0;
     int byteCount = 0;
 #ifdef USE_LINK_JTAG
     while (byteCount < size){
@@ -915,18 +913,24 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
        }
     }
 #endif  /*USE_LINK_JTAG*/
-#else
-
-    void* tmpUsbHandle = nullptr;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
-    }
-    device_handle handle{(libusb_device_handle*)tmpUsbHandle};
-    rc = usb_write(handle, data, size);
-    handle.release();
-#endif  /*USE_USB_VSC*/
     return rc;
+
+#else
+    try {
+        device_handle handle;
+        if(getPlatformDeviceFdFromKey(fdKey, out_param_ptr<void**>(handle))) {
+            mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        }
+        usb_write(handle, data, size);
+        handle.release();
+        return X_LINK_PLATFORM_SUCCESS;
+    } catch(const usb_error& e) {
+        return parseLibusbError(static_cast<libusb_error>(e.code().value()));
+    } catch(const std::exception&) {
+        return X_LINK_PLATFORM_ERROR;
+    }
+#endif  /*USE_USB_VSC*/
 }
 
 #ifdef _WIN32

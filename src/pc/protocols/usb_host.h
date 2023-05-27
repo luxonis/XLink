@@ -44,12 +44,12 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size) NOEXCEPT;
 int get_pid_by_name(const char* name);
 
 xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* path) NOEXCEPT;
-int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
-int usbPlatformClose(void *fd);
-int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
+int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd) NOEXCEPT;
+int usbPlatformClose(void *fd) NOEXCEPT;
+int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) NOEXCEPT;
 
-int usbPlatformRead(void *fd, void *data, int size);
-int usbPlatformWrite(void *fd, void *data, int size);
+int usbPlatformRead(void *fd, void *data, int size) NOEXCEPT;
+int usbPlatformWrite(void *fd, void *data, int size) NOEXCEPT;
 
 #ifdef __cplusplus
 }
