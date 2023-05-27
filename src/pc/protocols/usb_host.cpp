@@ -403,11 +403,11 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
                 std::array<uint8_t, expectedMxIdReadSize> rbuf;
                 try {
                     // WD Protection & MXID Retrieval Command
-                    handle.bulk_transfer<MVLOG_FATAL, true, MX_ID_TIMEOUT_MS>(send_ep, usb_mx_id_get_payload(), usb_mx_id_get_payload_size());
+                    handle.bulk_transfer<MVLOG_ERROR, true, MX_ID_TIMEOUT_MS>(send_ep, usb_mx_id_get_payload(), usb_mx_id_get_payload_size());
                     // MXID Read
-                    handle.bulk_transfer<MVLOG_FATAL, true, MX_ID_TIMEOUT_MS>(recv_ep, rbuf);
+                    handle.bulk_transfer<MVLOG_ERROR, true, MX_ID_TIMEOUT_MS>(recv_ep, rbuf);
                     // WD Protection end
-                    handle.bulk_transfer<MVLOG_FATAL, true, MX_ID_TIMEOUT_MS>(send_ep, usb_mx_id_get_payload_end(), usb_mx_id_get_payload_end_size());
+                    handle.bulk_transfer<MVLOG_ERROR, true, MX_ID_TIMEOUT_MS>(send_ep, usb_mx_id_get_payload_end(), usb_mx_id_get_payload_end_size());
                 }
                 catch(const usb_error& e) {
                     // Mark as error and retry
@@ -559,7 +559,7 @@ int usb_boot(const char* addr, const void* mvcmd, unsigned size) noexcept {
         const auto handleEndpoint = usbSharedOpen(addr, DEFAULT_CONNECT_TIMEOUT, true);
 
         // transfer boot binary to device
-        handleEndpoint.first.bulk_transfer<MVLOG_FATAL, true, DEFAULT_WRITE_TIMEOUT, true, DEFAULT_SEND_FILE_TIMEOUT.count()>(handleEndpoint.second, mvcmd, size);
+        handleEndpoint.first.bulk_transfer<MVLOG_ERROR, true, DEFAULT_WRITE_TIMEOUT, true, DEFAULT_SEND_FILE_TIMEOUT.count()>(handleEndpoint.second, mvcmd, size);
         return X_LINK_PLATFORM_SUCCESS;
     } catch(const usb_error& e) {
         return static_cast<int>(parseLibusbError(static_cast<libusb_error>(e.code().value())));
