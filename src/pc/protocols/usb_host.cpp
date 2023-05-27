@@ -281,8 +281,10 @@ std::string getLibusbDevicePath(const usb_device& device) {
     // Get and append all subsequent port numbers
     const auto portNumbers = device.get_port_numbers<MVLOG_ERROR, true, MAXIMUM_PORT_NUMBERS>();
     if (portNumbers.empty()) {
-        // Shouldn't happen! Emulate previous code by appending dot
-        devicePath += '.';
+        // likely a host controller/root hub directly on PCIE on Windows; otherwise shouldn't happen
+        // https://github.com/libusb/libusb/blob/cc498ded18fb2c6e4506c546d0351c4ae91ef2cc/libusb/core.c#L955
+        // Previous code appended only a dot
+        devicePath += ".0";
     }
     else {
         // Add port numbers to path separated by a dot
