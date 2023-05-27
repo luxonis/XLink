@@ -602,6 +602,7 @@ void usbLinkClose(libusb_device_handle *h)
     // when env LIBUSB_DEBUG=3, on app exit usually get...
     //   libusb: warning [libusb_exit] device 2.0 still referenced
     //   libusb: warning [libusb_exit] device 3.0 still referenced
+    if (h == nullptr) return;
     libusb_release_interface(h, 0);
     libusb_close(h);
 }
@@ -734,27 +735,17 @@ int usbPlatformClose(void* const fdKey) noexcept {
 
 #else
     try {
-        // BUGBUG During this two-step usbPlatformClose() can another thread get and use
-        // the fd or close the fd before the second step below (destroy) is completed.
-        // Is that possible with XLink? Or does the xlink pump (which is a single thread I think)
-        // prevent the possibility of another thread using this fd?
-        void* tmpUsbHandle = nullptr;
-        if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)) {
-            mvLog(MVLOG_FATAL, "Cannot find USB Handle by key: %" PRIxPTR, (uintptr_t)fdKey);
+        auto* const usbHandle = static_cast<libusb_device_handle*>(extractPlatformDeviceFdKey(fdKey));
+        if(usbHandle == nullptr) {
+            mvLog(MVLOG_FATAL, "Cannot find and destroy USB Handle by key: %" PRIxPTR, (uintptr_t)fdKey);
             return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
         }
-        usbLinkClose((libusb_device_handle*)tmpUsbHandle);
-
-        // BUGBUG if destroyPlatformDeviceFdKey fails/throws, then the key is still in the lookup
-        // but it points to a closed handle
-        if(destroyPlatformDeviceFdKey(fdKey)) {
-            mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key: %" PRIxPTR, (uintptr_t)fdKey);
-            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
-        }
+        usbLinkClose(usbHandle);
         return X_LINK_PLATFORM_SUCCESS;
     } catch(const usb_error& e) {
         return parseLibusbError(static_cast<libusb_error>(e.code().value()));
-    } catch(const std::exception&) {
+    } catch(const std::exception& e) {
+        mvLog(MVLOG_ERROR, "Unexpected exception: %s", e.what());
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 #endif  /*USE_USB_VSC*/

@@ -2,13 +2,16 @@
 #define _PLATFORM_DEVICE_FD_H_
 
 #ifdef __cplusplus
-extern "C"
-{
+#define NOEXCEPT noexcept
+extern "C" {
+#else
+#define NOEXCEPT
 #endif
 
-int getPlatformDeviceFdFromKey(void* fdKeyRaw, void** fd);
-void* createPlatformDeviceFdKey(void* fd);
-int destroyPlatformDeviceFdKey(void* fdKeyRaw);
+int getPlatformDeviceFdFromKey(void* fdKeyRaw, void** fd) NOEXCEPT;
+void* createPlatformDeviceFdKey(void* fd) NOEXCEPT;
+int destroyPlatformDeviceFdKey(void* fdKeyRaw) NOEXCEPT;
+void* extractPlatformDeviceFdKey(void* fdKeyRaw) NOEXCEPT;
 
 #ifdef __cplusplus
 }
