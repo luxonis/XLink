@@ -66,24 +66,24 @@ struct out_param_t {
     pointer pRaw;
     bool replace = true;
 
-    out_param_t(T& output) : wrapper(output), pRaw(nullptr) {}
+    explicit out_param_t(T& output) noexcept : wrapper(output), pRaw(nullptr) {}
 
-    out_param_t(out_param_t&& other) noexcept : wrapper(other.wrapper), pRaw(other.pRaw) {
+    out_param_t(out_param_t&& other) noexcept(noexcept(std::declval<T>().reset(std::declval<pointer>()))) : wrapper(other.wrapper), pRaw(other.pRaw) {
         assert(other.replace);
         other.replace = false;
     }
 
-    operator pointer*() {
+    operator pointer*() noexcept {
         assert(replace);
         return &pRaw;
     }
 
-    operator pointer&() {
+    operator pointer&() noexcept {
         assert(replace);
         return pRaw;
     }
 
-    ~out_param_t() {
+    ~out_param_t() noexcept(noexcept(std::declval<T>().reset(std::declval<pointer>()))) {
         if(replace) {
             wrapper.reset(pRaw);
         }
@@ -100,19 +100,19 @@ struct out_param_ptr_t {
     pointer pRaw;
     bool replace = true;
 
-    out_param_ptr_t(T& output) : wrapper(output), pRaw(nullptr) {}
+    explicit out_param_ptr_t(T& output) noexcept : wrapper(output), pRaw(nullptr) {}
 
-    out_param_ptr_t(out_param_ptr_t&& other) noexcept : wrapper(other.wrapper), pRaw(other.pRaw) {
+    out_param_ptr_t(out_param_ptr_t&& other) noexcept(noexcept(std::declval<T>().reset(std::declval<pointer>()))) : wrapper(other.wrapper), pRaw(other.pRaw) {
         assert(other.replace);
         other.replace = false;
     }
 
-    operator Tcast() {
+    operator Tcast() noexcept {
         assert(replace);
         return reinterpret_cast<Tcast>(&pRaw);
     }
 
-    ~out_param_ptr_t() {
+    ~out_param_ptr_t() noexcept(noexcept(std::declval<T>().reset(std::declval<pointer>()))) {
         if(replace) {
             wrapper.reset(pRaw);
         }
@@ -128,7 +128,7 @@ struct out_param_ptr_t {
 This avoids multi-step handling of a raw resource to establish the smart pointer.
 Example: `GetFoo(out_param(foo));` */
 template <typename T>
-details::out_param_t<T> out_param(T& p) {
+details::out_param_t<T> out_param(T& p) noexcept(noexcept(details::out_param_t<T>(p))) {
     return details::out_param_t<T>(p);
 }
 
@@ -136,7 +136,7 @@ details::out_param_t<T> out_param(T& p) {
 Use only when the smart pointer's &handle is not equal to the output type a function requires, necessitating a cast.
 Example: `dp::out_param_ptr<PSECURITY_DESCRIPTOR*>(securityDescriptor)` */
 template <typename Tcast, typename T>
-details::out_param_ptr_t<Tcast, T> out_param_ptr(T& p) {
+details::out_param_ptr_t<Tcast, T> out_param_ptr(T& p) noexcept(noexcept(details::out_param_ptr_t<Tcast, T>(p))) {
     return details::out_param_ptr_t<Tcast, T>(p);
 }
 

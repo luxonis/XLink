@@ -84,14 +84,14 @@ public:
 // exception error class for libusb transfer errors
 class transfer_error : public usb_error {
 public:
-    explicit transfer_error(int libusbErrorCode, ptrdiff_t transferred) noexcept :
+    explicit transfer_error(int libusbErrorCode, intmax_t transferred) noexcept :
         usb_error{libusbErrorCode}, transferred{transferred} {}
-    transfer_error(int libusbErrorCode, const std::string& what, ptrdiff_t transferred) noexcept :
+    transfer_error(int libusbErrorCode, const std::string& what, intmax_t transferred) noexcept :
         usb_error{libusbErrorCode, what}, transferred{transferred} {}
-    transfer_error(int libusbErrorCode, const char* what, ptrdiff_t transferred) noexcept :
+    transfer_error(int libusbErrorCode, const char* what, intmax_t transferred) noexcept :
         usb_error{libusbErrorCode, what}, transferred{transferred} {}
 private:
-    ptrdiff_t transferred; // number of bytes transferred
+    intmax_t transferred; // number of bytes transferred
 };
 
 // tag dispatch for throwing or not throwing exceptions
@@ -101,10 +101,10 @@ inline void throw_conditional_usb_error(int libusbErrorCode, std::true_type) noe
 inline void throw_conditional_usb_error(int, std::false_type) noexcept(true) {
     // do nothing
 }
-inline void throw_conditional_transfer_error(int libusbErrorCode, ptrdiff_t transferred, std::true_type) noexcept(false) {
+inline void throw_conditional_transfer_error(int libusbErrorCode, intmax_t transferred, std::true_type) noexcept(false) {
     throw transfer_error(libusbErrorCode, transferred);
 }
-inline void throw_conditional_transfer_error(int, ptrdiff_t, std::false_type) noexcept(true) {
+inline void throw_conditional_transfer_error(int, intmax_t, std::false_type) noexcept(true) {
     // do nothing
 }
 
@@ -301,7 +301,7 @@ private:
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
     };
-    std::vector<int> claimedInterfaces{};
+    std::vector<int> claimedInterfaces;
 
     // endpoint bit 7 = 0 is OUT host to device, bit 7 = 1 is IN device to host (Ignored for Control Endpoints)
     static bool is_direction_in(uint8_t endpoint) noexcept {
@@ -451,7 +451,7 @@ public:
               bool ZeroLengthPacketEnding = false,
               unsigned int TimeoutMs = 0 /* unlimited */,
               typename BufferValueType>
-    std::pair<libusb_error, ptrdiff_t> bulk_transfer(unsigned char endpoint, BufferValueType* buffer, intmax_t bufferSizeBytes) const noexcept(!Throw);
+    std::pair<libusb_error, intmax_t> bulk_transfer(unsigned char endpoint, BufferValueType* buffer, intmax_t bufferSizeBytes) const noexcept(!Throw);
 
     // bulk_transfer() overload for contiguous storage containers having data() and size() methods
     template <mvLog_t Loglevel = MVLOG_ERROR,
@@ -460,7 +460,7 @@ public:
               bool ZeroLengthPacketEnding = false,
               unsigned int TimeoutMs = 0 /* unlimited */,
               typename ContainerType>
-    std::pair<libusb_error, ptrdiff_t> bulk_transfer(const unsigned char endpoint, ContainerType& container) const noexcept(!Throw) {
+    std::pair<libusb_error, intmax_t> bulk_transfer(const unsigned char endpoint, ContainerType& container) const noexcept(!Throw) {
         return bulk_transfer<Loglevel, Throw, ChunkTimeoutMs, ZeroLengthPacketEnding, TimeoutMs>(
             endpoint, container.data(), container.size() * sizeof(typename ContainerType::value_type));
     }
@@ -551,7 +551,7 @@ inline usb_device device_handle::get_device() const noexcept {
 }
 
 template <mvLog_t Loglevel, bool Throw, unsigned int ChunkTimeoutMs, bool ZeroLengthPacketEnding, unsigned int TimeoutMs, typename BufferValueType>
-inline std::pair<libusb_error, ptrdiff_t> device_handle::bulk_transfer(const unsigned char endpoint,
+inline std::pair<libusb_error, intmax_t> device_handle::bulk_transfer(const unsigned char endpoint,
                                                                        BufferValueType* const buffer,
                                                                        intmax_t bufferSizeBytes) const noexcept(!Throw) {
     static constexpr auto FAIL_FORMAT =    "dp::libusb failed bulk_transfer(%u %s): %td/%jd bytes transmit; %s";
@@ -564,7 +564,7 @@ inline std::pair<libusb_error, ptrdiff_t> device_handle::bulk_transfer(const uns
     static constexpr bool BUFFER_IS_CONST = static_cast<bool>(std::is_const<BufferValueType>::value);
     static constexpr auto CHUNK_TIMEOUT = (TimeoutMs == 0) ? ChunkTimeoutMs : std::min(ChunkTimeoutMs, TimeoutMs);
 
-    std::pair<libusb_error, ptrdiff_t> result{LIBUSB_ERROR_INVALID_PARAM, 0};
+    std::pair<libusb_error, intmax_t> result{LIBUSB_ERROR_INVALID_PARAM, 0};
 
     // verify parameters and that buffer for specific endpoint is non-const for IN endpoints
     if((BUFFER_IS_CONST && is_direction_in(endpoint)) || buffer == nullptr || bufferSizeBytes < 0) {
