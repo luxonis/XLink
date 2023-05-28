@@ -351,13 +351,17 @@ public:
     device_handle(const device_handle&) = delete;
     device_handle& operator=(const device_handle&) = delete;
     device_handle(device_handle &&other) noexcept :
-        _base{std::exchange<_base, _base>(other, {})},
-        claimedInterfaces{std::exchange(other.claimedInterfaces, {})}
+        _base{std::move(other)},
+        bcdUSB{std::exchange(other.bcdUSB, {})},
+        maxPacketSize{exchange_maxPacketSize(other.maxPacketSize)},
+        claimedInterfaces{std::move(other.claimedInterfaces)}
     {}
     device_handle &operator=(device_handle &&other) noexcept {
         if (this != &other) {
-            *static_cast<_base*>(this) = std::exchange<_base, _base>(other, {});
-            claimedInterfaces = std::exchange(other.claimedInterfaces, {});
+            _base::operator=(std::move(other));
+            bcdUSB = std::exchange(other.bcdUSB, {});
+            maxPacketSize = exchange_maxPacketSize(other.maxPacketSize);
+            claimedInterfaces = std::move(other.claimedInterfaces);
         }
         return *this;
     }
