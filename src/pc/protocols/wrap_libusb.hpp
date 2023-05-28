@@ -453,13 +453,16 @@ public:
     }
 
     // wrapper for libusb_get_string_descriptor_ascii()
-    // template param Len is the maximum possible number of chars (without null terminator) read from the descriptor
-    // the return string is resized to the actual number of chars read
-    template <mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, int Len = 31>
+    // return string is size of actual number of ascii chars in descriptor
+    template <mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
     std::string get_string_descriptor_ascii(uint8_t descriptorIndex) const noexcept(!Throw) {
-        std::string descriptor(Len + 1, 0);
+        // String descriptors use UNICODE UTF16LE encodings where a bLength byte field declares the sizeBytes of the string + 2
+        // and the string is not NULL-terminated. However, internet searches show some devices do null terminate.
+        // The libusb api converts to ASCII
+        // Therefore, the max ascii string length is: (bLength - 2) / 2 = (255 - 2) / 2 = 126.5
+        std::string descriptor(127, 0);
         const auto result = call_log_throw<Loglevel, Throw>(
-            __func__, __LINE__, libusb_get_string_descriptor_ascii, get(), descriptorIndex, (unsigned char*)descriptor.data(), Len + 1);
+            __func__, __LINE__, libusb_get_string_descriptor_ascii, get(), descriptorIndex, (unsigned char*)(descriptor.data()), 127);
         if (Throw || result >= 0) {
             // when throwing enabled, then throw occurs on negative/error results before this resize(),
             // so don't need to check result and compiler can optimize this away.
@@ -529,7 +532,7 @@ public:
     int control_transfer(uint8_t requestType, uint8_t request, uint16_t value, uint16_t index, void *data, uint16_t length, std::chrono::milliseconds timeout) const noexcept(!Throw) {
         return call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_control_transfer, get(), requestType, request, value, index, static_cast<unsigned char*>(data), length, static_cast<unsigned int>(timeout.count()));
     }
-};
+    };
 
 class usb_device : public unique_resource_ptr<libusb_device, libusb_unref_device> {
 private:
