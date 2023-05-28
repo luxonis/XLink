@@ -15,16 +15,22 @@ static std::uintptr_t uniqueFdKey{0x55};
 // Returns the mapped fd value of the element with key equivalent to fdKeyRaw
 // Non-zero return value indicates failure
 int getPlatformDeviceFdFromKey(void* fdKeyRaw, void** fd) noexcept {
-    mvLog(MVLOG_FATAL, "getPlatformDeviceFdFromKey(%p, %p)", fdKeyRaw, fd);
-    if(fd == nullptr) return -1;
+    if(fd == nullptr) {
+        mvLog(MVLOG_ERROR, "getPlatformDeviceFdFromKey(%p) failed", fdKeyRaw);
+        return -1;
+    }
     try {
-        std::lock_guard<std::mutex> lock(mutex);
+        const std::lock_guard<std::mutex> lock(mutex);
         const auto result = map.find(reinterpret_cast<std::uintptr_t>(fdKeyRaw));
-        if(result == map.end())
+        if(result == map.end()) {
+            mvLog(MVLOG_ERROR, "getPlatformDeviceFdFromKey(%p) failed", fdKeyRaw);
             return 1;
+        }
         *fd = result->second;
+        //mvLog(MVLOG_DEBUG, "getPlatformDeviceFdFromKey(%p) result %p", fdKeyRaw, *fd);
         return 0;
     } catch(std::exception&) {
+        mvLog(MVLOG_ERROR, "getPlatformDeviceFdFromKey(%p) failed", fdKeyRaw);
         return -1;
     }
 }
@@ -32,13 +38,14 @@ int getPlatformDeviceFdFromKey(void* fdKeyRaw, void** fd) noexcept {
 // Inserts a copy of value fd into an associative container with key fdKeyRaw
 // nullptr return value indicates failure
 void* createPlatformDeviceFdKey(void* fd) noexcept {
-    mvLog(MVLOG_FATAL, "createPlatformDeviceFdKey(%p)", fd);
     try {
-        std::lock_guard<std::mutex> lock(mutex);
-        std::uintptr_t fdKey = uniqueFdKey++; // Get a unique key
+        const std::lock_guard<std::mutex> lock(mutex);
+        const std::uintptr_t fdKey = uniqueFdKey++; // Get a unique key
         map[fdKey] = fd;
+        mvLog(MVLOG_DEBUG, "createPlatformDeviceFdKey(%p) result %p", fd, reinterpret_cast<void*>(fdKey));
         return reinterpret_cast<void*>(fdKey);
     } catch(std::exception&) {
+        mvLog(MVLOG_ERROR, "createPlatformDeviceFdKey(%p) failed", fd);
         return nullptr;
     }
 }
@@ -46,30 +53,39 @@ void* createPlatformDeviceFdKey(void* fd) noexcept {
 // Removes the element (if one exists) with the key equivalent to fdKeyRaw
 // Non-zero return value indicates failure
 int destroyPlatformDeviceFdKey(void* fdKeyRaw) noexcept {
-    mvLog(MVLOG_FATAL, "destroyPlatformDeviceFdKey(%p)", fdKeyRaw);
     try {
         std::lock_guard<std::mutex> lock(mutex);
-        return !map.erase(reinterpret_cast<std::uintptr_t>(fdKeyRaw));
+        const auto result = map.erase(reinterpret_cast<std::uintptr_t>(fdKeyRaw));
+        if (result == 0)
+            mvLog(MVLOG_ERROR, "destroyPlatformDeviceFdKey(%p) failed", fdKeyRaw);
+        else
+            mvLog(MVLOG_DEBUG, "destroyPlatformDeviceFdKey(%p) success", fdKeyRaw);
+        return !result;
     } catch(std::exception&) {
+        mvLog(MVLOG_ERROR, "destroyPlatformDeviceFdKey(%p) failed", fdKeyRaw);
         return -1;
     }
 }
 
 // Extracts (finds and removes) the element (if one exists) with the key equivalent to fdKeyRaw
 // nullptr return value indicates failure
-// This atomic operation prevents a set of race conditions of two threads each get() and/or destroy()
-// keys in unpredictable orders.
+// Only one mutex lock is taken compared to separate getPlatformDeviceFdFromKey() then destroyPlatformDeviceFdKey().
+// Additionally, this atomic operation prevents a set of race conditions of two threads when
+// each get() and/or destroy() keys in unpredictable orders.
 void* extractPlatformDeviceFdKey(void* fdKeyRaw) noexcept {
-    mvLog(MVLOG_FATAL, "extractPlatformDeviceFdKey(%p)", fdKeyRaw);
     try {
         std::lock_guard<std::mutex> lock(mutex);
         const auto result = map.find(reinterpret_cast<std::uintptr_t>(fdKeyRaw));
-        if(result == map.end())
+        if(result == map.end()) {
+            mvLog(MVLOG_ERROR, "extractPlatformDeviceFdKey(%p) failed", fdKeyRaw);
             return nullptr;
+        }
         const auto fd = result->second;
         map.erase(result);
+        mvLog(MVLOG_DEBUG, "extractPlatformDeviceFdKey(%p) success", fdKeyRaw);
         return fd;
     } catch(std::exception&) {
+        mvLog(MVLOG_ERROR, "extractPlatformDeviceFdKey(%p) failed", fdKeyRaw);
         return nullptr;
     }
 }
