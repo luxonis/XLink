@@ -1,4 +1,7 @@
+#define MVLOG_UNIT_NAME xLinkUsb
+
 #include "PlatformDeviceFd.h"
+#include "XLink/XLinkLog.h"
 
 #include <atomic>
 #include <cstdint>
@@ -12,6 +15,7 @@ static std::uintptr_t uniqueFdKey{0x55};
 // Returns the mapped fd value of the element with key equivalent to fdKeyRaw
 // Non-zero return value indicates failure
 int getPlatformDeviceFdFromKey(void* fdKeyRaw, void** fd) noexcept {
+    mvLog(MVLOG_FATAL, "getPlatformDeviceFdFromKey(%p, %p)", fdKeyRaw, fd);
     if(fd == nullptr) return -1;
     try {
         std::lock_guard<std::mutex> lock(mutex);
@@ -28,6 +32,7 @@ int getPlatformDeviceFdFromKey(void* fdKeyRaw, void** fd) noexcept {
 // Inserts a copy of value fd into an associative container with key fdKeyRaw
 // nullptr return value indicates failure
 void* createPlatformDeviceFdKey(void* fd) noexcept {
+    mvLog(MVLOG_FATAL, "createPlatformDeviceFdKey(%p)", fd);
     try {
         std::lock_guard<std::mutex> lock(mutex);
         std::uintptr_t fdKey = uniqueFdKey++; // Get a unique key
@@ -41,6 +46,7 @@ void* createPlatformDeviceFdKey(void* fd) noexcept {
 // Removes the element (if one exists) with the key equivalent to fdKeyRaw
 // Non-zero return value indicates failure
 int destroyPlatformDeviceFdKey(void* fdKeyRaw) noexcept {
+    mvLog(MVLOG_FATAL, "destroyPlatformDeviceFdKey(%p)", fdKeyRaw);
     try {
         std::lock_guard<std::mutex> lock(mutex);
         return !map.erase(reinterpret_cast<std::uintptr_t>(fdKeyRaw));
@@ -54,6 +60,7 @@ int destroyPlatformDeviceFdKey(void* fdKeyRaw) noexcept {
 // This atomic operation prevents a set of race conditions of two threads each get() and/or destroy()
 // keys in unpredictable orders.
 void* extractPlatformDeviceFdKey(void* fdKeyRaw) noexcept {
+    mvLog(MVLOG_FATAL, "extractPlatformDeviceFdKey(%p)", fdKeyRaw);
     try {
         std::lock_guard<std::mutex> lock(mutex);
         const auto result = map.find(reinterpret_cast<std::uintptr_t>(fdKeyRaw));

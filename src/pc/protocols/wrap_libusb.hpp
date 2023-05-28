@@ -290,8 +290,7 @@ private:
     using _base = unique_resource_ptr<libusb_device_handle, libusb_close>;
 
     static constexpr decltype(libusb_endpoint_descriptor::wMaxPacketSize) DEFAULT_MAX_PACKET_SIZE = 512;
-
-    std::array<decltype(libusb_endpoint_descriptor::wMaxPacketSize), 32> maxPacketSize{
+    static constexpr std::array<decltype(libusb_endpoint_descriptor::wMaxPacketSize), 32> DEFAULT_MAX_PACKET_ARRAY{
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
@@ -301,11 +300,27 @@ private:
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
     };
+
+    decltype(libusb_device_descriptor::bcdUSB) bcdUSB{};
+    std::array<decltype(libusb_endpoint_descriptor::wMaxPacketSize), 32> maxPacketSize = DEFAULT_MAX_PACKET_ARRAY;
     std::vector<int> claimedInterfaces;
 
+    // exchange DEFAULT_MAX_PACKET_ARRAY -> val -> return
+    static decltype(maxPacketSize) exchange_maxPacketSize(decltype(maxPacketSize)& val) {
+        auto old = std::move(val);
+        val = DEFAULT_MAX_PACKET_ARRAY;
+        return old;
+    }
+
+    // get cached bcdUSB version of device
+    decltype(bcdUSB) get_bcdUSB() const noexcept {
+        return bcdUSB;
+    }
+
+    // given an endpoint address, return true if that address is for an IN endpoint, false for OUT
     // endpoint bit 7 = 0 is OUT host to device, bit 7 = 1 is IN device to host (Ignored for Control Endpoints)
     static bool is_direction_in(uint8_t endpoint) noexcept {
-        // (endpoint >> 7) & 0x01
+        // alternate calculation: (endpoint >> 7) & 0x01
         return static_cast<bool>(endpoint & 0x80);
     }
 
@@ -314,14 +329,22 @@ public:
 
     explicit device_handle(libusb_device* device) noexcept(false) {
         CALL_LOG_ERROR_THROW(libusb_open, device, out_param(*static_cast<_base*>(this)));
+
+        // cache the device's bcdUSB version for use in transfer methods
+        libusb_device_descriptor descriptor{};
+        CALL_LOG_ERROR_THROW(libusb_get_device_descriptor, device, &descriptor);
+        bcdUSB = descriptor.bcdUSB;
     }
 
-    explicit device_handle(const usb_device& device) noexcept(false);
+    explicit device_handle(const usb_device& device) noexcept(noexcept(device_handle{std::declval<libusb_device*>()}));
 
     // wrap a platform-specific system device handle and get a libusb device_handle for it
     // never use libusb_open() on this wrapped handle's underlying device
     device_handle(libusb_context* ctx, intptr_t sysDevHandle) noexcept(false) {
         CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sysDevHandle, out_param(*static_cast<_base*>(this)));
+
+        // cache the device's bcdUSB version for use in transfer methods
+        bcdUSB = get_device_descriptor().bcdUSB;
     }
 
     // copy and move constructors and assignment operators
@@ -492,11 +515,9 @@ public:
     usb_device(pointer, const deleter_type &) = delete;
     usb_device(pointer, deleter_type &&) = delete;
 
-    // generate a device_handle with libusb_open() to enable i/o on the device
+    // generate a device_handle for i/o on the device
     device_handle open() const noexcept(false) {
-        device_handle handle;
-        CALL_LOG_ERROR_THROW(libusb_open, get(), out_param(handle));
-        return handle;
+        return device_handle{get()};
     }
 
     // start managing the new libusb_device* with libusb_ref_device()
@@ -543,9 +564,9 @@ public:
     }
 };
 
-inline device_handle::device_handle(const usb_device& device) noexcept(false) : device_handle{device.get()} {}
+inline device_handle::device_handle(const usb_device& device) noexcept(noexcept(device_handle{device.get()})) : device_handle{device.get()} {}
 
-// wrap libusb_get_device() to return a ref counted usb_device
+// wrap libusb_get_device() and return a usb_device
 inline usb_device device_handle::get_device() const noexcept {
     return usb_device{libusb_get_device(get())};
 }
@@ -575,7 +596,7 @@ inline std::pair<libusb_error, intmax_t> device_handle::bulk_transfer(const unsi
     // start transfer
     else {
         const bool transmitZeroLengthPacket = ZeroLengthPacketEnding; // && (bufferSizeBytes % get_max_packet_size(endpoint) == 0);
-        const auto chunkSize = get_device_descriptor().bcdUSB >= 0x200 ? DEFAULT_CHUNK_SIZE : DEFAULT_CHUNK_SIZE_USB1;
+        const auto chunkSize = get_bcdUSB() >= 0x200 ? DEFAULT_CHUNK_SIZE : DEFAULT_CHUNK_SIZE_USB1;
         const auto completeSizeBytes = bufferSizeBytes;
         auto& rcNum = result.first;
         auto& transferredBytes = result.second;
