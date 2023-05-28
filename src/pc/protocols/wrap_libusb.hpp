@@ -63,6 +63,9 @@ struct unique_resource_deleter {
 template<typename Resource, void(*Dispose)(Resource*)>
 using unique_resource_ptr = std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>;
 
+// BUGBUG delete base unique_resource_ptr constructors that conflict with ref counts
+// e.g. usb_device(pointer, const deleter_type &) = delete;
+//      usb_device(pointer, deleter_type &&) = delete;
 
 namespace libusb {
 
@@ -327,25 +330,40 @@ private:
 public:
     using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
 
+    // create a device_handle from a raw libusb_device_handle*
+    // caution: this constructor will not manage previously claimed interfaces and
+    //          will default to DEFAULT_MAX_PACKET_SIZE for all endpoints
+    explicit device_handle(libusb_device_handle* handle) noexcept(false)
+        : _base{handle ? handle : throw std::invalid_argument("device_handle == nullptr")}, bcdUSB{get_device_descriptor().bcdUSB} {}
+
+    // create a device_handle from a raw libusb_device*
     explicit device_handle(libusb_device* device) noexcept(false) {
+        if(device == nullptr) throw std::invalid_argument("device == nullptr");
         CALL_LOG_ERROR_THROW(libusb_open, device, out_param(*static_cast<_base*>(this)));
 
         // cache the device's bcdUSB version for use in transfer methods
+        // call libusb_get_device_descriptor() directly since we already have the raw libusb_device*
         libusb_device_descriptor descriptor{};
         CALL_LOG_ERROR_THROW(libusb_get_device_descriptor, device, &descriptor);
         bcdUSB = descriptor.bcdUSB;
     }
 
-    explicit device_handle(const usb_device& device) noexcept(noexcept(device_handle{std::declval<libusb_device*>()}));
-
     // wrap a platform-specific system device handle and get a libusb device_handle for it
     // never use libusb_open() on this wrapped handle's underlying device
     device_handle(libusb_context* ctx, intptr_t sysDevHandle) noexcept(false) {
+        if(ctx == nullptr || sysDevHandle == 0) throw std::invalid_argument("ctx == nullptr || sysDevHandle == 0");
         CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sysDevHandle, out_param(*static_cast<_base*>(this)));
 
-        // cache the device's bcdUSB version for use in transfer methods
+        // cache the device's bcdUSB version
         bcdUSB = get_device_descriptor().bcdUSB;
     }
+
+    // create a device_handle from a usb_device wrapper
+    explicit device_handle(const usb_device& device) noexcept(noexcept(device_handle{std::declval<libusb_device*>()}));
+
+    // delete base constructors that conflict with libusb ref counts
+    device_handle(pointer, const deleter_type &) = delete;
+    device_handle(pointer, deleter_type &&) = delete;
 
     // copy and move constructors and assignment operators
     device_handle(const device_handle&) = delete;
@@ -372,15 +390,24 @@ public:
     // release all managed objects with libusb_release_interface() and libusb_close()
     // No exceptions are thrown. Errors are logged.
     void reset(pointer ptr = pointer{}) noexcept {
+        // release all claimed interfaces and resources
         for (const auto interfaceNumber : claimedInterfaces) {
             call_log_throw<MVLOG_ERROR, false>(__func__, __LINE__, libusb_release_interface, get(), interfaceNumber);
         }
         static_cast<_base*>(this)->reset(ptr);
+
+        // reset defaults
+        // BUGBUG do not know what interfaces or endpoints are in use, therefore we don't know their max packet size
+        bcdUSB = ptr == nullptr ? decltype(bcdUSB){} : get_device_descriptor().bcdUSB;
+        maxPacketSize = DEFAULT_MAX_PACKET_ARRAY;
+        claimedInterfaces.clear();
     }
 
     // release ownership of the managed libusb_device_handle and all device interfaces
     // caller is responsible for calling libusb_release_interface() and libusb_close()
     device_handle::pointer release() noexcept {
+        bcdUSB = {};
+        maxPacketSize = DEFAULT_MAX_PACKET_ARRAY;
         claimedInterfaces.clear();
         return static_cast<_base*>(this)->release();
     }
