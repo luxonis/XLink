@@ -9,6 +9,7 @@ extern "C" {
 #endif
 
 int getPlatformDeviceFdFromKey(void* fdKeyRaw, void** fd) NOEXCEPT;
+void* getPlatformDeviceFdFromKeySimple(void* fdKeyRaw) NOEXCEPT;
 void* createPlatformDeviceFdKey(void* fd) NOEXCEPT;
 int destroyPlatformDeviceFdKey(void* fdKeyRaw) NOEXCEPT;
 void* extractPlatformDeviceFdKey(void* fdKeyRaw) NOEXCEPT;

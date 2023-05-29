@@ -14,30 +14,38 @@ static std::uintptr_t uniqueFdKey{0x55};
 
 // Returns the mapped fd value of the element with key equivalent to fdKeyRaw
 // Non-zero return value indicates failure
-int getPlatformDeviceFdFromKey(void* fdKeyRaw, void** fd) noexcept {
+int getPlatformDeviceFdFromKey(void* const fdKeyRaw, void** const fd) noexcept {
     if(fd == nullptr) {
-        mvLog(MVLOG_ERROR, "getPlatformDeviceFdFromKey(%p) failed", fdKeyRaw);
+        mvLog(MVLOG_ERROR, "getPlatformDeviceFdFromKey/Simple(%p) failed", fdKeyRaw);
         return -1;
     }
     try {
         const std::lock_guard<std::mutex> lock(mutex);
         const auto result = map.find(reinterpret_cast<std::uintptr_t>(fdKeyRaw));
         if(result == map.end()) {
-            mvLog(MVLOG_ERROR, "getPlatformDeviceFdFromKey(%p) failed", fdKeyRaw);
+            mvLog(MVLOG_ERROR, "getPlatformDeviceFdFromKey/Simple(%p) failed", fdKeyRaw);
             return 1;
         }
         *fd = result->second;
         //mvLog(MVLOG_DEBUG, "getPlatformDeviceFdFromKey(%p) result %p", fdKeyRaw, *fd);
         return 0;
     } catch(std::exception&) {
-        mvLog(MVLOG_ERROR, "getPlatformDeviceFdFromKey(%p) failed", fdKeyRaw);
+        mvLog(MVLOG_ERROR, "getPlatformDeviceFdFromKey/Simple(%p) failed", fdKeyRaw);
         return -1;
     }
 }
 
+// Returns the mapped fd value of the element with key equivalent to fdKeyRaw
+// returns nullptr when not found, failure, or createPlatformDeviceFdKey(nullptr) was used
+void* getPlatformDeviceFdFromKeySimple(void* const fdKeyRaw) noexcept {
+    void* fd = nullptr;
+    getPlatformDeviceFdFromKey(fdKeyRaw, &fd);
+    return fd;
+}
+
 // Inserts a copy of value fd into an associative container with key fdKeyRaw
 // nullptr return value indicates failure
-void* createPlatformDeviceFdKey(void* fd) noexcept {
+void* createPlatformDeviceFdKey(void* const fd) noexcept {
     try {
         const std::lock_guard<std::mutex> lock(mutex);
         const std::uintptr_t fdKey = uniqueFdKey++; // Get a unique key
@@ -52,7 +60,7 @@ void* createPlatformDeviceFdKey(void* fd) noexcept {
 
 // Removes the element (if one exists) with the key equivalent to fdKeyRaw
 // Non-zero return value indicates failure
-int destroyPlatformDeviceFdKey(void* fdKeyRaw) noexcept {
+int destroyPlatformDeviceFdKey(void* const fdKeyRaw) noexcept {
     try {
         std::lock_guard<std::mutex> lock(mutex);
         const auto result = map.erase(reinterpret_cast<std::uintptr_t>(fdKeyRaw));
@@ -72,7 +80,7 @@ int destroyPlatformDeviceFdKey(void* fdKeyRaw) noexcept {
 // Only one mutex lock is taken compared to separate getPlatformDeviceFdFromKey() then destroyPlatformDeviceFdKey().
 // Additionally, this atomic operation prevents a set of race conditions of two threads when
 // each get() and/or destroy() keys in unpredictable orders.
-void* extractPlatformDeviceFdKey(void* fdKeyRaw) noexcept {
+void* extractPlatformDeviceFdKey(void* const fdKeyRaw) noexcept {
     try {
         std::lock_guard<std::mutex> lock(mutex);
         const auto result = map.find(reinterpret_cast<std::uintptr_t>(fdKeyRaw));
