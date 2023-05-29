@@ -1,3 +1,4 @@
+#undef NDEBUG
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -17,12 +18,16 @@
 #include "XLink/XLinkPublicDefines.h"
 #include "XLink/XLinkLog.h"
 
+using namespace std::chrono;
+
+constexpr static int NUM_ITERATIONS = 10000;
+constexpr static bool PRINT_DEBUG = false;
+constexpr static microseconds RTT_THRESHOLD{5000};
 
 struct Timestamp {
     int64_t sec;
     int64_t nsec;
 };
-using namespace std::chrono;
 
 int client();
 int server();
@@ -62,25 +67,35 @@ int client() {
     handler.protocol = deviceDesc.protocol;
     XLinkConnect(&handler);
 
+    std::this_thread::sleep_for(milliseconds(100));
     auto s = XLinkOpenStream(handler.linkId, "rtt", 1024);
+
     if(s != INVALID_STREAM_ID) {
         Timestamp ts = {};
 
         streamPacketDesc_t* packet;
         bool success = true;
-        for(int i = 0; i < 100; i++){
+
+        for(int i = 1; i <= NUM_ITERATIONS; i++){
+            ts.sec = i;
+            ts.nsec = 0;
             auto t1 = steady_clock::now();
-            XLinkWriteData(s, reinterpret_cast<uint8_t*>(&ts), sizeof(ts));
+            assert(XLinkWriteData(s, reinterpret_cast<uint8_t*>(&ts), sizeof(ts)) == X_LINK_SUCCESS);
             auto t1point5 = steady_clock::now();
-            XLinkReadData(s, &packet);
+            assert(XLinkReadData(s, &packet) == X_LINK_SUCCESS);
             auto t2 = steady_clock::now();
+            assert(packet->length == sizeof(ts));
+            memcpy(&ts, packet->data, packet->length);
             XLinkReleaseData(s);
 
-            if(t2-t1 <= milliseconds(1)) {
-                printf("OK, rtt = %ldms. RTT too high (write: %ld)\n", duration_cast<milliseconds>(t2-t1).count(), duration_cast<milliseconds>(t1point5-t1).count());
+            if(PRINT_DEBUG) printf("client received - sec: %ld, nsec: %ld\n", ts.sec, ts.nsec);
+            assert((ts.sec + 100)*2 == ts.nsec);
+
+            if(t2-t1 <= RTT_THRESHOLD) {
+                if(PRINT_DEBUG) printf("OK, rtt = %ldus. (write: %ldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
             } else {
+                printf("NOK, rtt = %ldus. RTT too high (write: %ldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
                 success = false;
-                printf("NOK, rtt = %ldms. RTT too high (write: %ld)\n", duration_cast<milliseconds>(t2-t1).count(), duration_cast<milliseconds>(t1point5-t1).count());
             }
         }
 
@@ -117,26 +132,29 @@ int server(){
     handler.protocol = X_LINK_TCP_IP;
     XLinkServer(&handler, "test", X_LINK_BOOTED, X_LINK_MYRIAD_X);
     auto s = XLinkOpenStream(handler.linkId, "rtt", 1024);
-    if(s != INVALID_STREAM_ID) {
+    std::this_thread::sleep_for(milliseconds(100));
 
-        Timestamp timestamp = {};
-        for(int i = 0; i<100; i++) {
+    if(s != INVALID_STREAM_ID) {
+        for(int i = 1; i <= NUM_ITERATIONS; i++) {
+            Timestamp timestamp = {};
             streamPacketDesc_t* packet;
             auto t1 = steady_clock::now();
             if(XLinkReadData(s, &packet) != X_LINK_SUCCESS) {
                 printf("failed.\n");
                 return -1;
             }
+            assert(packet->length == sizeof(timestamp));
+            memcpy(&timestamp, packet->data, packet->length);
+            XLinkReleaseData(s);
+            timestamp.nsec = (timestamp.sec + 100LL) * 2LL;
             auto t1point5 = steady_clock::now();
-            if(XLinkWriteData(s, packet->data, packet->length) != X_LINK_SUCCESS) {
+            if(PRINT_DEBUG) printf("server sent - sec: %ld, nsec: %ld\n", timestamp.sec, timestamp.nsec);
+            if(XLinkWriteData(s, reinterpret_cast<uint8_t*>(&timestamp), sizeof(timestamp)) != X_LINK_SUCCESS) {
                 printf("failed.\n");
                 return -1;
             }
             auto t2 = steady_clock::now();
-
-            printf("Respond time: %ld, (write: %ld)\n", duration_cast<milliseconds>(t2-t1).count(), duration_cast<milliseconds>(t1point5-t1).count());
-
-            XLinkReleaseData(s);
+            if(PRINT_DEBUG) printf("Respond time: %ldus, (write: %ldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
         }
 
     } else {
