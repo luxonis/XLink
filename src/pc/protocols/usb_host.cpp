@@ -377,7 +377,7 @@ libusb_error getLibusbDeviceMxId(const XLinkDeviceState_t state, const std::stri
                     // TODO consider sharing this whole block of code with openConfigClaimDevice()
                     const auto active_configuration = handle.get_configuration<MVLOG_DEBUG>();
                     if(active_configuration != 1){
-                        mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1\n", active_configuration);
+                        mvLog(MVLOG_DEBUG, "Setting configuration from %d to 1", active_configuration);
                         handle.set_configuration(1);
                     }
 
@@ -626,7 +626,7 @@ int usbPlatformConnect(const char* const devPathRead, const char* const devPathW
 
     if (connect(usbFdWrite, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
     {
-        mvLog(MVLOG_ERROR, "connect(usbFdWrite,...) returned < 0\n");
+        mvLog(MVLOG_ERROR, "connect(usbFdWrite,...) returned < 0");
         if (usbFdRead >= 0)
             close(usbFdRead);
         if (usbFdWrite >= 0)

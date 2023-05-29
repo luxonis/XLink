@@ -76,7 +76,7 @@ streamDesc_t* getStreamById(void* fd, streamId_t id)
             while(((rc = XLink_sem_wait(&link->availableStreams[stream].sem)) == -1) && errno == EINTR)
                 continue;
             if (rc) {
-                mvLog(MVLOG_ERROR,"can't wait semaphore\n");
+                mvLog(MVLOG_ERROR,"can't wait semaphore");
                 return NULL;
             }
             return &link->availableStreams[stream];
@@ -96,7 +96,7 @@ streamDesc_t* getStreamByName(xLinkDesc_t* link, const char* name)
             while(((rc = XLink_sem_wait(&link->availableStreams[stream].sem)) == -1) && errno == EINTR)
                 continue;
             if (rc) {
-                mvLog(MVLOG_ERROR,"can't wait semaphore\n");
+                mvLog(MVLOG_ERROR,"can't wait semaphore");
                 return NULL;
             }
             return &link->availableStreams[stream];
@@ -111,13 +111,13 @@ void releaseStream(streamDesc_t* stream)
         XLink_sem_post(&stream->sem);
     }
     else {
-        mvLog(MVLOG_DEBUG,"trying to release a semaphore for a released stream\n");
+        mvLog(MVLOG_DEBUG,"trying to release a semaphore for a released stream");
     }
 }
 
 xLinkState_t getXLinkState(xLinkDesc_t* link)
 {
     XLINK_RET_ERR_IF(link == NULL, XLINK_NOT_INIT);
-    mvLog(MVLOG_DEBUG,"%s() link %p link->peerState %d\n", __func__,link, link->peerState);
+    mvLog(MVLOG_DEBUG,"%s() link %p link->peerState %d", __func__,link, link->peerState);
     return link->peerState;
 }

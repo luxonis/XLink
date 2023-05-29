@@ -17,13 +17,13 @@
 
 XLinkError_t XLinkStreamInitialize(
     streamDesc_t* stream, streamId_t id, const char* name) {
-    mvLog(MVLOG_DEBUG, "name: %s, id: %ld\n", name, id);
+    mvLog(MVLOG_DEBUG, "name: %s, id: %ld", name, id);
     ASSERT_XLINK(stream);
 
     memset(stream, 0, sizeof(*stream));
 
     if (XLink_sem_init(&stream->sem, 0, 0)) {
-        mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
+        mvLog(MVLOG_ERROR, "Cannot initialize semaphore");
         return X_LINK_ERROR;
     }
 
@@ -40,7 +40,7 @@ void XLinkStreamReset(streamDesc_t* stream) {
     }
 
     if(XLink_sem_destroy(&stream->sem)) {
-        mvLog(MVLOG_DEBUG, "Cannot destroy semaphore\n");
+        mvLog(MVLOG_DEBUG, "Cannot destroy semaphore");
     }
 
     // sets all stream fields, including the packets circular buffer to NULL

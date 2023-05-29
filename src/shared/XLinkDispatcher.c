@@ -199,7 +199,7 @@ XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc) {
     numSchedulers = 0;
 
     if (sem_init(&addSchedulerSem, 0, 1)) {
-        mvLog(MVLOG_ERROR, "Can't create semaphore\n");
+        mvLog(MVLOG_ERROR, "Can't create semaphore");
         return X_LINK_ERROR;
     }
 
@@ -221,12 +221,12 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
     int eventIdx;
     if (numSchedulers >= MAX_SCHEDULERS)
     {
-        mvLog(MVLOG_ERROR,"Max number Schedulers reached!\n");
+        mvLog(MVLOG_ERROR,"Max number Schedulers reached!");
         return -1;
     }
     int idx = findAvailableScheduler();
     if (idx == -1) {
-        mvLog(MVLOG_ERROR,"Max number Schedulers reached!\n");
+        mvLog(MVLOG_ERROR,"Max number Schedulers reached!");
         return -1;
     }
 
@@ -304,7 +304,7 @@ XLinkError_t DispatcherStart(xLinkDeviceHandle_t *deviceHandle)
 
     while(((sem_wait(&addSchedulerSem) == -1) && errno == EINTR))
         continue;
-    mvLog(MVLOG_DEBUG,"%s() starting a new thread - schedulerId %d \n", __func__, idx);
+    mvLog(MVLOG_DEBUG,"%s() starting a new thread - schedulerId %d", __func__, idx);
     int sc = pthread_create(&schedulerState[idx].xLinkThreadId,
                             &attr,
                             eventSchedulerRun,
@@ -364,12 +364,12 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
     if(curr->resetXLink) {
         return NULL;
     }
-    mvLog(MVLOG_DEBUG, "Receiving event %s %d\n", TypeToStr(event->header.type), origin);
+    mvLog(MVLOG_DEBUG, "Receiving event %s %d", TypeToStr(event->header.type), origin);
     int rc;
     while(((rc = XLink_sem_wait(&curr->addEventSem)) == -1) && errno == EINTR)
         continue;
     if (rc) {
-        mvLog(MVLOG_ERROR,"can't wait semaphore\n");
+        mvLog(MVLOG_ERROR,"can't wait semaphore");
         return NULL;
     }
 
@@ -382,9 +382,9 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
             sem = createSem(curr);
         }
         if (!sem) {
-            mvLog(MVLOG_WARN,"No more semaphores. Increase XLink or OS resources\n");
+            mvLog(MVLOG_WARN,"No more semaphores. Increase XLink or OS resources");
             if (XLink_sem_post(&curr->addEventSem)) {
-                mvLog(MVLOG_ERROR,"can't post semaphore\n");
+                mvLog(MVLOG_ERROR,"can't post semaphore");
             }
 
             return NULL;
@@ -397,10 +397,10 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
         ev = addNextQueueElemToProc(curr, &curr->rQueue, event, NULL, origin);
     }
     if (XLink_sem_post(&curr->addEventSem)) {
-        mvLog(MVLOG_ERROR,"can't post semaphore\n");
+        mvLog(MVLOG_ERROR,"can't post semaphore");
     }
     if (XLink_sem_post(&curr->notifyDispatcherSem)) {
-        mvLog(MVLOG_ERROR, "can't post semaphore\n");
+        mvLog(MVLOG_ERROR, "can't post semaphore");
     }
     return ev;
 }
@@ -527,7 +527,7 @@ int DispatcherUnblockEvent(eventId_t id, xLinkEventType_t type, streamId_t strea
     xLinkSchedulerState_t* curr = findCorrespondingScheduler(xlinkFD);
     ASSERT_XLINK(curr != NULL);
 
-    mvLog(MVLOG_DEBUG,"unblock\n");
+    mvLog(MVLOG_DEBUG,"unblock");
     xLinkEventPriv_t* blockedEvent;
 
     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, 1);
@@ -540,17 +540,17 @@ int DispatcherUnblockEvent(eventId_t id, xLinkEventType_t type, streamId_t strea
              && blockedEvent->packet.header.type == type
              && blockedEvent->packet.header.streamId == stream))
         {
-            mvLog(MVLOG_DEBUG,"unblocked**************** %d %s\n",
+            mvLog(MVLOG_DEBUG,"unblocked**************** %d %s",
                   (int)blockedEvent->packet.header.id,
                   TypeToStr((int)blockedEvent->packet.header.type));
             blockedEvent->isServed = EVENT_READY;
             if (XLink_sem_post(&curr->notifyDispatcherSem)){
-                mvLog(MVLOG_ERROR, "can't post semaphore\n");
+                mvLog(MVLOG_ERROR, "can't post semaphore");
             }
             XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
             return 1;
         } else {
-            mvLog(MVLOG_DEBUG,"%d %s\n",
+            mvLog(MVLOG_DEBUG,"%d %s",
                   (int)blockedEvent->packet.header.id,
                   TypeToStr((int)blockedEvent->packet.header.type));
         }
@@ -574,7 +574,7 @@ int DispatcherServeEvent(eventId_t id, xLinkEventType_t type, streamId_t stream,
              && event->packet.header.type == type
              && event->packet.header.streamId == stream))
         {
-            mvLog(MVLOG_DEBUG,"served**************** %d %s\n",
+            mvLog(MVLOG_DEBUG,"served**************** %d %s",
                   (int)event->packet.header.id,
                   TypeToStr((int)event->packet.header.type));
             event->isServed = EVENT_SERVED;
@@ -639,7 +639,7 @@ static XLink_sem_t* createSem(xLinkSchedulerState_t* curr)
                 if (refs == -1) {
                     sem = &temp->sem;
                     if (XLink_sem_init(sem, 0, 0)){
-                        mvLog(MVLOG_ERROR, "Error: Can't create semaphore\n");
+                        mvLog(MVLOG_ERROR, "Error: Can't create semaphore");
                         return NULL;
                     }
                     curr->semaphores++;
@@ -695,7 +695,7 @@ static void* eventReader(void* ctx)
     while (!curr->resetXLink) {
         int sc = glControlFunc->eventReceive(&event);
 
-        mvLog(MVLOG_DEBUG,"Reading %s (scheduler %d, fd %p, event id %d, event stream_id %u, event size %u)\n",
+        mvLog(MVLOG_DEBUG,"Reading %s (scheduler %d, fd %p, event id %d, event stream_id %u, event size %u)",
               TypeToStr(event.header.type), curr->schedulerId, event.deviceHandle.xLinkFD, event.header.id, event.header.streamId, event.header.size);
 
         if (sc) {
@@ -725,7 +725,7 @@ static void* eventSchedulerRun(void* ctx)
 #endif
 {
     int schedulerId = *((int*) ctx);
-    mvLog(MVLOG_DEBUG,"%s() schedulerId %d\n", __func__, schedulerId);
+    mvLog(MVLOG_DEBUG,"%s() schedulerId %d", __func__, schedulerId);
     XLINK_RET_ERR_IF(schedulerId >= MAX_SCHEDULERS, NULL);
 
     xLinkSchedulerState_t* curr = &schedulerState[schedulerId];
@@ -823,7 +823,7 @@ static void postAndMarkEventServed(xLinkEventPriv_t *event)
     }
     if(event->sem){
         if (XLink_sem_post(event->sem)) {
-            mvLog(MVLOG_ERROR,"can't post semaphore\n");
+            mvLog(MVLOG_ERROR,"can't post semaphore");
         }
     }
 
@@ -891,7 +891,7 @@ static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_
     } else if (header->flags.bitField.ack == 1
               && header->flags.bitField.nack == 0){
         event->isServed = EVENT_PENDING;
-        mvLog(MVLOG_DEBUG,"------------------------UNserved %s\n",
+        mvLog(MVLOG_DEBUG,"------------------------UNserved %s",
               TypeToStr(event->packet.header.type));
     }else{
         return 1;
@@ -913,7 +913,7 @@ static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState
             header->id == evHeader->id &&
             header->type == evHeader->type - XLINK_REQUEST_LAST -1)
         {
-            mvLog(MVLOG_DEBUG,"----------------------ISserved %s\n",
+            mvLog(MVLOG_DEBUG,"----------------------ISserved %s",
                   TypeToStr(header->type));
             //propagate back flags
             header->flags = evHeader->flags;
@@ -922,13 +922,13 @@ static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState
         }
     }
     if (i == MAX_EVENTS) {
-        mvLog(MVLOG_FATAL,"no request for this response: %s %d\n", TypeToStr(event->packet.header.type), event->origin);
-        mvLog(MVLOG_DEBUG,"#### (i == MAX_EVENTS) %s %d %d\n", TypeToStr(event->packet.header.type), event->origin, (int)event->packet.header.id);
+        mvLog(MVLOG_FATAL,"no request for this response: %s %d", TypeToStr(event->packet.header.type), event->origin);
+        mvLog(MVLOG_DEBUG,"#### (i == MAX_EVENTS) %s %d %d", TypeToStr(event->packet.header.type), event->origin, (int)event->packet.header.id);
         for (i = 0; i < MAX_EVENTS; i++)
         {
             xLinkEventHeader_t *header = &curr->lQueue.q[i].packet.header;
 
-            mvLog(MVLOG_DEBUG,"%d) header->id %i, header->type %s(%i), curr->lQueue.q[i].isServed %i, EVENT_PENDING %i\n", i, (int)header->id
+            mvLog(MVLOG_DEBUG,"%d) header->id %i, header->type %s(%i), curr->lQueue.q[i].isServed %i, EVENT_PENDING %i", i, (int)header->id
             , TypeToStr(header->type), header->type, curr->lQueue.q[i].isServed, EVENT_PENDING);
 
         }
@@ -960,7 +960,7 @@ static xLinkEventPriv_t* searchForReadyEvent(xLinkSchedulerState_t* curr)
 
     ev = getNextElementWithState(curr->lQueue.base, curr->lQueue.end, curr->lQueue.base, EVENT_READY);
     if(ev){
-        mvLog(MVLOG_DEBUG,"ready %s %d \n",
+        mvLog(MVLOG_DEBUG,"ready %s %d",
               TypeToStr((int)ev->packet.header.type),
               (int)ev->packet.header.id);
     }
@@ -1019,7 +1019,7 @@ static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr)
     while(((rc = XLink_sem_wait(&curr->notifyDispatcherSem)) == -1) && errno == EINTR)
         continue;
     if (rc) {
-        mvLog(MVLOG_ERROR,"can't post semaphore\n");
+        mvLog(MVLOG_ERROR,"can't post semaphore");
     }
 
     xLinkEventPriv_t* event = NULL;
@@ -1060,11 +1060,11 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     mvLog(MVLOG_INFO, "Start Clean Dispatcher...");
 
     if (XLink_sem_post(&curr->notifyDispatcherSem)) {
-        mvLog(MVLOG_ERROR,"can't post semaphore\n"); //to allow us to get a NULL event
+        mvLog(MVLOG_ERROR,"can't post semaphore"); //to allow us to get a NULL event
     }
     xLinkEventPriv_t* event = dispatcherGetNextEvent(curr);
     while (event != NULL) {
-        mvLog(MVLOG_INFO, "dropped event is %s, status %d\n",
+        mvLog(MVLOG_INFO, "dropped event is %s, status %d",
               TypeToStr(event->packet.header.type), event->isServed);
 
         XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, 1);
@@ -1150,14 +1150,14 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
 
     xLinkDesc_t* link = getLink(curr->deviceHandle.xLinkFD);
     if(link == NULL || XLink_sem_post(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_DEBUG,"can't post dispatcherClosedSem\n");
+        mvLog(MVLOG_DEBUG,"can't post dispatcherClosedSem");
     }
 
     glControlFunc->closeLink(curr->deviceHandle.xLinkFD, 1);
 
     // Set dispatcher link state "down", to disallow resetting again
     curr->dispatcherLinkDown = 1;
-    mvLog(MVLOG_DEBUG,"Reset Successfully\n");
+    mvLog(MVLOG_DEBUG,"Reset Successfully");
 
     if(pthread_mutex_unlock(&reset_mutex) != 0) {
         mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
@@ -1279,7 +1279,7 @@ static void dispatcherFreeEvents(eventQueueHandler_t *queue, xLinkEventState_t s
 
     xLinkEventPriv_t* event = getNextElementWithState(queue->base, queue->end, queue->base, state);
     while (event != NULL) {
-        mvLog(MVLOG_DEBUG, "Event is %s, size is %d, Mark it served\n", TypeToStr(event->packet.header.type), event->packet.header.size);
+        mvLog(MVLOG_DEBUG, "Event is %s, size is %d, Mark it served", TypeToStr(event->packet.header.type), event->packet.header.size);
         postAndMarkEventServed(event);
         event = getNextElementWithState(queue->base, queue->end, queue->base, state);
     }

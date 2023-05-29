@@ -46,14 +46,14 @@ static int handleIncomingEvent(xLinkEvent_t* event);
 //adds a new event with parameters and returns event id
 int dispatcherEventSend(xLinkEvent_t *event)
 {
-    mvLog(MVLOG_DEBUG, "Send event: %s, size %d, streamId %ld.\n",
+    mvLog(MVLOG_DEBUG, "Send event: %s, size %d, streamId %ld.",
         TypeToStr(event->header.type), event->header.size, event->header.streamId);
 
     int rc = XLinkPlatformWrite(&event->deviceHandle,
         &event->header, sizeof(event->header));
 
     if(rc < 0) {
-        mvLog(MVLOG_ERROR,"Write failed (header) (err %d) | event %s\n", rc, TypeToStr(event->header.type));
+        mvLog(MVLOG_ERROR,"Write failed (header) (err %d) | event %s", rc, TypeToStr(event->header.type));
         return rc;
     }
 
@@ -61,7 +61,7 @@ int dispatcherEventSend(xLinkEvent_t *event)
         rc = XLinkPlatformWrite(&event->deviceHandle,
             event->data, event->header.size);
         if(rc < 0) {
-            mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
+            mvLog(MVLOG_ERROR,"Write failed %d", rc);
             return rc;
         }
     }
@@ -74,7 +74,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     int rc = XLinkPlatformRead(&event->deviceHandle,
         &event->header, sizeof(event->header));
 
-    // mvLog(MVLOG_DEBUG,"Incoming event %p: %s %d %p prevEvent: %s %d %p\n",
+    // mvLog(MVLOG_DEBUG,"Incoming event %p: %s %d %p prevEvent: %s %d %p",
     //       event,
     //       TypeToStr(event->header.type),
     //       (int)event->header.id,
@@ -84,7 +84,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     //       prevEvent.deviceHandle.xLinkFD);
 
     if(rc < 0) {
-        mvLog(MVLOG_WARN,"%s() Read failed %d\n", __func__, (int)rc);
+        mvLog(MVLOG_WARN,"%s() Read failed %d", __func__, (int)rc);
         return rc;
     }
 
@@ -92,7 +92,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     // if (prevEvent.header.id == event->header.id &&
     //     prevEvent.header.type == event->header.type &&
     //     prevEvent.deviceHandle.xLinkFD == event->deviceHandle.xLinkFD) {
-    //     mvLog(MVLOG_FATAL,"Duplicate id detected. \n");
+    //     mvLog(MVLOG_FATAL,"Duplicate id detected.");
     // }
     // prevEvent = *event;
 
@@ -104,7 +104,7 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 {
     streamDesc_t* stream;
     response->header.id = event->header.id;
-    mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
+    mvLog(MVLOG_DEBUG, "%s",TypeToStr(event->header.type));
     switch (event->header.type){
         case XLINK_WRITE_REQ:
         {
@@ -112,7 +112,7 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
             stream = getStreamById(event->deviceHandle.xLinkFD, event->header.streamId);
 
             if(!stream) {
-                mvLog(MVLOG_DEBUG, "stream %d has been closed!\n", event->header.streamId);
+                mvLog(MVLOG_DEBUG, "stream %d has been closed!", event->header.streamId);
                 XLINK_SET_EVENT_FAILED_AND_SERVE(event);
                 break;
             }
@@ -128,16 +128,16 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
             event->header.flags.bitField.localServe = 0;
 
             if(!isStreamSpaceEnoughFor(stream, event->header.size)){
-                mvLog(MVLOG_DEBUG,"local NACK RTS. stream '%s' is full (event %d)\n", stream->name, event->header.id);
+                mvLog(MVLOG_DEBUG,"local NACK RTS. stream '%s' is full (event %d)", stream->name, event->header.id);
                 event->header.flags.bitField.block = 1;
                 event->header.flags.bitField.localServe = 1;
                 // TODO: easy to implement non-blocking read here, just return nack
-                mvLog(MVLOG_WARN, "Blocked event would cause dispatching thread to wait on semaphore infinitely\n");
+                mvLog(MVLOG_WARN, "Blocked event would cause dispatching thread to wait on semaphore infinitely");
             }else{
                 event->header.flags.bitField.block = 0;
                 stream->remoteFillLevel += event->header.size;
                 stream->remoteFillPacketLevel++;
-                mvLog(MVLOG_DEBUG,"S%d: Got local write of %ld , remote fill level %ld out of %ld %ld\n",
+                mvLog(MVLOG_DEBUG,"S%d: Got local write of %ld , remote fill level %ld out of %ld %ld",
                       event->header.streamId, event->header.size, stream->remoteFillLevel, stream->writeSize, stream->readSize);
             }
             releaseStream(stream);
@@ -147,7 +147,7 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
         {
             stream = getStreamById(event->deviceHandle.xLinkFD, event->header.streamId);
             if(!stream) {
-                mvLog(MVLOG_DEBUG, "stream %d has been closed!\n", event->header.streamId);
+                mvLog(MVLOG_DEBUG, "stream %d has been closed!", event->header.streamId);
                 XLINK_SET_EVENT_FAILED_AND_SERVE(event);
                 break;
             }
@@ -205,11 +205,11 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
                                                             event->header.streamName,
                                                             event->header.size, 0,
                                                             INVALID_STREAM_ID);
-            mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - stream has been just opened with id %ld\n",
+            mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - stream has been just opened with id %ld",
                   event->header.streamId);
 #else
             mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - do nothing. Stream will be "
-                  "opened with forced id accordingly to response from the host\n");
+                  "opened with forced id accordingly to response from the host");
 #endif
             break;
         }
@@ -233,13 +233,13 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
         case XLINK_RESET_REQ:
         {
             XLINK_EVENT_ACKNOWLEDGE(event);
-            mvLog(MVLOG_DEBUG,"XLINK_RESET_REQ - do nothing\n");
+            mvLog(MVLOG_DEBUG,"XLINK_RESET_REQ - do nothing");
             break;
         }
         case XLINK_PING_REQ:
         {
             XLINK_EVENT_ACKNOWLEDGE(event);
-            mvLog(MVLOG_DEBUG,"XLINK_PING_REQ - do nothing\n");
+            mvLog(MVLOG_DEBUG,"XLINK_PING_REQ - do nothing");
             break;
         }
         case XLINK_WRITE_RESP:
@@ -257,7 +257,7 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
         default:
         {
             mvLog(MVLOG_ERROR,
-                  "Fail to get response for local event. type: %d, stream name: %s\n",
+                  "Fail to get response for local event. type: %d, stream name: %s",
                   event->header.type, event->header.streamName);
             ASSERT_XLINK(0);
         }
@@ -270,7 +270,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
 {
     response->header.id = event->header.id;
     response->header.flags.raw = 0;
-    mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
+    mvLog(MVLOG_DEBUG, "%s",TypeToStr(event->header.type));
 
     switch (event->header.type)
     {
@@ -289,7 +289,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                                                 response->header.streamId,
                                                 event->deviceHandle.xLinkFD);
                 (void) xxx;
-                mvLog(MVLOG_DEBUG,"unblocked from stream %d %d\n",
+                mvLog(MVLOG_DEBUG,"unblocked from stream %d %d",
                     (int)response->header.streamId, (int)xxx);
             }
             break;
@@ -305,7 +305,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             stream->remoteFillLevel -= event->header.size;
             stream->remoteFillPacketLevel--;
 
-            mvLog(MVLOG_DEBUG,"S%d: Got remote release of %ld, remote fill level %ld out of %ld %ld\n",
+            mvLog(MVLOG_DEBUG,"S%d: Got remote release of %ld, remote fill level %ld out of %ld %ld",
                   event->header.streamId, event->header.size, stream->remoteFillLevel, stream->writeSize, stream->readSize);
             releaseStream(stream);
 
@@ -314,7 +314,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             //with every released packet check if the stream is already marked for close
             if (stream->closeStreamInitiated && stream->localFillLevel == 0)
             {
-                mvLog(MVLOG_DEBUG,"%s() Unblock close STREAM\n", __func__);
+                mvLog(MVLOG_DEBUG,"%s() Unblock close STREAM", __func__);
                 DispatcherUnblockEvent(-1,
                                        XLINK_CLOSE_STREAM_REQ,
                                        event->header.streamId,
@@ -332,7 +332,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             stream->remoteFillLevel -= event->header.size;
             stream->remoteFillPacketLevel--;
 
-            mvLog(MVLOG_DEBUG,"S%d: Got remote release of %ld, remote fill level %ld out of %ld %ld\n",
+            mvLog(MVLOG_DEBUG,"S%d: Got remote release of %ld, remote fill level %ld out of %ld %ld",
                   event->header.streamId, event->header.size, stream->remoteFillLevel, stream->writeSize, stream->readSize);
             releaseStream(stream);
 
@@ -341,7 +341,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             //with every released packet check if the stream is already marked for close
             if (stream->closeStreamInitiated && stream->localFillLevel == 0)
             {
-                mvLog(MVLOG_DEBUG,"%s() Unblock close STREAM\n", __func__);
+                mvLog(MVLOG_DEBUG,"%s() Unblock close STREAM", __func__);
                 int xxx = DispatcherUnblockEvent(-1,
                                                  XLINK_CLOSE_STREAM_REQ,
                                                  event->header.streamId,
@@ -375,7 +375,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             mv_strncpy(response->header.streamName, MAX_STREAM_NAME_LENGTH,
                        event->header.streamName, MAX_STREAM_NAME_LENGTH - 1);
             response->header.size = event->header.size;
-            mvLog(MVLOG_DEBUG,"creating stream %x\n", (int)response->header.streamId);
+            mvLog(MVLOG_DEBUG,"creating stream %x", (int)response->header.streamId);
             break;
         case XLINK_CLOSE_STREAM_REQ:
         {
@@ -389,7 +389,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                 //if we have sent a NACK before, when the event gets unblocked
                 //the stream might already be unavailable
                 XLINK_EVENT_ACKNOWLEDGE(response);
-                mvLog(MVLOG_DEBUG,"%s() got a close stream on aready closed stream\n", __func__);
+                mvLog(MVLOG_DEBUG,"%s() got a close stream on aready closed stream", __func__);
             } else {
                 if (stream->localFillLevel == 0)
                 {
@@ -412,7 +412,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                 }
                 else
                 {
-                    mvLog(MVLOG_DEBUG,"%s():fifo is NOT empty returning NACK \n", __func__);
+                    mvLog(MVLOG_DEBUG,"%s():fifo is NOT empty returning NACK", __func__);
                     XLINK_EVENT_NOT_ACKNOWLEDGE(response);
                     stream->closeStreamInitiated = 1;
                 }
@@ -428,7 +428,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             sem_post(&pingSem);
             break;
         case XLINK_RESET_REQ:
-            mvLog(MVLOG_DEBUG,"reset request - received! Sending ACK *****\n");
+            mvLog(MVLOG_DEBUG,"reset request - received! Sending ACK *****");
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_RESET_RESP;
             response->deviceHandle = event->deviceHandle;
@@ -453,7 +453,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             XLINK_RET_IF(response->header.streamId
                 == INVALID_STREAM_ID);
             mvLog(MVLOG_DEBUG, "XLINK_CREATE_STREAM_REQ - stream has been just opened "
-                  "with forced id=%ld accordingly to response from the host\n",
+                  "with forced id=%ld accordingly to response from the host",
                   response->header.streamId);
 #endif
             response->deviceHandle = event->deviceHandle;
@@ -485,7 +485,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
         default:
         {
             mvLog(MVLOG_ERROR,
-                "Fail to get response for remote event. type: %d, stream name: %s\n",
+                "Fail to get response for remote event. type: %d, stream name: %s",
                 event->header.type, event->header.streamName);
             ASSERT_XLINK(0);
         }
@@ -537,7 +537,7 @@ void dispatcherCloseLink(void* fd, int fullClose)
     }
 
     if(XLink_sem_destroy(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_DEBUG, "Cannot destroy dispatcherClosedSem\n");
+        mvLog(MVLOG_DEBUG, "Cannot destroy dispatcherClosedSem");
     }
 }
 
@@ -560,7 +560,7 @@ int isStreamSpaceEnoughFor(streamDesc_t* stream, uint32_t size)
 {
     if(stream->remoteFillPacketLevel >= XLINK_MAX_PACKETS_PER_STREAM ||
        stream->remoteFillLevel + size > stream->writeSize){
-        mvLog(MVLOG_DEBUG, "S%d: Not enough space in stream '%s' for %ld: PKT %ld, FILL %ld SIZE %ld\n",
+        mvLog(MVLOG_DEBUG, "S%d: Not enough space in stream '%s' for %ld: PKT %ld, FILL %ld SIZE %ld",
               stream->id, stream->name, size, stream->remoteFillPacketLevel, stream->remoteFillLevel, stream->writeSize);
         return 0;
     }
@@ -592,7 +592,7 @@ streamPacketDesc_t* movePacketFromStream(streamDesc_t* stream)
         ret = malloc(sizeof(streamPacketDesc_t));
         if (!ret)
         {
-            mvLog(MVLOG_FATAL, "out of memory to move packet from stream\n");
+            mvLog(MVLOG_FATAL, "out of memory to move packet from stream");
             return NULL;
         }
         ret->data = NULL;
@@ -617,12 +617,12 @@ int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize)
 {
     streamPacketDesc_t* currPack = &stream->packets[stream->firstPacket];
     if(stream->blockedPackets == 0){
-        mvLog(MVLOG_ERROR,"There is no packet to release\n");
+        mvLog(MVLOG_ERROR,"There is no packet to release");
         return 0; // ignore this, although this is a big problem on application side
     }
 
     stream->localFillLevel -= currPack->length;
-    mvLog(MVLOG_DEBUG, "S%d: Got release of %ld , current local fill level is %ld out of %ld %ld\n",
+    mvLog(MVLOG_DEBUG, "S%d: Got release of %ld , current local fill level is %ld out of %ld %ld",
           stream->id, currPack->length, stream->localFillLevel, stream->readSize, stream->writeSize);
 
     XLinkPlatformDeallocateData(currPack->data,
@@ -638,7 +638,7 @@ int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize)
 
 int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize, uint8_t* data) {
     if (stream->blockedPackets == 0) {
-        mvLog(MVLOG_ERROR,"There is no packet to release\n");
+        mvLog(MVLOG_ERROR,"There is no packet to release");
         return 0; // ignore this, although this is a big problem on application side
     }
 
@@ -655,12 +655,12 @@ int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize
 
     streamPacketDesc_t* currPack = &stream->packets[packetId];
     if (currPack->length == 0) {
-        mvLog(MVLOG_ERROR, "Packet with ID %d is empty\n", packetId);
+        mvLog(MVLOG_ERROR, "Packet with ID %d is empty", packetId);
     }
 
     stream->localFillLevel -= currPack->length;
 
-  mvLog(MVLOG_DEBUG, "S%d: Got release of %ld , current local fill level is %ld out of %ld %ld\n",
+  mvLog(MVLOG_DEBUG, "S%d: Got release of %ld , current local fill level is %ld out of %ld %ld",
           stream->id, currPack->length, stream->localFillLevel, stream->readSize, stream->writeSize);
     XLinkPlatformDeallocateData(currPack->data,
                                 ALIGN_UP_INT32((int32_t) currPack->length, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
@@ -703,7 +703,7 @@ int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size) {
 int handleIncomingEvent(xLinkEvent_t* event) {
     //this function will be dependent whether this is a client or a Remote
     //specific actions to this peer
-    mvLog(MVLOG_DEBUG, "%s, size %u, streamId %u.\n", TypeToStr(event->header.type), event->header.size, event->header.streamId);
+    mvLog(MVLOG_DEBUG, "%s, size %u, streamId %u.", TypeToStr(event->header.type), event->header.size, event->header.streamId);
 
     ASSERT_XLINK(event->header.type >= XLINK_WRITE_REQ
                && event->header.type != XLINK_REQUEST_LAST
@@ -719,19 +719,19 @@ int handleIncomingEvent(xLinkEvent_t* event) {
     ASSERT_XLINK(stream);
 
     stream->localFillLevel += event->header.size;
-    mvLog(MVLOG_DEBUG,"S%u: Got write of %u, current local fill level is %u out of %u %u\n",
+    mvLog(MVLOG_DEBUG,"S%u: Got write of %u, current local fill level is %u out of %u %u",
           event->header.streamId, event->header.size, stream->localFillLevel, stream->readSize, stream->writeSize);
 
     void* buffer = XLinkPlatformAllocateData(ALIGN_UP(event->header.size, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
     XLINK_OUT_WITH_LOG_IF(buffer == NULL,
-        mvLog(MVLOG_FATAL,"out of memory to receive data of size = %zu\n", event->header.size));
+        mvLog(MVLOG_FATAL,"out of memory to receive data of size = %zu", event->header.size));
 
     const int sc = XLinkPlatformRead(&event->deviceHandle, buffer, event->header.size);
-    XLINK_OUT_WITH_LOG_IF(sc < 0, mvLog(MVLOG_ERROR,"%s() Read failed %d\n", __func__, sc));
+    XLINK_OUT_WITH_LOG_IF(sc < 0, mvLog(MVLOG_ERROR,"%s() Read failed %d", __func__, sc));
 
     event->data = buffer;
     XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size),
-        mvLog(MVLOG_WARN,"No more place in stream. release packet\n"));
+        mvLog(MVLOG_WARN,"No more place in stream. release packet"));
     rc = 0;
 
 XLINK_OUT:

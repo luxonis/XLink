@@ -49,7 +49,7 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
     XLINK_RET_ERR_IF(stream_write_size < 0, INVALID_STREAM_ID);
 
     xLinkDesc_t* link = getLinkById(id);
-    mvLog(MVLOG_DEBUG,"%s() id %d link %p\n", __func__, id, link);
+    mvLog(MVLOG_DEBUG,"%s() id %d link %p", __func__, id, link);
     XLINK_RET_ERR_IF(link == NULL, INVALID_STREAM_ID);
     XLINK_RET_ERR_IF(getXLinkState(link) != XLINK_UP, INVALID_STREAM_ID);
     XLINK_RET_ERR_IF(strlen(name) >= MAX_STREAM_NAME_LENGTH, INVALID_STREAM_ID);
@@ -189,7 +189,7 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t*
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_REQ,
         size,(void*)buffer, link->deviceHandle);
 
-    mvLog(MVLOG_WARN,"XLinkWriteDataWithTimeout is not fully supported yet. The XLinkWriteData method is called instead. Desired timeout = %d\n", timeoutMs);
+    mvLog(MVLOG_WARN,"XLinkWriteDataWithTimeout is not fully supported yet. The XLinkWriteData method is called instead. Desired timeout = %d", timeoutMs);
     XLINK_RET_IF_FAIL(addEventWithPerf(&event, &opTime, timeoutMs));
 
     if( glHandler->profEnable) {
@@ -423,7 +423,7 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
 
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, event);
     if(ev == NULL) {
-        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
+        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s",
             TypeToStr(event->header.type), event->header.id, event->header.streamName);
         return X_LINK_ERROR;
     }
@@ -488,7 +488,7 @@ XLinkError_t addEventTimeout(xLinkEvent_t *event, struct timespec abstime)
 
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, event);
     if(ev == NULL) {
-        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
+        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s",
             TypeToStr(event->header.type), event->header.id, event->header.streamName);
         return X_LINK_ERROR;
     }

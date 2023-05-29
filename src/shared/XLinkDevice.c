@@ -90,7 +90,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     ASSERT_XLINK(XLINK_MAX_STREAMS <= MAX_POOLS_ALLOC);
     glHandler = globalHandler;
     if (sem_init(&pingSem,0,0)) {
-        mvLog(MVLOG_ERROR, "Can't create semaphore\n");
+        mvLog(MVLOG_ERROR, "Can't create semaphore");
     }
     int i;
 
@@ -235,7 +235,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 
     xLinkDesc_t* link = getNextAvailableLink();
     XLINK_RET_IF(link == NULL);
-    mvLog(MVLOG_DEBUG,"%s() device name %s glHandler %p protocol %d\n", __func__, handler->devicePath, glHandler, handler->protocol);
+    mvLog(MVLOG_DEBUG,"%s() device name %s glHandler %p protocol %d", __func__, handler->devicePath, glHandler, handler->protocol);
 
     link->deviceHandle.protocol = handler->protocol;
     int connectStatus = XLinkPlatformConnect(handler->devicePath2, handler->devicePath,
@@ -330,7 +330,7 @@ XLinkError_t XLinkResetRemote(linkId_t id)
     xLinkEvent_t event = {0};
     event.header.type = XLINK_RESET_REQ;
     event.deviceHandle = link->deviceHandle;
-    mvLog(MVLOG_DEBUG, "sending reset remote event\n");
+    mvLog(MVLOG_DEBUG, "sending reset remote event");
     DispatcherAddEvent(EVENT_LOCAL, &event);
     XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
         X_LINK_TIMEOUT);
@@ -339,7 +339,7 @@ XLinkError_t XLinkResetRemote(linkId_t id)
     while(((rc = XLink_sem_wait(&link->dispatcherClosedSem)) == -1) && errno == EINTR)
         continue;
     if(rc) {
-        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
+        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem");
         return X_LINK_ERROR;
     }
 
@@ -361,7 +361,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
     xLinkEvent_t event = {0};
     event.header.type = XLINK_RESET_REQ;
     event.deviceHandle = link->deviceHandle;
-    mvLog(MVLOG_DEBUG, "sending reset remote event\n");
+    mvLog(MVLOG_DEBUG, "sending reset remote event");
 
     struct timespec start;
     clock_gettime(CLOCK_REALTIME, &start);
@@ -376,7 +376,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
 
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, &event);
     if(ev == NULL) {
-        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
+        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s",
             TypeToStr(event.header.type), event.header.id, event.header.streamName);
         return X_LINK_ERROR;
     }
@@ -391,7 +391,7 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
 
     // Wait for dispatcher to be closed
     if(XLink_sem_wait(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
+        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem");
         return X_LINK_ERROR;
     }
 
@@ -412,7 +412,7 @@ XLinkError_t XLinkResetAll()
             for (stream = 0; stream < XLINK_MAX_STREAMS; stream++) {
                 if (link->availableStreams[stream].id != INVALID_STREAM_ID) {
                     streamId_t streamId = link->availableStreams[stream].id;
-                    mvLog(MVLOG_DEBUG,"%s() Closing stream (stream = %d) %d on link %d\n",
+                    mvLog(MVLOG_DEBUG,"%s() Closing stream (stream = %d) %d on link %d",
                           __func__, stream, (int) streamId, (int) link->id);
                     COMBINE_IDS(streamId, link->id);
                     if (XLinkCloseStream(streamId) != X_LINK_SUCCESS) {
@@ -543,7 +543,7 @@ static linkId_t getNextAvailableLinkUniqueId()
             nextUniqueLinkId = 0;
         }
     } while (start != nextUniqueLinkId);
-    mvLog(MVLOG_ERROR, "%s():- no next available unique link id!\n", __func__);
+    mvLog(MVLOG_ERROR, "%s():- no next available unique link id!", __func__);
     return INVALID_LINK_ID;
 }
 
@@ -565,7 +565,7 @@ static xLinkDesc_t* getNextAvailableLink() {
     }
 
     if(i >= MAX_LINKS) {
-        mvLog(MVLOG_ERROR,"%s():- no next available link!\n", __func__);
+        mvLog(MVLOG_ERROR,"%s():- no next available link!", __func__);
         XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
         return NULL;
     }
@@ -573,7 +573,7 @@ static xLinkDesc_t* getNextAvailableLink() {
     xLinkDesc_t* link = &availableXLinks[i];
 
     if (XLink_sem_init(&link->dispatcherClosedSem, 0 ,0)) {
-        mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
+        mvLog(MVLOG_ERROR, "Cannot initialize semaphore");
         XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
         return NULL;
     }
@@ -587,13 +587,13 @@ static xLinkDesc_t* getNextAvailableLink() {
 static void freeGivenLink(xLinkDesc_t* link) {
 
     if(pthread_mutex_lock(&availableXLinksMutex) != 0){
-        mvLog(MVLOG_ERROR, "Cannot lock mutex\n");
+        mvLog(MVLOG_ERROR, "Cannot lock mutex");
         return;
     }
 
     link->id = INVALID_LINK_ID;
     if (XLink_sem_destroy(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_ERROR, "Cannot destroy semaphore\n");
+        mvLog(MVLOG_ERROR, "Cannot destroy semaphore");
     }
 
     pthread_mutex_unlock(&availableXLinksMutex);

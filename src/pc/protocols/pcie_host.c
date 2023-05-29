@@ -157,7 +157,7 @@ int pcie_write(HANDLE fd, void * buf, size_t bufSize)
     Event = CreateEvent(NULL, TRUE, FALSE, NULL);
 
     if (Event == NULL) {
-        mvLog(MVLOG_INFO, "Error creating I/O event for pcie_write - 0x%x\n", GetLastError());
+        mvLog(MVLOG_INFO, "Error creating I/O event for pcie_write - 0x%x", GetLastError());
         return PCIE_HOST_ERROR;
     }
 
@@ -174,7 +174,7 @@ int pcie_write(HANDLE fd, void * buf, size_t bufSize)
                 mvLog(MVLOG_DEBUG, "WriteFile GetOverlappedResult failed");
             }
         } else {
-            mvLog(MVLOG_DEBUG, "WriteFile failed with error code = 0x%x \n", GetLastError());
+            mvLog(MVLOG_DEBUG, "WriteFile failed with error code = 0x%x", GetLastError());
         }
     } else {
         mvLog(MVLOG_DEBUG, "fOverlapped - operation complete immediately");
@@ -233,7 +233,7 @@ int pcie_read(HANDLE fd, void * buf, size_t bufSize)
     Event = CreateEvent(NULL, TRUE, FALSE, NULL);
 
     if (Event == NULL) {
-        mvLog(MVLOG_ERROR, "Error creating I/O event for pcie_read - 0x%x\n", GetLastError());
+        mvLog(MVLOG_ERROR, "Error creating I/O event for pcie_read - 0x%x", GetLastError());
         return PCIE_HOST_ERROR;
     }
 
@@ -251,7 +251,7 @@ int pcie_read(HANDLE fd, void * buf, size_t bufSize)
                mvLog(MVLOG_DEBUG, "ReadFile GetOverlappedResult failed" );
             }
         } else {
-            mvLog(MVLOG_DEBUG, "ReadFile failed with error code = 0x%x \n", GetLastError());
+            mvLog(MVLOG_DEBUG, "ReadFile failed with error code = 0x%x", GetLastError());
         }
     } else {
          mvLog(MVLOG_DEBUG, "fOverlapped - operation complete immediately");
@@ -559,7 +559,7 @@ pcieHostError_t pcie_boot_device(HANDLE fd, const char  *buffer, size_t length)
 
         int resetDeviceRC = pcie_reset_device(fd);
         if (resetDeviceRC) {
-            mvLog(MVLOG_ERROR, "Device resetting failed with error: %d\n", resetDeviceRC);
+            mvLog(MVLOG_ERROR, "Device resetting failed with error: %d", resetDeviceRC);
             return resetDeviceRC;
         }
     }
