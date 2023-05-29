@@ -75,6 +75,9 @@ xlink_add_client_server_test(multiple_connection_test 16 10 multiple_connection_
 # connection shutdown test
 xlink_add_client_server_test(connection_shutdown_test 8 10)
 
+# RTT test
+xlink_add_test(rtt_test rtt_test.cpp)
+
 # TODO(themarpe) - XLinkConnectWithTimeout doesn't work yet as expected
 # # connect timeout test
 # xlink_add_client_server_test(connect_timeout_test 16 10 connect_timeout_test.sh)
