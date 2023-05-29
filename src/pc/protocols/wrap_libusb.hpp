@@ -21,6 +21,7 @@
 
 // project
 #define MVLOG_UNIT_NAME xLinkUsb
+#include "XLink/XLinkLog.h"
 
 // libraries
 #ifdef XLINK_LIBUSB_LOCAL
@@ -272,9 +273,6 @@ private:
     size_type countDevices{};
     pointer deviceList{};
 };
-
-// TODO move to dedicated cpp file to avoid multiple definitions
-std::mutex device_list::mtx;
 
 // wraps libusb_config_descriptor* and automatically libusb_free_config_descriptor() on destruction
 class config_descriptor : public unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor> {
@@ -534,7 +532,7 @@ public:
     int control_transfer(uint8_t requestType, uint8_t request, uint16_t value, uint16_t index, void *data, uint16_t length, std::chrono::milliseconds timeout) const noexcept(!Throw) {
         return call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_control_transfer, get(), requestType, request, value, index, static_cast<unsigned char*>(data), length, static_cast<unsigned int>(timeout.count()));
     }
-    };
+};
 
 class usb_device : public unique_resource_ptr<libusb_device, libusb_unref_device> {
 private:
