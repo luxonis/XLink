@@ -597,6 +597,7 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* const pathName) noexc
     }
 }
 
+// deprecated since apis like usbPlatformClose() use RAII
 void usbLinkClose(libusb_device_handle *h)
 {
     // BUGBUG debugger correctly shows ref=1 when entering this function.
@@ -701,14 +702,21 @@ int usbPlatformConnect(const char* const devPathRead, const char* const devPathW
 #else
     (void)devPathRead;
     try {
-        // Find, open, configure, and get the handle to the device by path
-        // Store the usb handle and create a "unique" key instead
+        // make device_handle safely on the heap
+        auto handle = std::make_unique<device_handle>(usbLinkOpen(devPathWrite));
+
+        // store device_handle in fd lookup container
         // (as file descriptors are reused and can cause a clash with lookups between scheduler and link).
-        // Caution! Below must release ownership (not reset) the device_handle to keep it open. Therefore,
-        // both device interfaces and device handle must be manually released in usbLinkClose()
-        // with libusb_release_interface() and libusb_close().
-        // BUGBUG if createPlatformDeviceFdKey fails/throws, then the device handle is still open and leaked
-        *fd = createPlatformDeviceFdKey(usbLinkOpen(devPathWrite).release());
+        auto* const newKey = createPlatformDeviceFdKey(handle.get());
+        if (newKey == nullptr) {
+            // failed transfer of ownership to fd lookup container
+            // handle will close on destruction
+            return X_LINK_PLATFORM_ERROR;
+        }
+
+        // successful transfer of ownership to fd lookup container
+        std::ignore = handle.release();
+        *fd = newKey;
         return X_LINK_PLATFORM_SUCCESS;
     } catch(const usb_error& e) {
         return parseLibusbError(static_cast<libusb_error>(e.code().value()));
@@ -736,12 +744,15 @@ int usbPlatformClose(void* const fdKey) noexcept {
 
 #else
     try {
-        auto* const usbHandle = static_cast<libusb_device_handle*>(extractPlatformDeviceFdKey(fdKey));
-        if(usbHandle == nullptr) {
+        // extract and transfer ownership of device_handle from the fd lookup container
+        std::unique_ptr<device_handle> handle(static_cast<device_handle*>(extractPlatformDeviceFdKey(fdKey)));
+        if (!handle) {
             mvLog(MVLOG_FATAL, "Cannot find and destroy USB Handle by key: %" PRIxPTR, (uintptr_t)fdKey);
             return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
         }
-        usbLinkClose(usbHandle);
+
+        // close device_handle and release resources normally on destruction
+        // therefore usbLinkClose(handle) is not needed
         return X_LINK_PLATFORM_SUCCESS;
     } catch(const usb_error& e) {
         return parseLibusbError(static_cast<libusb_error>(e.code().value()));
@@ -847,13 +858,14 @@ return rc;
 
 #else
     try {
-        device_handle handle;
-        if(getPlatformDeviceFdFromKey(fdKey, out_param_ptr<void**>(handle))) {
+        // get non-owning device_handle* from the fd lookup container
+        auto* const handle = static_cast<device_handle*>(getPlatformDeviceFdFromKeySimple(fdKey));
+        if (handle == nullptr) {
             mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
             return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
         }
-        usb_read(handle, data, size);
-        handle.release();
+
+        usb_read(*handle, data, size);
         return X_LINK_PLATFORM_SUCCESS;
     } catch(const usb_error& e) {
         return parseLibusbError(static_cast<libusb_error>(e.code().value()));
@@ -909,13 +921,14 @@ int usbPlatformWrite(void* const fdKey, void *data, int size) noexcept
 
 #else
     try {
-        device_handle handle;
-        if(getPlatformDeviceFdFromKey(fdKey, out_param_ptr<void**>(handle))) {
+        // get non-owning device_handle* from the fd lookup container
+        auto* const handle = static_cast<device_handle*>(getPlatformDeviceFdFromKeySimple(fdKey));
+        if (handle == nullptr) {
             mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
             return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
         }
-        usb_write(handle, data, size);
-        handle.release();
+
+        usb_write(*handle, data, size);
         return X_LINK_PLATFORM_SUCCESS;
     } catch(const usb_error& e) {
         return parseLibusbError(static_cast<libusb_error>(e.code().value()));
