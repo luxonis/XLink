@@ -292,6 +292,8 @@ class device_handle : public unique_resource_ptr<libusb_device_handle, libusb_cl
 private:
     using _base = unique_resource_ptr<libusb_device_handle, libusb_close>;
 
+    static constexpr int DEFAULT_CHUNK_SIZE = 1024 * 1024;  // must be multiple of endpoint max packet size
+    static constexpr int DEFAULT_CHUNK_SIZE_USB1 = 64;      // must be multiple of endpoint max packet size
     static constexpr decltype(libusb_endpoint_descriptor::wMaxPacketSize) DEFAULT_MAX_PACKET_SIZE = 512;
     static constexpr std::array<decltype(libusb_endpoint_descriptor::wMaxPacketSize), 32> DEFAULT_MAX_PACKET_ARRAY{
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
@@ -304,7 +306,7 @@ private:
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
     };
 
-    decltype(libusb_device_descriptor::bcdUSB) bcdUSB{};
+    int chunkSize = DEFAULT_CHUNK_SIZE; // persisted for quick access by transfer methods
     std::array<decltype(libusb_endpoint_descriptor::wMaxPacketSize), 32> maxPacketSize = DEFAULT_MAX_PACKET_ARRAY;
     std::vector<int> claimedInterfaces;
 
@@ -315,9 +317,9 @@ private:
         return old;
     }
 
-    // get cached bcdUSB version of device
-    decltype(bcdUSB) get_bcdUSB() const noexcept {
-        return bcdUSB;
+    // get chunk size in bytes given device bcdUSB version
+    static int get_chunk_size(const uint16_t bcdUSB) noexcept {
+        return bcdUSB >= 0x200 ? DEFAULT_CHUNK_SIZE : DEFAULT_CHUNK_SIZE_USB1;
     }
 
     // given an endpoint address, return true if that address is for an IN endpoint, false for OUT
@@ -334,7 +336,7 @@ public:
     // caution: this constructor will not manage previously claimed interfaces and
     //          will default to DEFAULT_MAX_PACKET_SIZE for all endpoints
     explicit device_handle(libusb_device_handle* handle) noexcept(false)
-        : _base{handle ? handle : throw std::invalid_argument("device_handle == nullptr")}, bcdUSB{get_device_descriptor().bcdUSB} {}
+        : _base{handle ? handle : throw std::invalid_argument("device_handle == nullptr")}, chunkSize{get_chunk_size(get_device_descriptor().bcdUSB)} {}
 
     // create a device_handle from a raw libusb_device*
     explicit device_handle(libusb_device* device) noexcept(false) {
@@ -345,7 +347,7 @@ public:
         // call libusb_get_device_descriptor() directly since we already have the raw libusb_device*
         libusb_device_descriptor descriptor{};
         CALL_LOG_ERROR_THROW(libusb_get_device_descriptor, device, &descriptor);
-        bcdUSB = descriptor.bcdUSB;
+        chunkSize = get_chunk_size(descriptor.bcdUSB);
     }
 
     // wrap a platform-specific system device handle and get a libusb device_handle for it
@@ -355,7 +357,7 @@ public:
         CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sysDevHandle, out_param(*static_cast<_base*>(this)));
 
         // cache the device's bcdUSB version
-        bcdUSB = get_device_descriptor().bcdUSB;
+        chunkSize = get_chunk_size(get_device_descriptor().bcdUSB);
     }
 
     // create a device_handle from a usb_device wrapper
@@ -370,14 +372,14 @@ public:
     device_handle& operator=(const device_handle&) = delete;
     device_handle(device_handle &&other) noexcept :
         _base{std::move(other)},
-        bcdUSB{std::exchange(other.bcdUSB, {})},
+        chunkSize{std::exchange(other.chunkSize, DEFAULT_CHUNK_SIZE)},
         maxPacketSize{exchange_maxPacketSize(other.maxPacketSize)},
         claimedInterfaces{std::move(other.claimedInterfaces)}
     {}
     device_handle &operator=(device_handle &&other) noexcept {
         if (this != &other) {
             _base::operator=(std::move(other));
-            bcdUSB = std::exchange(other.bcdUSB, {});
+            chunkSize = std::exchange(other.chunkSize, DEFAULT_CHUNK_SIZE);
             maxPacketSize = exchange_maxPacketSize(other.maxPacketSize);
             claimedInterfaces = std::move(other.claimedInterfaces);
         }
@@ -398,7 +400,7 @@ public:
 
         // reset defaults
         // BUGBUG do not know what interfaces or endpoints are in use, therefore we don't know their max packet size
-        bcdUSB = ptr == nullptr ? decltype(bcdUSB){} : get_device_descriptor().bcdUSB;
+        chunkSize = ptr == nullptr ? DEFAULT_CHUNK_SIZE : get_chunk_size(get_device_descriptor().bcdUSB);
         maxPacketSize = DEFAULT_MAX_PACKET_ARRAY;
         claimedInterfaces.clear();
     }
@@ -406,7 +408,7 @@ public:
     // release ownership of the managed libusb_device_handle and all device interfaces
     // caller is responsible for calling libusb_release_interface() and libusb_close()
     device_handle::pointer release() noexcept {
-        bcdUSB = {};
+        chunkSize = DEFAULT_CHUNK_SIZE;
         maxPacketSize = DEFAULT_MAX_PACKET_ARRAY;
         claimedInterfaces.clear();
         return static_cast<_base*>(this)->release();
@@ -614,8 +616,6 @@ inline std::pair<libusb_error, intmax_t> device_handle::bulk_transfer(const unsi
     static constexpr auto ZLP_FORMAT =     "dp::libusb zerolp bulk_transfer(%u %s): %td/%jd bytes transmit";
     static constexpr auto SUCCESS_FORMAT = "dp::libusb success bulk_transfer(%u %s): %td/%jd bytes transmit in %lf ms (%lf MB/s)";
     static constexpr std::array<const char*, 2> DIRECTION_TEXT{"out", "in"};
-    static constexpr int DEFAULT_CHUNK_SIZE = 1024 * 1024;  // must be multiple of endpoint max packet size
-    static constexpr int DEFAULT_CHUNK_SIZE_USB1 = 64;      // must be multiple of endpoint max packet size
     static constexpr bool BUFFER_IS_CONST = static_cast<bool>(std::is_const<BufferValueType>::value);
     static constexpr auto CHUNK_TIMEOUT = (TimeoutMs == 0) ? ChunkTimeoutMs : std::min(ChunkTimeoutMs, TimeoutMs);
 
@@ -630,7 +630,6 @@ inline std::pair<libusb_error, intmax_t> device_handle::bulk_transfer(const unsi
     // start transfer
     else {
         const bool transmitZeroLengthPacket = ZeroLengthPacketEnding; // && (bufferSizeBytes % get_max_packet_size(endpoint) == 0);
-        const auto chunkSize = get_bcdUSB() >= 0x200 ? DEFAULT_CHUNK_SIZE : DEFAULT_CHUNK_SIZE_USB1;
         const auto completeSizeBytes = bufferSizeBytes;
         auto& rcNum = result.first;
         auto& transferredBytes = result.second;
