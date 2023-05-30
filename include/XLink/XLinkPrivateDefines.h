@@ -63,6 +63,8 @@ typedef struct xLinkDesc_t {
     xLinkDeviceHandle_t deviceHandle;
     linkId_t id;
     XLink_sem_t dispatcherClosedSem;
+    // profiling
+    XLinkProf_t profilingData;
 } xLinkDesc_t;
 
 streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,

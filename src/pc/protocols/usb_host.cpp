@@ -1078,83 +1078,124 @@ xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name)
 #include <usbiodef.h>
 #pragma comment(lib, "setupapi.lib")
 #include <setupapi.h>
+#include <vector>
+
+// get MxId given the vidpid and libusb device (Windows only)
+// Uses the Win32 SetupDI* apis. Several cautions:
+// - Movidius MyriadX usb devices often change their usb path when they load their bootloader/firmware
+// - Since USB is dynamic, it is technically possible for a device to change its path at any time
 std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
     if (dev == NULL) return {};
 
-    constexpr int MAX_NUM_DEVICES = 128;
-    struct WinUsbDevList2 {
-        HDEVINFO devInfo;
-        SP_DEVINFO_DATA infos[MAX_NUM_DEVICES];
-    };
-    WinUsbDevList2 devList;
-    WinUsbDevList2* pDevList = &devList;
+    // init device info vars
+    HDEVINFO hDevInfoSet;
+    SP_DEVINFO_DATA devInfoData{};
+    devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
 
-    std::string deviceId = "";
-
-    pDevList->devInfo = SetupDiGetClassDevs(&GUID_DEVINTERFACE_USB_DEVICE, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
-    if (pDevList->devInfo == INVALID_HANDLE_VALUE) {
+    // get USB host controllers; each has exactly one root hub
+    hDevInfoSet = SetupDiGetClassDevsA(&GUID_DEVINTERFACE_USB_HOST_CONTROLLER, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (hDevInfoSet == INVALID_HANDLE_VALUE) {
         return {};
     }
 
-    // create list
-    for(int i = 0; i < MAX_NUM_DEVICES; i++) {
-        pDevList->infos[i].cbSize = sizeof(SP_DEVINFO_DATA);
+    // iterate over usb host controllers and populate list with their location path for later matching to device paths
+    std::vector<std::string> hostControllerLocationPaths;
+    for(int i = 0; SetupDiEnumDeviceInfo(hDevInfoSet, i, &devInfoData); i++) {
+        // get location paths as a REG_MULTI_SZ
+        std::string locationPaths(1023, 0);
+        if (!SetupDiGetDeviceRegistryPropertyA(hDevInfoSet, &devInfoData, SPDRP_LOCATION_PATHS, NULL, (PBYTE)locationPaths.c_str(), (DWORD)locationPaths.size(), NULL)) {
+            continue;
+        }
+
+        // find PCI path in the multi string and emplace to back of vector
+        const auto pciPosition = locationPaths.find("PCIROOT");
+        if (pciPosition == std::string::npos) {
+            continue;
+        }
+        hostControllerLocationPaths.emplace_back(locationPaths.substr(pciPosition, strnlen_s(locationPaths.c_str() + pciPosition, locationPaths.size() - pciPosition)));
     }
 
-    for(int i = 0; SetupDiEnumDeviceInfo(pDevList->devInfo, i, pDevList->infos + i) && i < MAX_NUM_DEVICES; i++) {
-        char instance_id[128] = {};
-        if(!SetupDiGetDeviceInstanceIdA(pDevList->devInfo, pDevList->infos + i, (PSTR) instance_id, sizeof(instance_id), NULL)) {
+    // Free dev info, return if no usb host controllers found
+    SetupDiDestroyDeviceInfoList(hDevInfoSet);
+    if (hostControllerLocationPaths.empty()) {
+        return {};
+    }
+
+    // get USB devices
+    hDevInfoSet = SetupDiGetClassDevsA(&GUID_DEVINTERFACE_USB_DEVICE, NULL, NULL, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (hDevInfoSet == INVALID_HANDLE_VALUE) {
+        return {};
+    }
+
+    // iterate over usb devices and populate with device info
+    std::string goalPath{getLibusbDevicePath(dev)};
+    std::string deviceId;
+    for(int i = 0; SetupDiEnumDeviceInfo(hDevInfoSet, i, &devInfoData); i++) {
+        // get device instance id
+        char instanceId[128] {};
+        if(!SetupDiGetDeviceInstanceIdA(hDevInfoSet, &devInfoData, (PSTR)instanceId, sizeof(instanceId), NULL)) {
             continue;
         }
-        char serial_id[128] = {};
-        int vid = 0, pid = 0;
-        if(sscanf(instance_id, "USB\\VID_%x&PID_%x\\%s", &vid, &pid, serial_id) != 3) {
+
+        // get device vid, pid, and serial id
+        char serialId[128] {};
+        uint16_t vid = 0, pid = 0;
+        if(sscanf(instanceId, "USB\\VID_%hx&PID_%hx\\%s", &vid, &pid, serialId) != 3) {
             continue;
         }
 
-        char location_paths[1024] = {};
-        if (!SetupDiGetDeviceRegistryProperty(pDevList->devInfo, pDevList->infos + i, SPDRP_LOCATION_PATHS, NULL, (PBYTE)&location_paths, sizeof(location_paths), NULL)) {
+        // check if this is the device we are looking for
+        if(vidpid.first != vid || vidpid.second != pid) {
             continue;
         }
 
-        char* full_path = location_paths;
-        while (*full_path) {
-
-            std::string holder(full_path);
-            holder.resize(holder.size() + 32);
-
-            size_t pos = 0;
-            std::string out = "";
-            if ((pos = std::string(holder.c_str()).find("#USBROOT")) != std::string::npos) {
-                int off = 0;
-                int port = 0;
-                if (sscanf(holder.c_str() + pos, "#USBROOT(%4d)%n", &port, &off) == 1) {
-                    pos += off;
-                    out += std::to_string(port + 1); // USBROOT+1 to match
-                    while (sscanf(holder.c_str() + pos, "#USB(%4d)%n", &port, &off) == 1) {
-                        pos += off;
-                        out += "." + std::to_string(port);
-                    }
-                }
-            }
-
-            if(vidpid.first == vid && vidpid.second == pid && out == getLibusbDevicePath(dev)) {
-                // compare
-                deviceId = serial_id;
-                break;
-            }
-
-            // Move to next string
-            full_path = full_path + strlen(full_path) + 1;
+        // get location paths as a REG_MULTI_SZ
+        std::string locationPaths(1023, 0);
+        if (!SetupDiGetDeviceRegistryPropertyA(hDevInfoSet, &devInfoData, SPDRP_LOCATION_PATHS, NULL, (PBYTE)locationPaths.c_str(), (DWORD)locationPaths.size(), NULL)) {
+            continue;
         }
 
-        if(!deviceId.empty()) {
+        // find PCI path in the multi string and isolate that path
+        const auto pciPosition = locationPaths.find("PCIROOT");
+        if (pciPosition == std::string::npos) {
+            continue;
+        }
+        const auto usbPath = locationPaths.substr(pciPosition, strnlen_s(locationPaths.c_str() + pciPosition, locationPaths.size() - pciPosition));
+
+        // find matching host controller
+        const auto hostController = std::find_if(hostControllerLocationPaths.begin(), hostControllerLocationPaths.end(), [&usbPath](const std::string& candidateController) noexcept {
+            // check if the usb path starts with the candidate controller path
+            return usbPath.find(candidateController) == 0;
+        });
+        if (hostController == hostControllerLocationPaths.end()) {
+            mvLog(MVLOG_WARN, "Found device with matching vid/pid but no matching USBROOT hub");
+            continue;
+        }
+
+        // initialize pseudo libusb path using the host controller index +1 as the "libusb bus number"
+        std::string pseudoLibUsbPath = std::to_string(std::distance(hostControllerLocationPaths.begin(), hostController) + 1);
+
+        // there is only one root hub per host controller, it is always on port 0,
+        // therefore start the search past this known root hub in the usb path
+        static constexpr auto usbRootLength = sizeof("#USBROOT(0)") - 1;
+        auto searchPosition{usbPath.c_str() + hostController->size() + usbRootLength};
+
+        // parse and transform the Windows USB path to the pseudo libusb path
+        int charsRead = 0;
+        int port = 0;
+        while (sscanf(searchPosition, "#USB(%4d)%n", &port, &charsRead) == 1) {
+            searchPosition += charsRead;
+            pseudoLibUsbPath += '.' + std::to_string(port);
+        }
+
+        if(pseudoLibUsbPath == goalPath) {
+            deviceId = serialId;
             break;
         }
     }
 
     // Free dev info
-    SetupDiDestroyDeviceInfoList(pDevList->devInfo);
+    SetupDiDestroyDeviceInfoList(hDevInfoSet);
 
     // Return deviceId if found
     return deviceId;

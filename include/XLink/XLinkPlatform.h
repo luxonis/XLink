@@ -50,6 +50,9 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler);
 xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, unsigned sizeFoundDevices,
                                                      unsigned *out_amountOfFoundDevices);
+xLinkPlatformErrorCode_t XLinkPlatformFindDevicesDynamic(const deviceDesc_t in_deviceRequirements,
+                                                     deviceDesc_t* out_foundDevices, unsigned sizeFoundDevices,
+                                                     unsigned *out_amountOfFoundDevices, int timeoutMs, bool (*cb)(deviceDesc_t*, unsigned int));
 
 xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
     XLinkDeviceState_t state,

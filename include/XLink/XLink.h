@@ -132,6 +132,23 @@ XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirement
                                          unsigned int *out_foundDevicesCount);
 
 /**
+ * @brief Returns all Myriad devices description which meets the requirements
+ * @param[in]      state - state of device enum (booted, not booted or any state)
+ * @param[in]      in_deviceRequirements - structure with device requirements (protocol, platform).
+ * @param[in,out]  out_foundDevicesPtr - pointer to array with all found devices descriptions
+ * @param[out]     devicesArraySize - size of out_foundDevicesPtr
+ * @param[out]     out_foundDevicesCount - amount of found devices
+ * @param[in]     timeoutMs - for how long to search for. -1 forever, 0 one iteration only.
+ * @param[in]     cb - callback with current set of devices for each iteration
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkSearchForDevices(const deviceDesc_t in_deviceRequirements,
+                                         deviceDesc_t *out_foundDevicesPtr,
+                                         const unsigned int devicesArraySize,
+                                         unsigned int *out_foundDevicesCount, int timeoutMs, bool (*cb)(deviceDesc_t*, unsigned int));
+
+
+/**
  * @brief Connects to specific device, starts dispatcher and pings remote
  * @param[in,out] handler - XLink communication parameters (file path name for underlying layer)
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
@@ -239,11 +256,14 @@ const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val);
 
 /**
  * @brief Profiling funcs - keeping them global for now
+ * Invalid to be called if XLink was not yet initialized
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkProfStart();
 XLinkError_t XLinkProfStop();
 XLinkError_t XLinkProfPrint();
+XLinkError_t XLinkGetGlobalProfilingData(XLinkProf_t* prof);
+XLinkError_t XLinkGetProfilingData(linkId_t id, XLinkProf_t* prof);
 
 
 // ------------------------------------

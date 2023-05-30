@@ -244,6 +244,21 @@ XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirement
     return parsePlatformError(rc);
 }
 
+XLinkError_t XLinkSearchForDevices(const deviceDesc_t in_deviceRequirements,
+                                         deviceDesc_t *out_foundDevicesPtr,
+                                         const unsigned int devicesArraySize,
+                                         unsigned int* out_foundDevicesCount,
+                                         int timeoutMs,
+                                         bool (*cb)(deviceDesc_t*, unsigned int)) {
+    XLINK_RET_IF(out_foundDevicesPtr == NULL);
+    XLINK_RET_IF(devicesArraySize <= 0);
+    XLINK_RET_IF(out_foundDevicesCount == NULL);
+
+    xLinkPlatformErrorCode_t rc;
+    rc = XLinkPlatformFindDevicesDynamic(in_deviceRequirements, out_foundDevicesPtr, devicesArraySize, out_foundDevicesCount, timeoutMs, cb);
+    return parsePlatformError(rc);
+}
+
 //Called only from app - per device
 XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, const unsigned int msTimeout);
 XLinkError_t XLinkConnect(XLinkHandler_t* handler)
@@ -406,6 +421,7 @@ XLinkError_t XLinkResetAll()
 
 XLinkError_t XLinkProfStart()
 {
+    XLINK_RET_IF(glHandler == NULL);
     glHandler->profEnable = 1;
     glHandler->profilingData.totalReadBytes = 0;
     glHandler->profilingData.totalWriteBytes = 0;
@@ -419,12 +435,14 @@ XLinkError_t XLinkProfStart()
 
 XLinkError_t XLinkProfStop()
 {
+    XLINK_RET_IF(glHandler == NULL);
     glHandler->profEnable = 0;
     return X_LINK_SUCCESS;
 }
 
 XLinkError_t XLinkProfPrint()
 {
+    XLINK_RET_IF(glHandler == NULL);
     printf("XLink profiling results:\n");
     if (glHandler->profilingData.totalWriteTime)
     {
@@ -448,6 +466,26 @@ XLinkError_t XLinkProfPrint()
                glHandler->profilingData.totalBootTime /
                glHandler->profilingData.totalBootCount);
     }
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkGetGlobalProfilingData(XLinkProf_t* prof)
+{
+    XLINK_RET_IF(prof == NULL);
+    XLINK_RET_IF(glHandler == NULL);
+    // TODO(themarpe) - thread safe readout
+    *prof = glHandler->profilingData;
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkGetProfilingData(linkId_t id, XLinkProf_t* prof)
+{
+    XLINK_RET_IF(prof == NULL);
+    xLinkDesc_t* link = getLinkById(id);
+    XLINK_RET_IF(link == NULL);
+
+    // TODO(themarpe) - thread safe readout
+    *prof = link->profilingData;
     return X_LINK_SUCCESS;
 }
 
