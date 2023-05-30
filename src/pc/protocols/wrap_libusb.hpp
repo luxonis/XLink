@@ -19,17 +19,6 @@
 #ifndef _WRAP_LIBUSB_HPP_
 #define _WRAP_LIBUSB_HPP_
 
-// project
-#define MVLOG_UNIT_NAME xLinkUsb
-#include "XLink/XLinkLog.h"
-
-// libraries
-#ifdef XLINK_LIBUSB_LOCAL
-#include <libusb.h>
-#else
-#include <libusb-1.0/libusb.h>
-#endif
-
 #include <algorithm>
 #include <array>
 #include <cassert>

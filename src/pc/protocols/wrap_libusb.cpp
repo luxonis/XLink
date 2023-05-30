@@ -16,6 +16,17 @@
     limitations under the License.
 */
 
+// project
+#define MVLOG_UNIT_NAME xLinkUsb
+#include "XLink/XLinkLog.h"
+
+// libraries
+#ifdef XLINK_LIBUSB_LOCAL
+#include <libusb.h>
+#else
+#include <libusb-1.0/libusb.h>
+#endif
+
 #include "wrap_libusb.hpp"
 
 std::mutex dp::libusb::device_list::mtx;
