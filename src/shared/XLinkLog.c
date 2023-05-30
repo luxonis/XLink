@@ -124,7 +124,7 @@ void XLinkLogGetThreadName(char *buf, size_t len){
 #ifdef __shave__
 __attribute__((section(".laststage")))
 #endif
-int __attribute__ ((unused))
+int MVLOG_ATTRIBUTE((unused))
 logprintf(mvLog_t curLogLvl, mvLog_t lvl, const char * func, const int line,
           const char * format, ...)
 {

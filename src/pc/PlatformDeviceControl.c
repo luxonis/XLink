@@ -30,7 +30,7 @@ int usbFdRead = -1;
 #include "XLinkPublicDefines.h"
 
 #define USB_LINK_SOCKET_PORT 5678
-#define UNUSED __attribute__((unused))
+#define UNUSED MVLOG_ATTRIBUTE((unused))
 
 
 static UsbSpeed_t usb_speed_enum = X_LINK_USB_SPEED_UNKNOWN;

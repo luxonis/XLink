@@ -44,12 +44,18 @@ typedef enum mvLog_t{
     MVLOG_LAST,
 } mvLog_t;
 
-// Windows-only
-#if (defined (WINNT) || defined(_WIN32) || defined(_WIN64) )
-#define __attribute__(x)
-#define FUNCATTR_WEAK static
+// attribute directive support test
+#if defined(__has_attribute)
+#  define MVLOG_ATTRIBUTE(x) __attribute__(x)
+// weak function support test
+#  if __has_attribute(weak)
+#    define FUNCATTR_WEAK
+#  else
+#    define FUNCATTR_WEAK static
+#  endif
 #else
-#define FUNCATTR_WEAK
+#  define MVLOG_ATTRIBUTE(x)
+#  define FUNCATTR_WEAK static
 #endif
 
 #define _MVLOGLEVEL(UNIT_NAME)  mvLogLevel_ ## UNIT_NAME
@@ -61,7 +67,7 @@ typedef enum mvLog_t{
 #ifndef MVLOG_UNIT_NAME
 #define MVLOG_UNIT_NAME global
 #else
-FUNCATTR_WEAK mvLog_t __attribute__ ((weak)) MVLOGLEVEL(MVLOG_UNIT_NAME) = MVLOG_LAST;
+FUNCATTR_WEAK mvLog_t MVLOG_ATTRIBUTE((weak)) MVLOGLEVEL(MVLOG_UNIT_NAME) = MVLOG_LAST;
 #endif
 
 
@@ -75,7 +81,7 @@ FUNCATTR_WEAK mvLog_t __attribute__ ((weak)) MVLOGLEVEL(MVLOG_UNIT_NAME) = MVLOG
 extern mvLog_t MVLOGLEVEL(global);
 extern mvLog_t MVLOGLEVEL(default);
 
-int __attribute__ ((unused)) logprintf(mvLog_t curLogLvl, mvLog_t lvl, const char * func, const int line, const char * format, ...);
+int MVLOG_ATTRIBUTE((unused)) logprintf(mvLog_t curLogLvl, mvLog_t lvl, const char * func, const int line, const char * format, ...);
 
 #define mvLog(lvl, format, ...)                              \
     logprintf(MVLOGLEVEL(MVLOG_UNIT_NAME), lvl, __func__, __LINE__, format, ##__VA_ARGS__)
