@@ -440,7 +440,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
                 // Convert to HEX presentation and store into mx_id
                 for (int i = 0; i < expectedMxIdReadSize; i++) {
-                    sprintf(mxId + 2*i, "%02X", rbuf[i]);
+                    snprintf(mxId + 2*i, 3, "%02X", rbuf[i]);
                 }
 
                 // Indicate no error

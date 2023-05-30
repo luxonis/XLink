@@ -138,7 +138,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevicesDynamic(const deviceDesc_t in_d
         {
             deviceDesc_t* devices = out_foundDevices;
             int write_index = 0;
-            for(int i = 0; i < *out_amountOfFoundDevices; i++){
+            for(int i = 0; i < static_cast<int>(*out_amountOfFoundDevices); i++){
                 bool duplicate = false;
                 for(int j = i - 1; j >= 0; j--){
                     // Check if duplicate

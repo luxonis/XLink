@@ -31,7 +31,7 @@
 #include <Iphlpapi.h>
 #pragma comment(lib, "Ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
-#define errno WSAGetLastError()
+#define tcpip_errno WSAGetLastError()
 #define ERRNO_EAGAIN WSAETIMEDOUT
 
 #else
@@ -49,6 +49,7 @@
 #include <netinet/tcp.h>
 using TCPIP_SOCKET = int;
 #define ERRNO_EAGAIN EAGAIN
+#define tcpip_errno errno
 
 #endif
 
@@ -1070,11 +1071,13 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
         return -1;
     }
 
+#if defined(TCP_QUICKACK)
     if(tcpip_setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &on, sizeof(on)) < 0)
     {
         // Do not error out, as its not portable
         mvLog(MVLOG_WARN, "TCP_QUICKACK could not be enabled");
     }
+#endif
 
     if(connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
     {
@@ -1230,8 +1233,8 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
 
             PACKET_LEN packetlen = 0;
             if(( packetlen = recvfrom(sockfd, reinterpret_cast<char*>(&request), sizeof(request), 0, (struct sockaddr*) &send_addr, &socklen)) < 0){
-                if(errno != ERRNO_EAGAIN) {
-                    mvLog(MVLOG_ERROR, "Device discovery service - Error recvform - %d\n", errno);
+                if(tcpip_errno != ERRNO_EAGAIN) {
+                    mvLog(MVLOG_ERROR, "Device discovery service - Error recvform - %d\n", tcpip_errno);
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 }
                 continue;
