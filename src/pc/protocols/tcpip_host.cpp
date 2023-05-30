@@ -132,7 +132,7 @@ typedef struct
 /* **************************************************************************/
 
 // Debug, uncomment first line for some printing
-//#define HAS_DEBUG
+// #define HAS_DEBUG
 #undef HAS_DEBUG
 
 static constexpr const auto DEFAULT_DEVICE_DISCOVERY_PORT = 11491;
@@ -348,7 +348,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
         struct sockaddr_in broadcast_addr = { 0 };
         broadcast_addr.sin_addr.s_addr = INADDR_BROADCAST;
         broadcast_addr.sin_family = AF_INET;
-        broadcast_addr.sin_port = htons(BROADCAST_UDP_PORT);
+        broadcast_addr.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
 
         tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
         sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr));
@@ -659,6 +659,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     if(target_mxid != NULL && strlen(target_mxid) > 0){
         check_target_mxid = true;
     }
+    DEBUG("check target mxid = %d\n", check_target_mxid);
 
     // Create socket first (also capable of doing broadcasts)
     if(tcpip_create_socket_broadcast(&sock, DEVICE_DISCOVERY_SOCKET_TIMEOUT) != TCPIP_HOST_SUCCESS){
@@ -749,20 +750,21 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
             DEBUG("target_state: %d, foundState: %d\n", target_state, foundState);
             if(target_state != X_LINK_ANY_STATE && foundState != target_state) continue;
             // Check that platform matches
-            DEBUG("target_platform: %d, platform: %d\n", target_platform, platform});
+            DEBUG("target_platform: %d, platform: %d\n", target_platform, platform);
             if(target_platform != X_LINK_ANY_PLATFORM && platform != target_platform) continue;
 
+            DEBUG("target id: %s, found id: %s\n", target_mxid, bufferId);
             // Correct device found, increase matched num and save details
             // Convert IP address in binary into string
             inet_ntop(AF_INET, &dev_addr.sin_addr, ip_addr, sizeof(ip_addr));
 
             // Check IP if needed
-            if(check_target_ip && strcmp(target_ip, ip_addr) != 0){
+            if(check_target_ip && (strcmp(target_ip, ip_addr) != 0)){
                 // IP doesn't match, skip this device
                 continue;
             }
             // Check MXID if needed
-            if(check_target_mxid && strcmp(target_mxid, bufferId)){
+            if(check_target_mxid && (strcmp(target_mxid, bufferId) != 0)){
                 // MXID doesn't match, skip this device
                 continue;
             }
@@ -1242,7 +1244,7 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
 
             // Debug
             #ifdef HAS_DEBUG
-                DEBUG("Received packet, length: %d data: ", packetlen);
+                DEBUG("Received packet, length: %zd data: ", packetlen);
                 for(ssize_t i = 0; i < packetlen; i++){
                     DEBUG("%02X ", ((uint8_t*)&request)[i]);
                 }
@@ -1254,16 +1256,34 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
                 case TCPIP_HOST_CMD_DEVICE_DISCOVER: {
                     mvLog(MVLOG_DEBUG, "Received device discovery request, sending back - mxid: %s, state: %u\n", deviceId.c_str(), (uint32_t) deviceState);
 
-                    // send back device discovery response
-                    tcpipHostDeviceDiscoveryResp_t resp = {};
-                    resp.command = TCPIP_HOST_CMD_DEVICE_DISCOVER;
-                    strncpy(resp.mxid, deviceId.c_str(), sizeof(resp.mxid));
-                    resp.state = deviceState;
+                    if(devicePlatform == TCPIP_HOST_PLATFORM_MYRIAD_X) {
 
-                    if(sendto(sockfd, reinterpret_cast<char*>(&resp), sizeof(resp), 0, (struct sockaddr*) &send_addr, sizeof(send_addr)) < 0) {
-                        mvLog(MVLOG_ERROR, "Device discovery service - Error sendto...\n");
-                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                        continue;
+                        // send back device discovery response
+                        tcpipHostDeviceDiscoveryResp_t resp = {};
+                        resp.command = TCPIP_HOST_CMD_DEVICE_DISCOVER;
+                        strncpy(resp.mxid, deviceId.c_str(), sizeof(resp.mxid));
+                        resp.state = deviceState;
+
+                        if(sendto(sockfd, reinterpret_cast<char*>(&resp), sizeof(resp), 0, (struct sockaddr*) &send_addr, sizeof(send_addr)) < 0) {
+                            mvLog(MVLOG_ERROR, "Device discovery service - Error sendto...\n");
+                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                            continue;
+                        }
+
+                    } else {
+                        // send back device discovery EX response
+                        tcpipHostDeviceDiscoveryExResp_t resp = {};
+                        resp.command = TCPIP_HOST_CMD_DEVICE_DISCOVERY_EX;
+                        resp.platform = devicePlatform;
+                        resp.state = deviceState;
+                        resp.protocol = TCPIP_HOST_PROTOCOL_TCP_IP;
+                        strncpy(resp.id, deviceId.c_str(), sizeof(resp.id));
+
+                        if(sendto(sockfd, reinterpret_cast<char*>(&resp), sizeof(resp), 0, (struct sockaddr*) &send_addr, sizeof(send_addr)) < 0) {
+                            mvLog(MVLOG_ERROR, "Device discovery service - Error sendto...\n");
+                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                            continue;
+                        }
                     }
 
                 } break;
@@ -1291,10 +1311,6 @@ xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDevi
                 case TCPIP_HOST_CMD_RESET: {
                     if(resetCb) resetCb();
                 } break;
-
-                // TODO(themarpe) - handle
-                // case TCPIP_HOST_CMD_DEVICE_DISCOVERY_EX: {
-                // } break;
 
                 default: {
 
