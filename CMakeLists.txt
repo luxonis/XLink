@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # With additions of Luxonis
 
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.3)
 
 include("cmake/HunterGate.cmake")
 HunterGate(
@@ -152,6 +152,7 @@ else()
 endif()
 
 # Add flags
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_default_flags(${TARGET_NAME})
 
 # Check if pthread_getname_np exists

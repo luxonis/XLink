@@ -1,13 +1,19 @@
 ## setup compilation flags
 # conditionally applies flag. If flag is supported by current compiler, it will be added to compile options.
 include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
 function(add_flag target flag)
     check_c_compiler_flag(${flag} FLAG_${flag})
     if (FLAG_${flag} EQUAL 1)
         target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:C>:${flag}>)
     endif ()
+    check_cxx_compiler_flag(${flag} FLAGXX_${flag})
+    if (FLAGXX_${flag} EQUAL 1)
+        target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${flag}>)
+    endif ()
 endfunction()
 
+# only works for C source files
 function(add_flag_source source flag)
     check_c_compiler_flag(${flag} FLAG_${flag})
     if (FLAG_${flag} EQUAL 1)
