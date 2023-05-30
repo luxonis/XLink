@@ -661,6 +661,12 @@ void dispatcherCloseLink(xLinkDeviceHandle_t deviceHandle)
     link->deviceHandle.xLinkFD = NULL;
     link->peerState = XLINK_NOT_INIT;
     link->nextUniqueStreamId = 0;
+    link->profilingData.totalBootCount = 0;
+    link->profilingData.totalBootTime = 0.0f;
+    link->profilingData.totalReadBytes = 0;
+    link->profilingData.totalReadTime = 0.0f;
+    link->profilingData.totalWriteBytes = 0;
+    link->profilingData.totalWriteTime = 0.0f;
 
     for (int index = 0; index < XLINK_MAX_STREAMS; index++) {
         streamDesc_t* stream = &link->availableStreams[index];

@@ -50,6 +50,8 @@ xLinkDesc_t* getLinkUnsafe(void* fd);
 xLinkState_t getXLinkState(xLinkDesc_t* link);
 XLinkError_t getLinkUpDeviceHandleByLinkId(linkId_t const linkId, xLinkDeviceHandle_t* const out_handle);
 XLinkError_t getLinkUpDeviceHandleByStreamId(streamId_t const streamId, xLinkDeviceHandle_t* const out_handle);
+XLinkError_t addLinkProfilingByStreamId(streamId_t const streamId, size_t size, float time, bool write);
+XLinkError_t addLinkProfilingByLinkId(linkId_t const id, size_t size, float time, bool write);
 
 streamId_t getStreamIdByName(xLinkDesc_t* link, const char* name);
 

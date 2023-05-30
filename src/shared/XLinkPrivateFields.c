@@ -41,6 +41,37 @@ XLinkError_t getLinkUpDeviceHandleByStreamId(streamId_t const streamId, xLinkDev
     return getLinkUpDeviceHandleByLinkId(id, out_handle);
 }
 
+XLinkError_t addLinkProfilingByStreamId(streamId_t const streamId, size_t size, float time, bool write) {
+    linkId_t id = EXTRACT_LINK_ID(streamId);
+    return addLinkProfilingByLinkId(id, size, time, write);
+}
+
+XLinkError_t addLinkProfilingByLinkId(linkId_t const id, size_t size, float time, bool write) {
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, X_LINK_ERROR);
+
+    // Error if no valid id found
+    XLinkError_t ret = X_LINK_ERROR;
+    for (int i = 0; i < MAX_LINKS; i++) {
+        if (availableXLinks[i].id == id) {
+
+            if(write) {
+                availableXLinks[i].profilingData.totalWriteBytes += size;
+                availableXLinks[i].profilingData.totalWriteTime += time;
+            } else {
+                availableXLinks[i].profilingData.totalReadBytes += size;
+                availableXLinks[i].profilingData.totalReadTime += time;
+            }
+            // Exit the loop
+            break;
+        }
+    }
+
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, X_LINK_ERROR);
+    // Return success/error status
+    return ret;
+}
+
+
 XLinkError_t getLinkUpDeviceHandleByLinkId(linkId_t id, xLinkDeviceHandle_t* const out_handle)
 {
     ASSERT_XLINK(out_handle);

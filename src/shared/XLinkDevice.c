@@ -127,6 +127,12 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
         link->id = INVALID_LINK_ID;
         link->deviceHandle.xLinkFD = NULL;
         link->peerState = XLINK_NOT_INIT;
+        link->profilingData.totalBootCount = 0;
+        link->profilingData.totalBootTime = 0.0f;
+        link->profilingData.totalReadBytes = 0;
+        link->profilingData.totalReadTime = 0.0f;
+        link->profilingData.totalWriteBytes = 0;
+        link->profilingData.totalWriteTime = 0.0f;
         int stream;
         for (stream = 0; stream < XLINK_MAX_STREAMS; stream++)
             link->availableStreams[stream].id = INVALID_STREAM_ID;

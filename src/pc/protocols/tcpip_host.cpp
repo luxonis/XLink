@@ -355,7 +355,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
         struct sockaddr_in broadcast_addr = { 0 };
         broadcast_addr.sin_addr.s_addr = INADDR_BROADCAST;
         broadcast_addr.sin_family = AF_INET;
-        broadcast_addr.sin_port = htons(BROADCAST_UDP_PORT);
+        broadcast_addr.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
 
         tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
         sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr));
@@ -426,7 +426,7 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
         struct sockaddr_in broadcast_addr = { 0 };
         broadcast_addr.sin_addr.s_addr = INADDR_BROADCAST;
         broadcast_addr.sin_family = AF_INET;
-        broadcast_addr.sin_port = htons(BROADCAST_UDP_PORT);
+        broadcast_addr.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
 
         tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
         sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr));
@@ -524,7 +524,7 @@ xLinkPlatformErrorCode_t tcpip_perform_search(void* ctx, deviceDesc_t* devices, 
         // send unicast device discovery
         struct sockaddr_in device_address;
         device_address.sin_family = AF_INET;
-        device_address.sin_port = htons(BROADCAST_UDP_PORT);
+        device_address.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
 
         // Convert address to binary
         #if (defined(_WIN32) || defined(__USE_W32_SOCKETS)) && (_WIN32_WINNT <= 0x0501)
