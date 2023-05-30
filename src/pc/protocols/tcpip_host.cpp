@@ -737,6 +737,70 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
     return 0;
 }
 
+#ifdef __linux__
+int tcpipPlatformWriteMulti(xLinkEvent_t* event)
+{
+
+    // Up to 3 messages
+    struct mmsghdr msg[3];
+
+    memset(msg[0], 0, sizeof(msg[0]));
+    msg1[0].iov_base = "one";
+    msg1[0].iov_len = 3;
+    msg1[1].iov_base = "two";
+    msg1[1].iov_len = 3;
+
+   memset(&msg2, 0, sizeof(msg2));
+    msg2.iov_base = "three";
+    msg2.iov_len = 5;
+
+   memset(msg, 0, sizeof(msg));
+    msg[0].msg_hdr.msg_iov = msg1;
+    msg[0].msg_hdr.msg_iovlen = 2;
+
+   msg[1].msg_hdr.msg_iov = &msg2;
+    msg[1].msg_hdr.msg_iovlen = 1;
+
+   retval = sendmmsg(sockfd, msg, 2, 0);
+    if (retval == -1)
+        perror("sendmmsg()");
+    else
+        printf("%d messages sent\n", retval);
+
+    int byteCount = 0;
+
+    void* tmpsockfd = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
+
+    while(byteCount < size)
+    {
+        // Use send instead of write and ignore SIGPIPE
+        //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
+
+        int flags = 0;
+        #if defined(MSG_NOSIGNAL)
+            // Use flag NOSIGNAL on send call
+            flags = MSG_NOSIGNAL;
+        #endif
+
+        int rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
+        if(rc <= 0)
+        {
+            return -1;
+        }
+        else
+        {
+            byteCount += rc;
+        }
+    }
+
+    return 0;
+}
+#endif
 
 // TODO add IPv6 to tcpipPlatformConnect()
 int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
@@ -883,7 +947,7 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     if(tcpip_setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &on, sizeof(on)) < 0)
     {
-        // Do not error out, as its not portable
+        // Do not error out, as not portable
         mvLog(MVLOG_WARN, "TCP_QUICKACK could not be enabled");
     }
 

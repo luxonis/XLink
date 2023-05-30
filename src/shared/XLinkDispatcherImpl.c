@@ -150,23 +150,7 @@ int dispatcherEventSend(xLinkEvent_t *event)
     mvLog(MVLOG_DEBUG, "Send event: %s, size %u, streamId %u.\n",
         TypeToStr(event->header.type), event->header.size, event->header.streamId);
 
-    int rc = XLinkPlatformWrite(&event->deviceHandle,
-        &event->header, sizeof(event->header));
-
-    if(rc < 0) {
-        mvLog(MVLOG_ERROR,"Write failed (header) (err %d) | event %s\n", rc, TypeToStr(event->header.type));
-        return rc;
-    }
-
-    if (event->header.type == XLINK_WRITE_REQ) {
-        rc = writeEventMultipart(&event->deviceHandle, event->data, event->header.size, event->data2, event->data2Size);
-        if(rc < 0) {
-            mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
-            return rc;
-        }
-    }
-
-    return 0;
+    return XLinkPlatformEventSend(event);
 }
 
 int dispatcherEventReceive(xLinkEvent_t* event){

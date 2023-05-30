@@ -33,6 +33,45 @@
 // ------------------------------------
 // XLinkPlatform API implementation. Begin.
 // ------------------------------------
+int XLinkPlatformEventSend(xLinkEvent_t *event) {
+    // Enable specialization. If Linux & TCP_IP
+#ifdef __linux__
+    bool is_linux = true;
+#else
+    bool is_linux = false;
+#endif
+
+    if(is_linux && event->deviceHandle.protocol == X_LINK_TCP_IP) {
+
+        #ifdef __linux__
+        int tcpipPlatformWriteMulti(xLinkEvent_t* event)
+        #endif
+        return tcpipPlatformWriteMulti(event);
+
+    } else {
+
+        int rc = XLinkPlatformWrite(&event->deviceHandle,
+            &event->header, sizeof(event->header));
+
+        if(rc < 0) {
+            mvLog(MVLOG_ERROR,"Write failed (header) (err %d) | event %s\n", rc, TypeToStr(event->header.type));
+            return rc;
+        }
+
+        if (event->header.type == XLINK_WRITE_REQ) {
+            rc = writeEventMultipart(&event->deviceHandle, event->data, event->header.size, event->data2, event->data2Size);
+            if(rc < 0) {
+                mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
+                return rc;
+            }
+        }
+
+        return 0;
+
+    }
+
+    return 0;
+}
 
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 {
