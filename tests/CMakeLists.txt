@@ -29,6 +29,13 @@ macro(xlink_add_test test_name test_src)
             )
         endif()
     endif()
+
+    # Add to test suite
+    add_test(NAME ${test_name} COMMAND
+        "$<TARGET_FILE:${test_name}>"
+        COMMAND_EXPAND_LISTS
+    )
+
 endmacro()
 
 # Helper 'xlink_add_client_server_test'
@@ -77,6 +84,9 @@ xlink_add_client_server_test(connection_shutdown_test 8 10)
 
 # RTT test
 xlink_add_test(rtt_test rtt_test.cpp)
+
+# Throughput test
+xlink_add_test(throughput_test throughput_test.cpp)
 
 # TODO(themarpe) - XLinkConnectWithTimeout doesn't work yet as expected
 # # connect timeout test

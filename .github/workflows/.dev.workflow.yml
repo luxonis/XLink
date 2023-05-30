@@ -45,17 +45,27 @@ jobs:
         choco install mingw
         choco upgrade mingw
 
-    - name: configure
+    - name: configure (Debug)
       if: matrix.compiler == 'default'
       run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON
 
-    - name: configure
+    - name: configure (Debug)
       if: matrix.compiler == 'mingw'
       run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -G"MinGW Makefiles"
 
-    - name: build
+    - name: build (Debug)
       run: cmake --build build --parallel --config Debug
 
-    - name: test
+    - name: test (Debug)
       shell: bash
       run: ctest --test-dir build -C Debug --output-on-failure
+
+    - name: reconfigure (Release)
+      run: cmake . -Bbuild -DCMAKE_BUILD_TYPE=Release
+
+    - name: build (Release)
+      run: cmake --build build --parallel --config Release
+
+    - name: test (Release)
+      shell: bash
+      run: ctest --test-dir build -C Release --output-on-failure

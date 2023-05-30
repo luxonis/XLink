@@ -238,6 +238,14 @@ static tcpipHostDevicePlatform_t tcpip_convert_device_platform(XLinkPlatform_t p
     return TCPIP_HOST_PLATFORM_INVALID;
 }
 
+static int tcpip_setsockopt(int __fd, int __level, int __optname, const void *__optval, socklen_t __optlen) {
+#if (defined(_WIN32) || defined(_WIN64) )
+    return setsockopt(__fd, __level, __optname, (const char*) __optval, __optlen);
+#else
+    return setsockopt(__fd, __level, __optname, __optval, __optlen);
+#endif
+}
+
 static tcpipHostError_t tcpip_create_socket(TCPIP_SOCKET* out_sock, bool broadcast, int timeout_ms)
 {
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -681,6 +689,13 @@ int tcpipPlatformRead(void *fdKey, void *data, int size)
         else
         {
             nread += rc;
+            int on = 1;
+            if(tcpip_setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &on, sizeof(on)) < 0)
+            {
+                // Do not error out, as not portable
+                // Warning is not needed, as its issued once at the beginnning
+                // mvLog(MVLOG_WARN, "TCP_QUICKACK could not be enabled");
+            }
         }
     }
     return 0;
@@ -722,13 +737,6 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
     return 0;
 }
 
-static int tcpip_setsockopt(int __fd, int __level, int __optname, const void *__optval, socklen_t __optlen) {
-#if (defined(_WIN32) || defined(_WIN64) )
-    return setsockopt(__fd, __level, __optname, (const char*) __optval, __optlen);
-#else
-    return setsockopt(__fd, __level, __optname, __optval, __optlen);
-#endif
-}
 
 // TODO add IPv6 to tcpipPlatformConnect()
 int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
@@ -738,6 +746,7 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     {
         mvLog(MVLOG_FATAL, "Couldn't open socket for server");
         tcpip_close_socket(sock);
+        return X_LINK_PLATFORM_ERROR;
     }
 
     int reuse_addr = 1;
@@ -747,6 +756,7 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     {
         mvLog(MVLOG_FATAL, "Couldn't set server socket options");
         tcpip_close_socket(sock);
+        return X_LINK_PLATFORM_ERROR;
     }
 
     // Disable sigpipe reception on send
@@ -776,12 +786,14 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
         mvLog(MVLOG_FATAL, "Couldn't bind to server socket");
         perror("bind");
         tcpip_close_socket(sock);
+        return X_LINK_PLATFORM_ERROR;
     }
 
     if(listen(sock, 1) < 0)
     {
         mvLog(MVLOG_FATAL, "Couldn't listen to server socket");
         tcpip_close_socket(sock);
+        return X_LINK_PLATFORM_ERROR;
     }
 
 #if (defined(_WIN32) || defined(_WIN64) )
@@ -792,9 +804,13 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
 
     socklen_portable len = (socklen_portable) sizeof(client);
     int connfd = accept(sock, (struct sockaddr*) &client, &len);
+    // Regardless of return, close the listening socket
+    tcpip_close_socket(sock);
+    // Then check if connection was accepted succesfully
     if(connfd < 0)
     {
         mvLog(MVLOG_FATAL, "Couldn't accept a connection to server socket");
+        return X_LINK_PLATFORM_ERROR;
     }
 
     // Store the socket and create a "unique" key instead
@@ -863,6 +879,12 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
         perror("setsockopt TCP_NODELAY");
         tcpip_close_socket(sock);
         return -1;
+    }
+
+    if(tcpip_setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &on, sizeof(on)) < 0)
+    {
+        // Do not error out, as its not portable
+        mvLog(MVLOG_WARN, "TCP_QUICKACK could not be enabled");
     }
 
     if(connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
