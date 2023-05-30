@@ -62,10 +62,7 @@ extern int usbFdRead;
 // ------------------------------------
 
 static int pciePlatformRead(void *f, void *data, int size);
-static int tcpipPlatformRead(void *fd, void *data, int size);
-
 static int pciePlatformWrite(void *f, void *data, int size);
-static int tcpipPlatformWrite(void *fd, void *data, int size);
 
 // ------------------------------------
 // Wrappers declaration. End.
@@ -262,70 +259,7 @@ int pciePlatformRead(void *f, void *data, int size)
 #endif
 }
 
-static int tcpipPlatformRead(void *fdKey, void *data, int size)
-{
-#if defined(USE_TCP_IP)
-    int nread = 0;
 
-    void* tmpsockfd = NULL;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
-    }
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
-
-    while(nread < size)
-    {
-        int rc = recv(sock, &((char*)data)[nread], size - nread, 0);
-        if(rc <= 0)
-        {
-            return -1;
-        }
-        else
-        {
-            nread += rc;
-        }
-    }
-#endif
-    return 0;
-}
-
-static int tcpipPlatformWrite(void *fdKey, void *data, int size)
-{
-#if defined(USE_TCP_IP)
-    int byteCount = 0;
-
-    void* tmpsockfd = NULL;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
-    }
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
-
-    while(byteCount < size)
-    {
-        // Use send instead of write and ignore SIGPIPE
-        //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
-
-        int flags = 0;
-        #if defined(MSG_NOSIGNAL)
-            // Use flag NOSIGNAL on send call
-            flags = MSG_NOSIGNAL;
-        #endif
-
-        int rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
-        if(rc <= 0)
-        {
-            return -1;
-        }
-        else
-        {
-            byteCount += rc;
-        }
-    }
-#endif
-    return 0;
-}
 
 // ------------------------------------
 // Wrappers implementation. End.

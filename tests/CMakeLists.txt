@@ -1,5 +1,14 @@
-# Helper 'add_test'
-macro(add_test test_name test_src)
+# Add CMake testing infrastructure
+include(CTest)
+enable_testing()
+
+# Search for Bash executable
+find_program(BASH_EXECUTABLE name "bash"
+    HINTS "C:/Program Files/Git/bin" # Windows hint
+)
+
+# Helper 'xlink_add_test'
+macro(xlink_add_test test_name test_src)
     add_executable(${test_name} ${test_src})
     target_link_libraries(${test_name} ${TARGET_NAME})
     set_property(TARGET ${test_name} PROPERTY CXX_STANDARD 11)
@@ -20,13 +29,53 @@ macro(add_test test_name test_src)
             )
         endif()
     endif()
+
+    # Add to test suite
+    add_test(NAME ${test_name} COMMAND
+        "$<TARGET_FILE:${test_name}>"
+        COMMAND_EXPAND_LISTS
+    )
+
+endmacro()
+
+# Helper 'xlink_add_client_server_test'
+macro(xlink_add_client_server_test test_name num_iterations timeout)
+    # Add client
+    add_executable(${test_name}_client ${test_name}.cpp)
+    target_compile_definitions(${test_name}_client PRIVATE XLINK_TEST_CLIENT)
+    target_link_libraries(${test_name}_client ${TARGET_NAME})
+
+    # Add server
+    add_executable(${test_name}_server ${test_name}.cpp)
+    target_compile_definitions(${test_name}_server PRIVATE XLINK_TEST_SERVER)
+    target_link_libraries(${test_name}_server ${TARGET_NAME})
+
+    # Specify test script
+    if("${ARGV3}" STREQUAL "")
+        set(test_script "${CMAKE_CURRENT_LIST_DIR}/bash/test_client_server.sh")
+    else()
+        set(test_script "${CMAKE_CURRENT_LIST_DIR}/bash/${ARGV3}")
+    endif()
+
+    # Add to test suite
+    add_test(NAME ${test_name} COMMAND
+        ${BASH_EXECUTABLE} "${test_script}"
+        "$<TARGET_FILE:${test_name}_server>"
+        "$<TARGET_FILE:${test_name}_client>"
+        "${num_iterations}"
+        "${timeout}"
+        COMMAND_EXPAND_LISTS
+    )
 endmacro()
 
 # Tests
 
-# Multiple stream open
-add_test(multiple_open_stream multiple_open_stream.cpp)
-add_test(multiple_open_stream_server multiple_open_stream_server.cpp)
-
 # Multithreading search
-add_test(multithreading_search_test multithreading_search_test.cpp)
+xlink_add_test(multithreading_search_test multithreading_search_test.cpp)
+
+# RTT test
+xlink_add_test(rtt_test rtt_test.cpp)
+
+# WIP
+# Throughput test
+# xlink_add_test(throughput_test throughput_test.cpp)

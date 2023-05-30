@@ -15,6 +15,7 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
         compiler: [default]
@@ -27,16 +28,16 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - name: Install dependencies
-      if: matrix.os == 'macos-latest'
-      run: |
-        brew install libusb
+    # - name: Install dependencies
+    #   if: matrix.os == 'macos-latest'
+    #   run: |
+    #     brew install libusb
 
-    - name: Install dependencies
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        sudo apt-get install libusb-1.0-0-dev
-        sudo apt-get install libusb-1.0-0
+    # - name: Install dependencies
+    #   if: matrix.os == 'ubuntu-latest'
+    #   run: |
+    #     sudo apt-get install libusb-1.0-0-dev
+    #     sudo apt-get install libusb-1.0-0
 
     - name: Setup MinGW compiler
       if: matrix.compiler == 'mingw'
@@ -44,13 +45,27 @@ jobs:
         choco install mingw
         choco upgrade mingw
 
-    - name: configure
+    - name: configure (Debug)
       if: matrix.compiler == 'default'
       run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON
 
-    - name: configure
+    - name: configure (Debug)
       if: matrix.compiler == 'mingw'
       run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -G"MinGW Makefiles"
 
-    - name: build
-      run: cmake --build build --parallel
+    - name: build (Debug)
+      run: cmake --build build --parallel --config Debug
+
+    - name: test (Debug)
+      shell: bash
+      run: ctest --test-dir build -C Debug --output-on-failure
+
+    - name: reconfigure (Release)
+      run: cmake . -Bbuild -DCMAKE_BUILD_TYPE=Release
+
+    - name: build (Release)
+      run: cmake --build build --parallel --config Release
+
+    - name: test (Release)
+      shell: bash
+      run: ctest --test-dir build -C Release --output-on-failure
