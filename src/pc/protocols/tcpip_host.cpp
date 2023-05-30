@@ -154,15 +154,13 @@ static constexpr auto DEVICE_DISCOVERY_RES_TIMEOUT = std::chrono::milliseconds{5
 
 static tcpipHostDeviceState_t tcpip_convert_device_state(XLinkDeviceState_t state) {
     switch (state) {
-        case X_LINK_BOOTED: return TCPIP_HOST_STATE_BOOTED;
-        case X_LINK_UNBOOTED: return TCPIP_HOST_STATE_UNBOOTED;
-        case X_LINK_BOOTLOADER: return TCPIP_HOST_STATE_BOOTLOADER;
-        case X_LINK_BOOTED_NON_EXCLUSIVE: return TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE;
-        case X_LINK_GATE: return TCPIP_HOST_STATE_GATE;
-        case X_LINK_GATE_BOOTED: return TCPIP_HOST_STATE_GATE_BOOTED;
-
-        case X_LINK_ANY_STATE:
-            return TCPIP_HOST_STATE_INVALID;
+        case XLinkDeviceState_t::X_LINK_BOOTED: return TCPIP_HOST_STATE_BOOTED;
+        case XLinkDeviceState_t::X_LINK_UNBOOTED: return TCPIP_HOST_STATE_UNBOOTED;
+        case XLinkDeviceState_t::X_LINK_BOOTLOADER: return TCPIP_HOST_STATE_BOOTLOADER;
+        case XLinkDeviceState_t::X_LINK_BOOTED_NON_EXCLUSIVE: return TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE;
+        case XLinkDeviceState_t::X_LINK_GATE: return TCPIP_HOST_STATE_GATE;
+        case XLinkDeviceState_t::X_LINK_GATE_BOOTED: return TCPIP_HOST_STATE_GATE_BOOTED;
+        case XLinkDeviceState_t::X_LINK_ANY_STATE: return TCPIP_HOST_STATE_INVALID;
     }
     return TCPIP_HOST_STATE_INVALID;
 }
@@ -230,10 +228,8 @@ static tcpipHostDevicePlatform_t tcpip_convert_device_platform(XLinkPlatform_t p
     switch (platform) {
         case X_LINK_MYRIAD_X: return TCPIP_HOST_PLATFORM_MYRIAD_X;
         case X_LINK_RVC3: return TCPIP_HOST_PLATFORM_RVC3;
-
-        case X_LINK_ANY_PLATFORM:
-        case X_LINK_MYRIAD_2:
-            return TCPIP_HOST_PLATFORM_INVALID;
+        case X_LINK_ANY_PLATFORM: return TCPIP_HOST_PLATFORM_INVALID;
+        case X_LINK_MYRIAD_2: return TCPIP_HOST_PLATFORM_INVALID;
     }
     return TCPIP_HOST_PLATFORM_INVALID;
 }
@@ -647,6 +643,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
     // Name signifies ip in TCP_IP protocol case
     const char* target_ip = in_deviceRequirements.name;
     XLinkDeviceState_t target_state = in_deviceRequirements.state;
+    XLinkPlatform_t target_platform = in_deviceRequirements.platform;
     const char* target_mxid = in_deviceRequirements.mxid;
 
     // Socket
@@ -754,6 +751,9 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
             // Check that state matches
             DEBUG("target_state: %d, foundState: %d\n", target_state, foundState);
             if(target_state != X_LINK_ANY_STATE && foundState != target_state) continue;
+            // Check that platform matches
+            DEBUG("target_platform: %d, platform: %d\n", target_platform, platform});
+            if(target_platform != X_LINK_ANY_PLATFORM && platform != target_platform) continue;
 
             // Correct device found, increase matched num and save details
             // Convert IP address in binary into string
@@ -882,13 +882,15 @@ int tcpipPlatformRead(void *fdKey, void *data, int size)
         else
         {
             nread += rc;
-            int on = 1;
-            if(tcpip_setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &on, sizeof(on)) < 0)
+#if defined(TCP_QUICKACK)
+            const int enable = 1;
+            if(tcpip_setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &enable, sizeof(enable)) < 0)
             {
                 // Do not error out, as not portable
                 // Warning is not needed, as its issued once at the beginnning
                 // mvLog(MVLOG_WARN, "TCP_QUICKACK could not be enabled");
             }
+#endif
         }
     }
     return 0;
