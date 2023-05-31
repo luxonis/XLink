@@ -42,7 +42,7 @@ namespace dp {
 // Helper functions and macros
 ///////////////////////////////
 
-// base implementation wrapper
+// unique_resource_ptr deleter used to call native API to release resources
 template<typename Resource, void(*Dispose)(Resource*)>
 struct unique_resource_deleter {
     inline void operator()(Resource* const ptr) noexcept {
@@ -50,12 +50,14 @@ struct unique_resource_deleter {
             Dispose(ptr);
     }
 };
-template<typename Resource, void(*Dispose)(Resource*)>
-using unique_resource_ptr = std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>;
 
+// base unique_resource_ptr type used to wrap native API resources
+// behavior is undefined using operator->() and operator*() when get() == nullptr
 // BUGBUG delete base unique_resource_ptr constructors that conflict with ref counts
 // e.g. usb_device(pointer, const deleter_type &) = delete;
 //      usb_device(pointer, deleter_type &&) = delete;
+template<typename Resource, void(*Dispose)(Resource*)>
+using unique_resource_ptr = std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>;
 
 namespace libusb {
 
@@ -127,16 +129,28 @@ inline auto call_log_throw(const char* funcWithin, const int lineNumber, Func&& 
 ///////////////////////////////
 
 // wraps libusb_context and automatically libusb_exit() on destruction
- using usb_context = unique_resource_ptr<libusb_context, libusb_exit>;
+using usb_context = unique_resource_ptr<libusb_context, libusb_exit>;
 
 // wrap libusb_device* with RAII ref counting
 class usb_device;
 
 // device_list container class wrapper for libusb_get_device_list()
-// Use constructors to create an instance as the primary approach.
-// Use device_list::create() to create an instance via factory approach.
+// container interface ideas from https://en.cppreference.com/w/cpp/named_req/SequenceContainer
 class device_list {
 public:
+    using value_type = libusb_device*;
+    using allocator_type = std::allocator<value_type>;
+    using size_type = allocator_type::size_type;
+    using difference_type = allocator_type::difference_type;
+    using reference = allocator_type::reference;
+    using const_reference = allocator_type::const_reference;
+    using pointer = allocator_type::pointer;
+    using const_pointer = allocator_type::const_pointer;
+    using iterator = pointer;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_iterator = const_pointer;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
     // default constructors, destructor, copy, move
     device_list() = default;
     ~device_list() noexcept {
@@ -173,20 +187,10 @@ public:
 
     explicit device_list(const usb_context& context) noexcept(false) : device_list{context.get()} {}
 
-    // container interface
-    // ideas from https://en.cppreference.com/w/cpp/named_req/SequenceContainer
-    using value_type = libusb_device*;
-    using allocator_type = std::allocator<value_type>;
-    using size_type = allocator_type::size_type;
-    using difference_type = allocator_type::difference_type;
-    using reference = allocator_type::reference;
-    using const_reference = allocator_type::const_reference;
-    using pointer = allocator_type::pointer;
-    using const_pointer = allocator_type::const_pointer;
-    using iterator = pointer;
-    using reverse_iterator = std::reverse_iterator<iterator>;
-    using const_iterator = const_pointer;
-    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+    // wrap an existing libusb_device** list and its count
+    device_list(pointer deviceList, size_type countDevices) noexcept : deviceList{deviceList}, countDevices{countDevices} {}
+
+    // container methods
     size_type size() const noexcept {
         return countDevices;
     }
@@ -326,12 +330,12 @@ public:
     // caution: this constructor will not manage previously claimed interfaces and
     //          will default to DEFAULT_MAX_PACKET_SIZE for all endpoints
     explicit device_handle(libusb_device_handle* handle) noexcept(false)
-        : _base{handle ? handle : throw std::invalid_argument("device_handle == nullptr")}, chunkSize{get_chunk_size(get_device_descriptor().bcdUSB)} {}
+        : _base{handle}, chunkSize{handle ? get_chunk_size(get_device_descriptor().bcdUSB) : DEFAULT_CHUNK_SIZE} {}
 
     // create a device_handle from a raw libusb_device*
     explicit device_handle(libusb_device* device) noexcept(false) {
         if(device == nullptr) throw std::invalid_argument("device == nullptr");
-        CALL_LOG_ERROR_THROW(libusb_open, device, out_param(*static_cast<_base*>(this)));
+        CALL_LOG_ERROR_THROW(libusb_open, device, out_param(static_cast<_base&>(*this)));
 
         // cache the device's bcdUSB version for use in transfer methods
         // call libusb_get_device_descriptor() directly since we already have the raw libusb_device*
@@ -344,7 +348,7 @@ public:
     // never use libusb_open() on this wrapped handle's underlying device
     device_handle(libusb_context* ctx, intptr_t sysDevHandle) noexcept(false) {
         if(ctx == nullptr || sysDevHandle == 0) throw std::invalid_argument("ctx == nullptr || sysDevHandle == 0");
-        CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sysDevHandle, out_param(*static_cast<_base*>(this)));
+        CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sysDevHandle, out_param(static_cast<_base&>(*this)));
 
         // cache the device's bcdUSB version
         chunkSize = get_chunk_size(get_device_descriptor().bcdUSB);
@@ -381,15 +385,17 @@ public:
 
     // release all managed objects with libusb_release_interface() and libusb_close()
     // No exceptions are thrown. Errors are logged.
+    // caution: will not manage previously claimed interfaces of ptr and
+    //          will default to DEFAULT_MAX_PACKET_SIZE for all endpoints of ptr
     void reset(pointer ptr = pointer{}) noexcept {
         // release all claimed interfaces and resources
         for (const auto interfaceNumber : claimedInterfaces) {
             call_log_throw<MVLOG_ERROR, false>(__func__, __LINE__, libusb_release_interface, get(), interfaceNumber);
         }
-        static_cast<_base*>(this)->reset(ptr);
+        _base::reset(ptr);
 
         // reset defaults
-        // BUGBUG do not know what interfaces or endpoints are in use, therefore we don't know their max packet size
+        // do not know what interfaces or endpoints are in use, therefore we don't know their max packet size
         chunkSize = ptr == nullptr ? DEFAULT_CHUNK_SIZE : get_chunk_size(get_device_descriptor().bcdUSB);
         maxPacketSize = DEFAULT_MAX_PACKET_ARRAY;
         claimedInterfaces.clear();
@@ -401,7 +407,7 @@ public:
         chunkSize = DEFAULT_CHUNK_SIZE;
         maxPacketSize = DEFAULT_MAX_PACKET_ARRAY;
         claimedInterfaces.clear();
-        return static_cast<_base*>(this)->release();
+        return _base::release();
     }
 
     // wrap libusb_get_device() and return a ref counted usb_device
@@ -535,7 +541,7 @@ public:
     using unique_resource_ptr<libusb_device, libusb_unref_device>::unique_resource_ptr;
 
     // stores a raw libusb_device* pointer, increments its refcount with libusb_ref_device()
-    explicit usb_device(pointer ptr) noexcept : _base{libusb_ref_device(ptr)} {}
+    explicit usb_device(pointer ptr) noexcept : _base{ptr ? libusb_ref_device(ptr) : nullptr} {}
 
     // delete base constructors that conflict with libusb ref counts
     usb_device(pointer, const deleter_type &) = delete;
@@ -550,14 +556,12 @@ public:
     // then remove the old libusb_device* and decrement its ref count
     // No exceptions are thrown. No errors are logged.
     void reset(pointer ptr = pointer{}) noexcept {
-        static_cast<_base*>(this)->reset(libusb_ref_device(ptr));
+        _base::reset(ptr ? libusb_ref_device(ptr) : nullptr);
     }
 
     // wrapper for libusb_get_config_descriptor()
-    config_descriptor get_config_descriptor(uint8_t configIndex) const noexcept(false) {
-        config_descriptor descriptor;
-        CALL_LOG_ERROR_THROW(libusb_get_config_descriptor, get(), configIndex, out_param(descriptor));
-        return descriptor;
+    config_descriptor get_config_descriptor(uint8_t configIndex) const noexcept(noexcept(config_descriptor{get(), 0})) {
+        return config_descriptor{get(), configIndex};
     }
 
     // wrapper for libusb_get_device_descriptor()
