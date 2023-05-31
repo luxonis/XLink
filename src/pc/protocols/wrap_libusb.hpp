@@ -140,9 +140,12 @@ public:
     // default constructors, destructor, copy, move
     device_list() = default;
     ~device_list() noexcept {
-        if (deviceList != nullptr) {
-            libusb_free_device_list(deviceList, 1);
+        // both libapi apis return when param == nullptr
+        // workaround libusb bug https://github.com/libusb/libusb/issues/1287
+        for (size_type i = 0; i < countDevices; ++i) {
+            libusb_unref_device(deviceList[i]);
         }
+        libusb_free_device_list(deviceList, 0);
     }
     device_list(const device_list&) = delete;
     device_list& operator=(const device_list&) = delete;
