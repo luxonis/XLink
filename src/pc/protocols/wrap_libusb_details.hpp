@@ -143,9 +143,14 @@ details::out_param_ptr_t<Tcast, T> out_param_ptr(T& p) noexcept(noexcept(details
 #if WRAP_CPLUSPLUS < 202002L
 
 // simple implementation of std::span for compilers older than C++20
-// includes non-standard bounds checking
+// dpes not include every feature of C++20 std::span
 template <typename T>
 class span {
+    T* ptr_ = nullptr;
+    size_t size_ = 0;
+    static constexpr const char* const throwText = "span index out of range";
+    static constexpr auto dynamic_extent = static_cast<size_t>(-1);
+
    public:
     using element_type = T;
     using value_type = typename std::remove_cv<T>::type;
@@ -156,9 +161,12 @@ class span {
     using reference = element_type&;
     using const_reference = const element_type&;
     using iterator = pointer;
-    using const_iterator = const_pointer;
     using reverse_iterator = std::reverse_iterator<iterator>;
-    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+    // no constant iterators in c++20 span https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2278r4.html
+    //using const_iterator = const_pointer;
+    //using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
+    //// constructors, copy, move, assignment ////
 
     span() noexcept = default;
     ~span() noexcept = default;
@@ -183,111 +191,133 @@ class span {
     template <typename Iterator>
     span(Iterator begin, Iterator end) noexcept : ptr_(&(*begin)), size_(std::distance(begin, end)) {}
 
+    ////////////////////////
+    //// element access ////
+    ////////////////////////
+
     pointer data() noexcept {
         return ptr_;
     }
     const_pointer data() const noexcept {
         return ptr_;
     }
+    reference operator[](size_type index) noexcept {
+        return *(begin() + index);
+    }
+    const_reference operator[](size_type index) const noexcept {
+        return *(begin() + index);
+    }
+    reference front() noexcept {
+        return *begin();
+    }
+    const_reference front() const noexcept {
+        return *begin();
+    }
+    reference back() noexcept {
+        return *(end() - 1);
+    }
+    const_reference back() const noexcept {
+        return *(end() - 1);
+    }
+    // caution: this is non-standard and not available when compiled with C++20 or newer
+    reference at(size_type index) {
+        if(index >= size_) {
+            throw std::out_of_range(throwText);
+        }
+        return *(begin() + index);
+    }
+    // caution: this is non-standard and not available when compiled with C++20 or newer
+    const_reference at(size_type index) const {
+        if(index >= size_) {
+            throw std::out_of_range(throwText);
+        }
+        return *(begin() + index);
+    }
+
+    ///////////////////
+    //// iterators ////
+    ///////////////////
+
+    iterator begin() const noexcept {
+        return ptr_;
+    }
+    iterator end() const noexcept {
+        return ptr_ + size_;
+    }
+    reverse_iterator rbegin() const noexcept {
+        return reverse_iterator(end());
+    }
+    reverse_iterator rend() const noexcept {
+        return reverse_iterator(begin());
+    }
+    // no constant iterators in c++20 span https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2022/p2278r4.html
+    //const_iterator cbegin() const noexcept {
+    //    return ptr_;
+    //}
+    //const_iterator cend() const noexcept {
+    //    return ptr_ + size_;
+    //}
+    //const_reverse_iterator crbegin() const noexcept {
+    //    return const_reverse_iterator(cend());
+    //}
+    //const_reverse_iterator crend() const noexcept {
+    //    return const_reverse_iterator(cbegin());
+    //}
+
+    ///////////////////
+    //// observers ////
+    ///////////////////
+
     size_type size() const noexcept {
         return size_;
     }
     size_type size_bytes() const noexcept {
         return size_ * sizeof(T);
     }
-
-    // includes non-standard bounds checking
-    reference operator[](size_type index) const {
-        if(index >= size_) {
-            throw std::out_of_range(throwText);
-        }
-        return ptr_[index];
-    }
-
-    iterator begin() noexcept {
-        return ptr_;
-    }
-    const_iterator begin() const noexcept {
-        return ptr_;
-    }
-    iterator end() noexcept {
-        return ptr_ + size_;
-    }
-    const_iterator end() const noexcept {
-        return ptr_ + size_;
-    }
-    const_iterator cbegin() const noexcept {
-        return ptr_;
-    }
-    const_iterator cend() const noexcept {
-        return ptr_ + size_;
-    }
-
-    reverse_iterator rbegin() noexcept {
-        return reverse_iterator(end());
-    }
-    const_reverse_iterator rbegin() const noexcept {
-        return const_reverse_iterator(end());
-    }
-    reverse_iterator rend() noexcept {
-        return reverse_iterator(begin());
-    }
-    const_reverse_iterator rend() const noexcept {
-        return const_reverse_iterator(begin());
-    }
-    const_reverse_iterator crbegin() const noexcept {
-        return const_reverse_iterator(cend());
-    }
-    const_reverse_iterator crend() const noexcept {
-        return const_reverse_iterator(cbegin());
-    }
-
     bool empty() const noexcept {
         return size_ == 0;
     }
 
-    // includes non-standard bounds checking
-    reference front() const {
-        if(size_ == 0) {
-            throw std::out_of_range(throwText);
-        }
-        return ptr_[0];
+    //////////////////
+    //// subviews ////
+    //////////////////
+
+    span<T> subspan(size_type offset, size_type count = dynamic_extent) const noexcept {
+        return span<T>(ptr_ + offset, count == dynamic_extent ? size_ - offset : count);
     }
 
-    // includes non-standard bounds checking
-    reference back() const {
-        if(size_ == 0) {
-            throw std::out_of_range(throwText);
-        }
-        return ptr_[size_ - 1];
+    template<size_t offset, size_t count = dynamic_extent>
+    span<T> subspan() const noexcept {
+        return span<T>(ptr_ + offset, count == dynamic_extent ? size_ - offset : count);
     }
 
-    // includes non-standard bounds checking
-    span<T> subspan(size_type offset, size_type count = size_type(-1)) const {
-        if(offset > size_) {
-            throw std::out_of_range(throwText);
-        }
-        if(count == size_type(-1)) {
-            count = size_ - offset;
-        }
-        if(offset + count > size_) {
-            throw std::out_of_range(throwText);
-        }
-        return span<T>(ptr_ + offset, count);
+    span<T> first(size_type count) const noexcept {
+        return subspan(0, count);
     }
 
+    template<size_t count>
+    span<T> first() const noexcept {
+        return subspan<0, count>();
+    }
+
+    span<T> last(size_type count) const noexcept {
+        return subspan(size_ - count, count);
+    }
+
+    template<size_t count>
+    span<T> last() const noexcept {
+        return span<T>{ptr_ + (size_ - count), count};
+    }
+
+    // caution: this is non-standard and not available when compiled with C++20 or newer
     span<const unsigned char> as_bytes() const noexcept {
         return {reinterpret_cast<const unsigned char*>(ptr_), size_ * sizeof(T)};
     }
 
-    span<unsigned char> as_writable_bytes() const noexcept {
+    // caution: this is non-standard and not available when compiled with C++20 or newer
+    span<unsigned char> as_writable_bytes() noexcept {
         return {reinterpret_cast<unsigned char*>(ptr_), size_ * sizeof(T)};
     }
-
-   private:
-    element_type* ptr_ = nullptr;
-    const size_type size_ = 0;
-    const char* const throwText = "span index out of range";
 };
 #else
 
