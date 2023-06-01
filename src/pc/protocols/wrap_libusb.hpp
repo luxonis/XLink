@@ -194,6 +194,10 @@ public:
     size_type size() const noexcept {
         return countDevices;
     }
+    constexpr size_type max_size() const noexcept {
+        constexpr auto MAX = std::numeric_limits<uintptr_t>::max() / sizeof(value_type);
+        return MAX;
+    }
     bool empty() const noexcept {
         return countDevices == 0;
     }
@@ -262,6 +266,20 @@ public:
             throw std::out_of_range("device_list::at");
         }
         return *(cbegin() + index);
+    }
+    void swap(device_list& other) noexcept {
+        std::swap(countDevices, other.countDevices);
+        std::swap(deviceList, other.deviceList);
+    }
+    friend void swap(device_list& left, device_list& right) noexcept {
+        left.swap(right);
+    }
+    bool operator==(const device_list& other) const noexcept {
+        // short circuit if same pointer list
+        return countDevices == other.countDevices && deviceList == other.deviceList;
+    }
+    bool operator!=(const device_list& other) const noexcept {
+        return !(*this == other);
     }
 
 private:
