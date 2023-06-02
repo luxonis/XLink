@@ -590,11 +590,13 @@ public:
 
     explicit device_list(libusb_context* context) noexcept(false) {
         // libusb_get_device_list() is not thread safe!
-        // multiple threads simultaneously generating device lists causes crashes and memory violations
-        // within libusb itself due to incorrect libusb ref count handling, wrongly deleted devices, etc.
-        // crashes occurred when libusb internally called libusb_ref_device(), XLink called libusb_unref_device(),
-        // often when libusb called usbi_get_device_priv(dev) and then operated on the pointers
-        // line in file libusb/os/windows_winusb.c in winusb_get_device_list() line 1741
+        // https://github.com/libusb/libusb/wiki/FAQ#what-are-the-extra-considerations-to-be-applied-to-applications-which-interact-with-libusb-from-multiple-threads
+        // libusb will crash or have memory violations when multiple threads simultaneously generate device lists
+        // due to errant libusb ref count handling, wrongly deleted devices, etc.
+        // Testing confirmed crashes occurred when libusb internally called libusb_ref_device() or
+        // called usbi_get_device_priv(dev) and then operated on the pointers
+        // line in file libusb/os/windows_winusb.c in winusb_get_device_list() line 1741;
+        // later code using libusb can crash when they call libusb_unref_device().
         std::lock_guard<std::mutex> lock(mtx);
         countDevices = static_cast<size_type>(CALL_LOG_ERROR_THROW(libusb_get_device_list, context, &deviceList));
     }
@@ -731,7 +733,7 @@ inline std::pair<libusb_error, intmax_t> device_handle::bulk_transfer(const unsi
 
     // start transfer
     else {
-        const bool transmitZeroLengthPacket = ZeroLengthPacketEnding; // && (bufferSizeBytes % get_max_packet_size(endpoint) == 0);
+        const bool transmitZeroLengthPacket = ZeroLengthPacketEnding && !is_direction_in(endpoint) && (bufferSizeBytes % get_max_packet_size(endpoint) == 0);
         const auto completeSizeBytes = bufferSizeBytes;
         auto& rcNum = result.first;
         auto& transferredBytes = result.second;
