@@ -144,21 +144,20 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t deviceRequi
         //   libusb: warning [init_device] could not get node connection information for device 'USB\VID_03E7&PID_2485\03E72485': [87] The parameter is incorrect.
         //   libusb: warning [winusb_get_device_list] failed to initialize device 'USB\VID_03E7&PID_2485\03E72485'
         //   libusb: warning [winusb_get_device_list] could not detect installation state of driver for 'USB\VID_03E7&PID_2485\03E72485': [3758096907] The device instance does not exist in the hardware tree.
-        device_list deviceList{context};
+        const device_list deviceList{context};
 
         // Loop over all usb devices, persist devices only if they are known/myriad devices
         const std::string requiredPath(deviceRequirements.name);
         const std::string requiredMxId(deviceRequirements.mxid);
         span<deviceDesc_t> foundDevices{foundDevicesBuffer, static_cast<size_t>(sizeFoundDevicesBufferEntities)};
         auto* foundDevice = foundDevices.begin();
-        for (auto* const candidate : deviceList) {
-            // validate conditions
-            if(candidate == nullptr) continue;
+        for (const auto candidateDevice : deviceList) {
+            // skip invalid devices https://github.com/libusb/libusb/issues/1287
+            if(!candidateDevice) continue;
 
             // setup device i/o and query device
             try {
                 // Get candidate device descriptor
-                const usb_device candidateDevice{candidate};
                 const auto candidateDescriptor = candidateDevice.get_device_descriptor<MVLOG_DEBUG>();
 
                 // Filter device by known vid/pid pairs
@@ -254,15 +253,13 @@ usb_device acquireDeviceByPath(const char* const path) {
 
     try {
         // Get list of usb devices
-        device_list deviceList{context};
+        const device_list deviceList{context};
 
         // Loop over all usb devices
         const std::string requiredPath(path);
-        for(auto* const candidate : deviceList) {
-            if(candidate == nullptr) continue;
-
-            // take ownership (increments ref count)
-            usb_device candidateDevice{candidate};
+        for(auto candidateDevice : deviceList) {
+            // skip invalid devices https://github.com/libusb/libusb/issues/1287
+            if(!candidateDevice) continue;
 
             // compare device path with required path
             if(requiredPath == getLibusbDevicePath(candidateDevice)) {
