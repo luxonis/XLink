@@ -134,160 +134,6 @@ using usb_context = unique_resource_ptr<libusb_context, libusb_exit>;
 // wrap libusb_device* with RAII ref counting
 class usb_device;
 
-// device_list container class wrapper for libusb_get_device_list()
-// container interface ideas from https://en.cppreference.com/w/cpp/named_req/SequenceContainer
-class device_list {
-public:
-    using value_type = libusb_device*;
-    using allocator_type = std::allocator<value_type>;
-    using size_type = allocator_type::size_type;
-    using difference_type = allocator_type::difference_type;
-    using reference = allocator_type::reference;
-    using const_reference = allocator_type::const_reference;
-    using pointer = allocator_type::pointer;
-    using const_pointer = allocator_type::const_pointer;
-    using iterator = pointer;
-    using reverse_iterator = std::reverse_iterator<iterator>;
-    using const_iterator = const_pointer;
-    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-
-    // default constructors, destructor, copy, move
-    device_list() = default;
-    ~device_list() noexcept {
-        // both libapi apis return when param == nullptr
-        // workaround libusb bug https://github.com/libusb/libusb/issues/1287
-        for (size_type i = 0; i < countDevices; ++i) {
-            libusb_unref_device(deviceList[i]);
-        }
-        libusb_free_device_list(deviceList, 0);
-    }
-    device_list(const device_list&) = delete;
-    device_list& operator=(const device_list&) = delete;
-    device_list(device_list&& other) noexcept :
-        countDevices{std::exchange(other.countDevices, 0)},
-        deviceList{std::exchange(other.deviceList, nullptr)} {};
-    device_list& operator=(device_list&& other) noexcept {
-        if (this == &other)
-            return *this;
-        countDevices = std::exchange(other.countDevices, 0);
-        deviceList = std::exchange(other.deviceList, nullptr);
-        return *this;
-    }
-
-    explicit device_list(libusb_context* context) noexcept(false) {
-        // libusb_get_device_list() is not thread safe!
-        // multiple threads simultaneously generating device lists causes crashes and memory violations
-        // within libusb itself due to incorrect libusb ref count handling, wrongly deleted devices, etc.
-        // crashes occurred when libusb internally called libusb_ref_device(), XLink called libusb_unref_device(),
-        // often when libusb called usbi_get_device_priv(dev) and then operated on the pointers
-        // line in file libusb/os/windows_winusb.c in winusb_get_device_list() line 1741
-        std::lock_guard<std::mutex> lock(mtx);
-        countDevices = static_cast<size_type>(CALL_LOG_ERROR_THROW(libusb_get_device_list, context, &deviceList));
-    }
-
-    explicit device_list(const usb_context& context) noexcept(false) : device_list{context.get()} {}
-
-    // wrap an existing libusb_device** list and its count
-    device_list(pointer deviceList, size_type countDevices) noexcept : deviceList{deviceList}, countDevices{countDevices} {}
-
-    // container methods
-    size_type size() const noexcept {
-        return countDevices;
-    }
-    constexpr size_type max_size() const noexcept {
-        constexpr auto MAX = std::numeric_limits<uintptr_t>::max() / sizeof(value_type);
-        return MAX;
-    }
-    bool empty() const noexcept {
-        return countDevices == 0;
-    }
-    pointer data() noexcept {
-        return deviceList;
-    }
-    const_pointer data() const noexcept {
-        return deviceList;
-    }
-    iterator begin() noexcept {
-        return deviceList;
-    }
-    const_iterator begin() const noexcept {
-        return deviceList;
-    }
-    const_iterator cbegin() const noexcept {
-        return deviceList;
-    }
-    reverse_iterator rbegin() noexcept {
-        return std::reverse_iterator<iterator>{end()};
-    }
-    const_reverse_iterator rbegin() const noexcept {
-        return std::reverse_iterator<const_iterator>{cend()};
-    }
-    iterator end() noexcept {
-        return begin() + countDevices;
-    }
-    const_iterator end() const noexcept {
-        return cbegin() + countDevices;
-    }
-    const_iterator cend() const noexcept {
-        return cbegin() + countDevices;
-    }
-    reverse_iterator rend() noexcept {
-        return std::reverse_iterator<iterator>{begin()};
-    }
-    const_reverse_iterator rend() const noexcept {
-        return std::reverse_iterator<const_iterator>{cbegin()};
-    }
-    reference front() noexcept {
-        return *begin();
-    }
-    const_reference front() const noexcept {
-        return *cbegin();
-    }
-    reference back() noexcept {
-        return *(begin() + size() - 1);
-    }
-    const_reference back() const noexcept {
-        return *(cbegin() + size() - 1);
-    }
-    reference operator[](size_type index) noexcept {
-        return *(begin() + index);
-    }
-    const_reference operator[](size_type index) const noexcept {
-        return *(cbegin() + index);
-    }
-    reference at(size_type index) {
-        if (index >= size()) {
-            throw std::out_of_range("device_list::at");
-        }
-        return *(begin() + index);
-    }
-    const_reference at(size_type index) const {
-        if (index >= size()) {
-            throw std::out_of_range("device_list::at");
-        }
-        return *(cbegin() + index);
-    }
-    void swap(device_list& other) noexcept {
-        std::swap(countDevices, other.countDevices);
-        std::swap(deviceList, other.deviceList);
-    }
-    friend void swap(device_list& left, device_list& right) noexcept {
-        left.swap(right);
-    }
-    bool operator==(const device_list& other) const noexcept {
-        // short circuit if same pointer list
-        return countDevices == other.countDevices && deviceList == other.deviceList;
-    }
-    bool operator!=(const device_list& other) const noexcept {
-        return !(*this == other);
-    }
-
-private:
-    static std::mutex mtx;
-    size_type countDevices{};
-    pointer deviceList{};
-};
-
 // wraps libusb_config_descriptor* and automatically libusb_free_config_descriptor() on destruction
 class config_descriptor : public unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor> {
 public:
@@ -610,6 +456,250 @@ public:
         }
         return numbers;
     }
+};
+
+// device_list container class wrapper for libusb_get_device_list()
+// container interface ideas from https://en.cppreference.com/w/cpp/named_req/SequenceContainer
+class device_list {
+public:
+    using value_type = libusb_device*;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using reference = usb_device;
+    using const_reference = const reference;
+    using pointer = value_type*;
+    using const_pointer = const value_type*;
+
+
+    template<typename Val, typename Ref>
+    class iterator_xform {
+      public:
+        //using Val = libusb_device*;
+        //using Ref = usb_device;
+        using iterator_category = std::random_access_iterator_tag;
+        using value_type = Val;
+        using difference_type = std::ptrdiff_t;
+        using reference = Ref;       // results in r-value returned by operator*()
+        using pointer = value_type*;
+
+        explicit iterator_xform(pointer ptr) noexcept : ptr_{ptr} {}
+
+        reference operator*() const noexcept {
+            return reference{*ptr_};
+        }
+        reference operator[](difference_type n) const noexcept {
+            return reference{*(ptr_ + n)};
+        }
+        // no operator->() because it would require persisting a usb_device object in the iterator_xform
+        // itself and then returning a pointer to it
+        // pointer operator->() const {
+        //     return ptr_;
+        // }
+
+        iterator_xform& operator++() noexcept {
+            ++ptr_;
+            return *this;
+        }
+        iterator_xform operator++(int) noexcept {
+            auto tmp = *this;
+            operator++();
+            return tmp;
+        }
+        iterator_xform& operator--() noexcept {
+            --ptr_;
+            return *this;
+        }
+        iterator_xform operator--(int) noexcept {
+            auto tmp = *this;
+            operator--();
+            return tmp;
+        }
+
+        bool operator==(const iterator_xform& rhs) const noexcept {
+            return ptr_ == rhs.ptr_;
+        }
+        bool operator!=(const iterator_xform& rhs) const noexcept {
+            return !(*this == rhs);
+        }
+        bool operator<(const iterator_xform& rhs) const noexcept {
+            return ptr_ < rhs.ptr_;
+        }
+        bool operator>(const iterator_xform& rhs) const noexcept {
+            return rhs < *this;
+        }
+        bool operator<=(const iterator_xform& rhs) const noexcept {
+            return !(*this > rhs);
+        }
+        bool operator>=(const iterator_xform& rhs) const noexcept {
+            return !(*this < rhs);
+        }
+
+        iterator_xform& operator+=(difference_type n) noexcept {
+            ptr_ += n;
+            return *this;
+        }
+        iterator_xform operator+(difference_type n) const noexcept {
+            auto tmp = *this;
+            tmp += n;
+            return tmp;
+        }
+        iterator_xform& operator-=(difference_type n) noexcept {
+            ptr_ -= n;
+            return *this;
+        }
+        iterator_xform operator-(difference_type n) const noexcept {
+            auto tmp = *this;
+            tmp -= n;
+            return tmp;
+        }
+        difference_type operator-(const iterator_xform& rhs) const noexcept {
+            return ptr_ - rhs.ptr_;
+        }
+      private:
+        pointer ptr_ = nullptr;
+    };
+    using iterator = iterator_xform<libusb_device*, usb_device>;
+    // 2nd const_iterator param should be const but it prevent the return value from being moved,
+    // and then the fallback to copy fails because the base unique_ptr can not copy
+    using const_iterator = iterator_xform<libusb_device*, usb_device>;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
+    // default constructors, destructor, copy, move
+    device_list() noexcept = default;
+    ~device_list() noexcept {
+        // both libapi apis return when param == nullptr
+        // workaround libusb bug https://github.com/libusb/libusb/issues/1287
+        for (size_type i = 0; i < countDevices; ++i) {
+            libusb_unref_device(deviceList[i]);
+        }
+        libusb_free_device_list(deviceList, 0);
+    }
+    device_list(const device_list&) = delete;
+    device_list& operator=(const device_list&) = delete;
+    device_list(device_list&& other) noexcept :
+        countDevices{std::exchange(other.countDevices, 0)},
+        deviceList{std::exchange(other.deviceList, nullptr)} {};
+    device_list& operator=(device_list&& other) noexcept {
+        if (this == &other)
+            return *this;
+        countDevices = std::exchange(other.countDevices, 0);
+        deviceList = std::exchange(other.deviceList, nullptr);
+        return *this;
+    }
+
+    explicit device_list(libusb_context* context) noexcept(false) {
+        // libusb_get_device_list() is not thread safe!
+        // multiple threads simultaneously generating device lists causes crashes and memory violations
+        // within libusb itself due to incorrect libusb ref count handling, wrongly deleted devices, etc.
+        // crashes occurred when libusb internally called libusb_ref_device(), XLink called libusb_unref_device(),
+        // often when libusb called usbi_get_device_priv(dev) and then operated on the pointers
+        // line in file libusb/os/windows_winusb.c in winusb_get_device_list() line 1741
+        std::lock_guard<std::mutex> lock(mtx);
+        countDevices = static_cast<size_type>(CALL_LOG_ERROR_THROW(libusb_get_device_list, context, &deviceList));
+    }
+
+    explicit device_list(const usb_context& context) noexcept(false) : device_list{context.get()} {}
+
+    // wrap an existing libusb_device** list and its count
+    device_list(pointer deviceList, size_type countDevices) noexcept : deviceList{deviceList}, countDevices{countDevices} {}
+
+    // container methods
+    size_type size() const noexcept {
+        return countDevices;
+    }
+    constexpr size_type max_size() const noexcept {
+        constexpr auto MAX = std::numeric_limits<uintptr_t>::max() / sizeof(value_type);
+        return MAX;
+    }
+    bool empty() const noexcept {
+        return countDevices == 0;
+    }
+    pointer data() noexcept {
+        return deviceList;
+    }
+    const_pointer data() const noexcept {
+        return deviceList;
+    }
+    iterator begin() noexcept {
+        return iterator{deviceList};
+    }
+    const_iterator begin() const noexcept {
+        return const_iterator{deviceList};
+    }
+    const_iterator cbegin() const noexcept {
+        return const_iterator{deviceList};
+    }
+    reverse_iterator rbegin() noexcept {
+        return std::reverse_iterator<iterator>{end()};
+    }
+    const_reverse_iterator rbegin() const noexcept {
+        return std::reverse_iterator<const_iterator>{cend()};
+    }
+    iterator end() noexcept {
+        return begin() + countDevices;
+    }
+    const_iterator end() const noexcept {
+        return cbegin() + countDevices;
+    }
+    const_iterator cend() const noexcept {
+        return cbegin() + countDevices;
+    }
+    reverse_iterator rend() noexcept {
+        return std::reverse_iterator<iterator>{begin()};
+    }
+    const_reverse_iterator rend() const noexcept {
+        return std::reverse_iterator<const_iterator>{cbegin()};
+    }
+    reference front() noexcept {
+        return *begin();
+    }
+    const_reference front() const noexcept {
+        return *cbegin();
+    }
+    reference back() noexcept {
+        return *(begin() + size() - 1);
+    }
+    const_reference back() const noexcept {
+        return *(cbegin() + size() - 1);
+    }
+    reference operator[](size_type index) noexcept {
+        return *(begin() + index);
+    }
+    const_reference operator[](size_type index) const noexcept {
+        return *(cbegin() + index);
+    }
+    reference at(size_type index) {
+        if (index >= size()) {
+            throw std::out_of_range("device_list::at");
+        }
+        return *(begin() + index);
+    }
+    const_reference at(size_type index) const {
+        if (index >= size()) {
+            throw std::out_of_range("device_list::at");
+        }
+        return *(cbegin() + index);
+    }
+    void swap(device_list& other) noexcept {
+        std::swap(countDevices, other.countDevices);
+        std::swap(deviceList, other.deviceList);
+    }
+    friend void swap(device_list& left, device_list& right) noexcept {
+        left.swap(right);
+    }
+    bool operator==(const device_list& other) const noexcept {
+        // short circuit if same pointer list
+        return countDevices == other.countDevices && deviceList == other.deviceList;
+    }
+    bool operator!=(const device_list& other) const noexcept {
+        return !(*this == other);
+    }
+
+private:
+    static std::mutex mtx;
+    size_type countDevices{};
+    pointer deviceList{};
 };
 
 inline device_handle::device_handle(const usb_device& device) noexcept(noexcept(device_handle{device.get()})) : device_handle{device.get()} {}
