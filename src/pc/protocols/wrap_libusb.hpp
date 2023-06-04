@@ -36,13 +36,16 @@
 #include <vector>
 #include "wrap_libusb_details.hpp"
 
+/// @brief dp namespace
 namespace dp {
 
 ///////////////////////////////
 // Helper functions and macros
 ///////////////////////////////
 
-// unique_resource_ptr deleter used to call native API to release resources
+/// @brief unique_resource_ptr deleter used to call native API to release resources
+/// @tparam Resource native API resource type; the type of the resource disposed/released by this deleter
+/// @tparam Dispose native API function used to release the resource; must be a function pointer
 template<typename Resource, void(*Dispose)(Resource*)>
 struct unique_resource_deleter {
     inline void operator()(Resource* const ptr) noexcept {
@@ -51,21 +54,25 @@ struct unique_resource_deleter {
     }
 };
 
-// base unique_resource_ptr type used to wrap native API resources
-// behavior is undefined using operator->() and operator*() when get() == nullptr
-// BUGBUG delete base unique_resource_ptr constructors that conflict with ref counts
-// e.g. usb_device(pointer, const deleter_type &) = delete;
-//      usb_device(pointer, deleter_type &&) = delete;
+/// @brief base unique_resource_ptr type used to wrap native API resources; behavior is undefined
+///        using operator->() and operator*() when get() == nullptr
+/// @tparam Resource native API resource type; the type of the resource managed by this unique_resource_ptr
+/// @tparam Dispose native API function used to release the resource; must be a function pointer
 template<typename Resource, void(*Dispose)(Resource*)>
 using unique_resource_ptr = std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>;
 
+// TODO delete base unique_resource_ptr constructors that conflict with ref counts
+// e.g. usb_device(pointer, const deleter_type &) = delete;
+//      usb_device(pointer, deleter_type &&) = delete;
+
+/// @brief libusb resources, structs, and functions with RAII resource management and exceptions
 namespace libusb {
 
 ///////////////////////////////////
 // libusb error exception wrappers
 ///////////////////////////////////
 
-// exception error class for libusb errors
+/// @brief exception error class for libusb errors
 class usb_error : public std::system_error {
 public:
     explicit usb_error(int libusbErrorCode) noexcept :
@@ -76,7 +83,7 @@ public:
         std::system_error{std::error_code(libusbErrorCode, std::system_category()), what} {}
 };
 
-// exception error class for libusb transfer errors
+/// @brief exception error class for libusb transfer errors
 class transfer_error : public usb_error {
 public:
     explicit transfer_error(int libusbErrorCode, intmax_t transferred) noexcept :
@@ -103,9 +110,16 @@ inline void throw_conditional_transfer_error(int, intmax_t, std::false_type) noe
     // do nothing
 }
 
-// template function that can call any libusb function passed to it
-// function parameters are passed as variadic template arguments
-// caution: when Throw=false, a negative return code can be returned on error; always handle such scenarios
+/// @brief template function that can call any libusb function passed to it
+/// @tparam Loglevel log level used when errors occur
+/// @tparam Throw throw exceptions on errors or only return error codes; when false, return codes must be handled by the caller
+/// @tparam Func auto-deduced libusb function pointer type
+/// @tparam ...Args auto-deduced variadic template parameter pack for the function parameter(s)
+/// @param funcWithin name of the function calling this function; prepended to the log message
+/// @param lineNumber line number of the function calling this function; prepended to the log message
+/// @param func libusb function pointer
+/// @param ...args libusb function parameter(s)
+/// @return return code of the libusb function
 template <mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, typename Func, typename... Args>
 inline auto call_log_throw(const char* funcWithin, const int lineNumber, Func&& func, Args&&... args) noexcept(!Throw)
     -> decltype(func(std::forward<Args>(args)...)) {
@@ -128,13 +142,13 @@ inline auto call_log_throw(const char* funcWithin, const int lineNumber, Func&& 
 // libusb resource wrappers
 ///////////////////////////////
 
-// wraps libusb_context and automatically libusb_exit() on destruction
+/// @brief RAII wrapper for libusb_context; automatically calls libusb_exit() on destruction
 using usb_context = unique_resource_ptr<libusb_context, libusb_exit>;
 
-// wrap libusb_device* with RAII ref counting
+/// @brief RAII wrapper for libusb_device; automatically calls libusb_unref_device() on destruction
 class usb_device;
 
-// wraps libusb_config_descriptor* and automatically libusb_free_config_descriptor() on destruction
+/// @brief RAII wrapper for libusb_config_descriptor; automatically calls libusb_free_config_descriptor() on destruction
 class config_descriptor : public unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor> {
 public:
     using unique_resource_ptr<libusb_config_descriptor, libusb_free_config_descriptor>::unique_resource_ptr;
@@ -144,8 +158,8 @@ public:
     }
 };
 
-// wrap libusb_device_handle* to allow I/O on device. Create with usb_device::open(), device_handle{libusb_device*}
-// or from raw platform pointers with device_handle{libusb_context*, intptr_t}
+/// @brief RAII wrapper for libusb_device_handle to allow I/O on device; automatically calls libusb_close() on destruction
+/// @note Can also create with usb_device::open()
 class device_handle : public unique_resource_ptr<libusb_device_handle, libusb_close> {
 private:
     using _base = unique_resource_ptr<libusb_device_handle, libusb_close>;
@@ -188,15 +202,20 @@ private:
     }
 
 public:
+    // inherit base constructors, delete base constructors that conflict with libusb ref counts
     using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
+    device_handle(pointer, const deleter_type &) = delete;
+    device_handle(pointer, deleter_type &&) = delete;
 
-    // create a device_handle from a raw libusb_device_handle*
-    // caution: this constructor will not manage previously claimed interfaces and
-    //          will default to DEFAULT_MAX_PACKET_SIZE for all endpoints
+    /// @brief Create a device_handle from a raw libusb_device_handle*
+    /// @param handle raw libusb_device_handle* to wrap and manage ownership
+    /// @note This constructor will not manage previously claimed interfaces and
+    ///       will default to DEFAULT_MAX_PACKET_SIZE for all endpoints
     explicit device_handle(libusb_device_handle* handle) noexcept(false)
         : _base{handle}, chunkSize{handle ? get_chunk_size(get_device_descriptor().bcdUSB) : DEFAULT_CHUNK_SIZE} {}
 
-    // create a device_handle from a raw libusb_device*
+    /// @brief Create a device_handle from a raw libusb_device*
+    /// @param device raw libusb_device* from which to open a new handle and manage its ownership
     explicit device_handle(libusb_device* device) noexcept(false) {
         if(device == nullptr) throw std::invalid_argument("device == nullptr");
         CALL_LOG_ERROR_THROW(libusb_open, device, out_param(static_cast<_base&>(*this)));
@@ -208,8 +227,10 @@ public:
         chunkSize = get_chunk_size(descriptor.bcdUSB);
     }
 
-    // wrap a platform-specific system device handle and get a libusb device_handle for it
-    // never use libusb_open() on this wrapped handle's underlying device
+    /// @brief Create a device_handle from a platform-specific system device handle
+    /// @param ctx raw libusb_context* to use for wrapping the platform-specific system device handle
+    /// @param sysDevHandle platform-specific system device handle to wrap
+    /// @note Never use usb_device::open() or libusb_open() on this wrapped handle's underlying USB device
     device_handle(libusb_context* ctx, intptr_t sysDevHandle) noexcept(false) {
         if(ctx == nullptr || sysDevHandle == 0) throw std::invalid_argument("ctx == nullptr || sysDevHandle == 0");
         CALL_LOG_ERROR_THROW(libusb_wrap_sys_device, ctx, sysDevHandle, out_param(static_cast<_base&>(*this)));
@@ -218,12 +239,9 @@ public:
         chunkSize = get_chunk_size(get_device_descriptor().bcdUSB);
     }
 
-    // create a device_handle from a usb_device wrapper
+    /// @brief Create a device_handle from a usb_device wrapper
+    /// @param device usb_device from which to open a new handle and manage its ownership
     explicit device_handle(const usb_device& device) noexcept(noexcept(device_handle{std::declval<libusb_device*>()}));
-
-    // delete base constructors that conflict with libusb ref counts
-    device_handle(pointer, const deleter_type &) = delete;
-    device_handle(pointer, deleter_type &&) = delete;
 
     // copy and move constructors and assignment operators
     device_handle(const device_handle&) = delete;
@@ -247,10 +265,10 @@ public:
         reset();
     }
 
-    // release all managed objects with libusb_release_interface() and libusb_close()
-    // No exceptions are thrown. Errors are logged.
-    // caution: will not manage previously claimed interfaces of ptr and
-    //          will default to DEFAULT_MAX_PACKET_SIZE for all endpoints of ptr
+    /// @brief Release handle and its claimed interfaces, then replace with ptr
+    /// @param ptr raw resource pointer used to replace the currently managed resource
+    /// @note This method does not automatically manage previously claimed interfaces of ptr and
+    ///       will default to DEFAULT_MAX_PACKET_SIZE for all endpoints of ptr
     void reset(pointer ptr = pointer{}) noexcept {
         // release all claimed interfaces and resources
         for (const auto interfaceNumber : claimedInterfaces) {
@@ -265,8 +283,9 @@ public:
         claimedInterfaces.clear();
     }
 
-    // release ownership of the managed libusb_device_handle and all device interfaces
-    // caller is responsible for calling libusb_release_interface() and libusb_close()
+    /// @brief Release ownership of the managed device_handle and all device interfaces
+    /// @return raw libusb_device_handle* that was managed by this device_handle
+    /// @note Caller is responsible for calling libusb_release_interface() and libusb_close()
     device_handle::pointer release() noexcept {
         chunkSize = DEFAULT_CHUNK_SIZE;
         maxPacketSize = DEFAULT_MAX_PACKET_ARRAY;
@@ -274,17 +293,22 @@ public:
         return _base::release();
     }
 
-    // wrap libusb_get_device() and return a ref counted usb_device
+    /// @brief Get a usb_device for the device_handle's underlying USB device
+    /// @return usb_device for the device_handle's underlying USB device
     usb_device get_device() const noexcept;
 
-    // wrapper for libusb_claim_interface()
+    /// @brief Claim a USB interface on the device_handle's device
+    /// @param interfaceNumber USB interface number to claim
+    /// @note Repeat claims of an interface with libusb are generally allowed; the interface
+    ///       will be released when the device_handle is destroyed
     void claim_interface(int interfaceNumber) noexcept(false) {
         if(std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interfaceNumber) != claimedInterfaces.end()) return;
         CALL_LOG_ERROR_THROW(libusb_claim_interface, get(), interfaceNumber);
         claimedInterfaces.emplace_back(interfaceNumber);
     }
 
-    // wrapper for libusb_release_interface()
+    /// @brief Release a USB interface on the device_handle's device
+    /// @param interfaceNumber USB interface number to release
     void release_interface(int interfaceNumber) noexcept(false) {
         auto candidate = std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interfaceNumber);
         if (candidate == claimedInterfaces.end())
@@ -293,29 +317,43 @@ public:
         claimedInterfaces.erase(candidate);
     }
 
-    // wrapper for libusb_get_configuration()
+    /// @brief Get the active configuration value of the device_handle's device
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return error codes
+    /// @return active configuration value of the device_handle's device; error returns libusb_error cast to int
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
     int get_configuration() const noexcept(!Throw) {
         int configuration{};
-        call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_configuration, get(), &configuration);
-        return configuration;
+        const int rc = call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_get_configuration, get(), &configuration);
+        return rc >= LIBUSB_SUCCESS ? configuration : rc;
     }
 
-    // wrapper for libusb_set_configuration()
-    // if skip_active_check = true, the current configuration is not checked before setting the new one
+    /// @brief Set the active configuration of the device_handle's device
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return error codes
+    /// @tparam Force force configuration to be set even if it is already active; may cause a lightweight device reset
+    /// @param configuration value of the configuration to set; put the device in unconfigured state with -1
+    /// @return libusb_error result code
+    /// @note Recommended to set the configuration before claiming interfaces
     template <mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, bool Force = false>
-    void set_configuration(int configuration) noexcept(!Throw) {
+    libusb_error set_configuration(int configuration) noexcept(!Throw) {
         if(!Force) {
             const auto active = get_configuration<Loglevel, Throw>();
             if(active == configuration)
-                return;
+                return LIBUSB_SUCCESS;
             mvLog(MVLOG_DEBUG, "Setting configuration from %d to %d", active, configuration);
         }
-        call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_set_configuration, get(), configuration);
+        return static_cast<libusb_error>(call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_set_configuration, get(), configuration));
     }
 
     // wrapper for libusb_get_string_descriptor_ascii()
     // return string is size of actual number of ascii chars in descriptor
+
+    /// @brief Get a string descriptor from the device_handle's device and convert to ASCII
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return empty string
+    /// @param descriptorIndex index of the string descriptor to get
+    /// @return string descriptor from the device_handle's device converted to ASCII; empty on error
     template <mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
     std::string get_string_descriptor_ascii(uint8_t descriptorIndex) const noexcept(!Throw) {
         // String descriptors use UNICODE UTF16LE encodings where a bLength byte field declares the sizeBytes of the string + 2
@@ -328,32 +366,49 @@ public:
         if (Throw || result >= 0) {
             // when throwing enabled, then throw occurs on negative/error results before this resize(),
             // so don't need to check result and compiler can optimize this away.
-            // when throwing disabled, then always prevent resize to negative/error code result
+            // when throwing disabled, then resize on non-error
             descriptor.resize(result);
+        }
+        else {
+            // when throwing disabled, then return empty string on error
+            descriptor.clear();
         }
         return descriptor;
     }
 
-    // wrapper for libusb_set_auto_detach_kernel_driver()
+    /// @brief Set whether the device_handle's device should automatically detach the kernel driver when claiming interfaces
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return error codes
+    /// @param enable true to automatically detach kernel driver when claiming interface then attach it when releasing interface
+    /// @return libusb_error result code
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
-    void set_auto_detach_kernel_driver(bool enable) noexcept(!Throw) {
-        call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_set_auto_detach_kernel_driver, get(), enable);
+    libusb_error set_auto_detach_kernel_driver(bool enable) noexcept(!Throw) {
+        return static_cast<libusb_error>(call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_set_auto_detach_kernel_driver, get(), enable));
     }
 
+    /// @brief Set the maximum packet size for an endpoint
+    /// @param endpoint USB endpoint address
+    /// @param size maximum packet size for the endpoint
     void set_max_packet_size(uint8_t endpoint, decltype(libusb_endpoint_descriptor::wMaxPacketSize) size) noexcept {
         // keep endpoint bits 0-3, then move bit 7 to bit 4
         // this creates a 0-31 number representing all possible endpoint addresses
         maxPacketSize[(endpoint & 0x0F) | ((endpoint & 0x80) >> 3)] = size;
     }
 
+    /// @brief Get the maximum packet size for an endpoint
+    /// @param endpoint USB endpoint address
+    /// @return value previously stored with set_max_packet_size(endpoint, value)
     decltype(libusb_endpoint_descriptor::wMaxPacketSize) get_max_packet_size(uint8_t endpoint) const noexcept {
         // keep endpoint bits 0-3, then move bit 7 to bit 4
         // this creates a 0-31 number representing all possible endpoint addresses
         return maxPacketSize[(endpoint & 0x0F) | ((endpoint & 0x80) >> 3)];
     }
 
-    // wrapper for libusb_get_device_descriptor(libusb_get_device())
-    // faster than calling get_device().get_device_descriptor()
+    /// @brief Get the device descriptor for the device_handle's device
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return a value initialized libusb_device_descriptor
+    /// @return device descriptor for the device_handle's device; value initialized on error
+    /// @note Faster than calling get_device() then get_device_descriptor()
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
     libusb_device_descriptor get_device_descriptor() const noexcept(!Throw) {
         libusb_device_descriptor descriptor{};
@@ -361,9 +416,16 @@ public:
         return descriptor;
     }
 
-    // wrapper for libusb_bulk_transfer(); returns std::pair with error code and number of bytes actually transferred
-    // Transfers on IN endpoints will continue until the requested number of bytes has been transferred
-    // TODO should a short packet on IN endpoint indicate the device is finished and this function return?
+    /// @brief transfer with libusb_bulk_transfer(); transfers IN continue until bufferSizeBytes is full or timeout/error occurs
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return error codes
+    /// @tparam ChunkTimeoutMs timeout in milliseconds for transfer of each chunk of data; 0 = unlimited
+    /// @tparam ZeroLengthPacketEnding end transfers OUT having (bufferSizeBytes % maxPacketSize(ep) == 0) with zero length packet
+    /// @tparam TimeoutMs timeout in milliseconds for entire transfer of data; 0 = unlimited
+    /// @param endpoint USB endpoint address
+    /// @param buffer buffer for transfer
+    /// @param bufferSizeBytes size of buffer in bytes
+    /// @return std::pair with error code and number of bytes actually transferred
     template <mvLog_t Loglevel = MVLOG_ERROR,
               bool Throw = true,
               unsigned int ChunkTimeoutMs = 0 /* unlimited */,
@@ -372,63 +434,93 @@ public:
               typename BufferValueType>
     std::pair<libusb_error, intmax_t> bulk_transfer(unsigned char endpoint, BufferValueType* buffer, intmax_t bufferSizeBytes) const noexcept(!Throw);
 
-    // bulk_transfer() overload for contiguous storage containers having data() and size() methods
+    /// @brief transfer with libusb_bulk_transfer(); transfers IN continue until bufferSizeBytes is full or timeout/error occurs
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return error codes
+    /// @tparam ChunkTimeoutMs timeout in milliseconds for transfer of each chunk of data; 0 = unlimited
+    /// @tparam ZeroLengthPacketEnding end transfers OUT having (bufferSizeBytes % maxPacketSize(ep) == 0) with zero length packet
+    /// @tparam TimeoutMs timeout in milliseconds for entire transfer of data; 0 = unlimited
+    /// @param endpoint USB endpoint address
+    /// @param buffer buffer for transfer; contiguous storage container having data() and size() methods
+    /// @return std::pair with error code and number of bytes actually transferred
     template <mvLog_t Loglevel = MVLOG_ERROR,
               bool Throw = true,
               unsigned int ChunkTimeoutMs = 0 /* unlimited */,
               bool ZeroLengthPacketEnding = false,
               unsigned int TimeoutMs = 0 /* unlimited */,
               typename ContainerType>
-    std::pair<libusb_error, intmax_t> bulk_transfer(const unsigned char endpoint, ContainerType& container) const noexcept(!Throw) {
+    std::pair<libusb_error, intmax_t> bulk_transfer(const unsigned char endpoint, ContainerType& buffer) const noexcept(!Throw) {
         return bulk_transfer<Loglevel, Throw, ChunkTimeoutMs, ZeroLengthPacketEnding, TimeoutMs>(
-            endpoint, container.data(), container.size() * sizeof(typename ContainerType::value_type));
+            endpoint, buffer.data(), buffer.size() * sizeof(typename ContainerType::value_type));
     }
 
-    // basic wrapper for libusb_bulk_transfer()
-    int bulk_transfer(unsigned char endpoint, void *data, int length, int *transferred, std::chrono::milliseconds timeout) const noexcept {
-        return libusb_bulk_transfer(get(), endpoint, static_cast<unsigned char*>(data), length, transferred, static_cast<unsigned int>(timeout.count()));
-    }
-
-    // wrapper for libusb_control_transfer()
+    /// @brief basic wrapper for libusb_bulk_transfer()
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return error codes
+    /// @return libusb_error result code
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
-    int control_transfer(uint8_t requestType, uint8_t request, uint16_t value, uint16_t index, void *data, uint16_t length, std::chrono::milliseconds timeout) const noexcept(!Throw) {
-        return call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_control_transfer, get(), requestType, request, value, index, static_cast<unsigned char*>(data), length, static_cast<unsigned int>(timeout.count()));
+    libusb_error bulk_transfer(unsigned char endpoint, void *data, int length, int *transferred, std::chrono::milliseconds timeout) const noexcept {
+        return static_cast<libusb_error>(call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_bulk_transfer, get(), endpoint, static_cast<unsigned char*>(data), length, transferred, static_cast<unsigned int>(timeout.count())));
+    }
+
+    /// @brief basic wrapper for libusb_control_transfer()
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return error codes
+    /// @return libusb_error result code
+    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
+    libusb_error control_transfer(uint8_t requestType, uint8_t request, uint16_t value, uint16_t index, void *data, uint16_t length, std::chrono::milliseconds timeout) const noexcept(!Throw) {
+        return static_cast<libusb_error>(call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_control_transfer, get(), requestType, request, value, index, static_cast<unsigned char*>(data), length, static_cast<unsigned int>(timeout.count())));
+    }
+
+    /// @brief basic wrapper for libusb_interrupt_transfer()
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return error codes
+    /// @return libusb_error result code
+    template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
+    libusb_error interrupt_transfer(unsigned char endpoint, void *data, int length, int *transferred, std::chrono::milliseconds timeout) const noexcept {
+        return static_cast<libusb_error>(call_log_throw<Loglevel, Throw>(__func__, __LINE__, libusb_interrupt_transfer, get(), endpoint, static_cast<unsigned char*>(data), length, transferred, static_cast<unsigned int>(timeout.count())));
     }
 };
 
+/// @brief RAII wrapper for libusb_device; automatically calls libusb_unref_device() on destruction
 class usb_device : public unique_resource_ptr<libusb_device, libusb_unref_device> {
 private:
     using _base = unique_resource_ptr<libusb_device, libusb_unref_device>;
 
 public:
-    // inherit base constructors
+    // inherit base constructors, delete base constructors that conflict with libusb ref counts
     using unique_resource_ptr<libusb_device, libusb_unref_device>::unique_resource_ptr;
-
-    // stores a raw libusb_device* pointer, increments its refcount with libusb_ref_device()
-    explicit usb_device(pointer ptr) noexcept : _base{ptr ? libusb_ref_device(ptr) : nullptr} {}
-
-    // delete base constructors that conflict with libusb ref counts
     usb_device(pointer, const deleter_type &) = delete;
     usb_device(pointer, deleter_type &&) = delete;
 
-    // generate a device_handle for i/o on the device
+    /// @brief construct a usb_device from a raw libusb_device* pointer and shares ownership
+    /// @param ptr raw libusb_device* pointer
+    explicit usb_device(pointer ptr) noexcept : _base{ptr ? libusb_ref_device(ptr) : nullptr} {}
+
+    /// @brief open a device_handle for i/o on the device
+    /// @return device_handle for i/o on the device
     device_handle open() const noexcept(false) {
         return device_handle{get()};
     }
 
-    // start managing the new libusb_device* with libusb_ref_device()
-    // then remove the old libusb_device* and decrement its ref count
-    // No exceptions are thrown. No errors are logged.
+    /// @brief Release shared ownership of usb device, then replace with ptr and take shared ownership
+    /// @param ptr raw resource pointer used to replace the currently managed resource
+    /// @note No exceptions are thrown. No errors are logged.
     void reset(pointer ptr = pointer{}) noexcept {
         _base::reset(ptr ? libusb_ref_device(ptr) : nullptr);
     }
 
-    // wrapper for libusb_get_config_descriptor()
+    /// @brief get the USB config descriptor given the index
+    /// @param configIndex index of the config descriptor to get
+    /// @return config_descriptor for the USB device
     config_descriptor get_config_descriptor(uint8_t configIndex) const noexcept(noexcept(config_descriptor{get(), 0})) {
         return config_descriptor{get(), configIndex};
     }
 
-    // wrapper for libusb_get_device_descriptor()
+    /// @brief get the USB device descriptor
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return a value initialized libusb_device_descriptor
+    /// @return device descriptor for the device; value initialized on error
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true>
     libusb_device_descriptor get_device_descriptor() const noexcept(!Throw) {
         libusb_device_descriptor descriptor{};
@@ -436,14 +528,17 @@ public:
         return descriptor;
     }
 
-    // wrapper for libusb_get_bus_number()
+    /// @brief get the USB bus number to which the device is connected
+    /// @return bus number to which the device is connected
     uint8_t get_bus_number() const noexcept(false) {
         return CALL_LOG_ERROR_THROW(libusb_get_bus_number, get());
     }
 
-    // wrapper for libusb_get_port_numbers()
-    // template param Len is the maximum possible number of port-numbers read from usb
-    // the return vector is resized to the actual number read
+    /// @brief get the USB port numbers to which the device is connected
+    /// @tparam Loglevel log level used when errors occur
+    /// @tparam Throw throw exceptions on errors or only return empty vector
+    /// @tparam Len maximum number of port numbers to read from usb
+    /// @return port numbers to which device is connected, resized to actual number read; empty on error
     template<mvLog_t Loglevel = MVLOG_ERROR, bool Throw = true, int Len = 7>
     std::vector<uint8_t> get_port_numbers() const noexcept(!Throw) {
         std::vector<uint8_t> numbers(Len, 0);
@@ -454,36 +549,34 @@ public:
             // when throwing disabled, then always prevent resize of negative/error code result
             numbers.resize(result);
         }
+        else {
+            // when throwing disabled, then return empty vector on error
+            numbers.clear();
+        }
         return numbers;
     }
 };
 
-// device_list container class wrapper for libusb_get_device_list()
-// container interface ideas from https://en.cppreference.com/w/cpp/named_req/SequenceContainer
+/// @brief RAII wrapper for generated list of usb_device; automatically releases shared ownership of devices and frees device list on destruction
 class device_list {
-public:
-    using value_type = libusb_device*;
-    using size_type = std::size_t;
-    using difference_type = std::ptrdiff_t;
-    using reference = usb_device;
-    using const_reference = const reference;
-    using pointer = value_type*;
-    using const_pointer = const value_type*;
-
-
+private:
+    /// @brief iterator template internally used by device_list
+    /// @tparam Val value type of the iterator
+    /// @tparam Ref reference type of the iterator; non-reference transformative type returns an r-value
+    ///         to prevent dangling references with operator*() and operator[]()
     template<typename Val, typename Ref>
     class iterator_xform {
       public:
-        //using Val = libusb_device*;
-        //using Ref = usb_device;
         using iterator_category = std::random_access_iterator_tag;
         using value_type = Val;
         using difference_type = std::ptrdiff_t;
-        using reference = Ref;       // results in r-value returned by operator*()
+        using reference = Ref;
         using pointer = value_type*;
 
         explicit iterator_xform(pointer ptr) noexcept : ptr_{ptr} {}
 
+        // until C++17, deref operators must return non-const reference since usb_device derives
+        // from std::unique_ptr and a const unique_ptr can not be moved or copied as needed by a function return
         reference operator*() const noexcept {
             return reference{*ptr_};
         }
@@ -558,9 +651,16 @@ public:
       private:
         pointer ptr_ = nullptr;
     };
+
+public:
+    using value_type = libusb_device*;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using reference = usb_device;
+    using const_reference = usb_device; // unable to be const usb_device until c++17 due to unique_ptr base
+    using pointer = value_type*;
+    using const_pointer = const value_type*;
     using iterator = iterator_xform<libusb_device*, usb_device>;
-    // 2nd const_iterator param should be const but it prevent the return value from being moved,
-    // and then the fallback to copy fails because the base unique_ptr can not copy
     using const_iterator = iterator_xform<libusb_device*, usb_device>;
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
@@ -588,6 +688,8 @@ public:
         return *this;
     }
 
+    /// @brief Construct a device_list from a raw libusb_context*
+    /// @param context raw libusb_context* from which to generate the device list
     explicit device_list(libusb_context* context) noexcept(false) {
         // libusb_get_device_list() is not thread safe!
         // https://github.com/libusb/libusb/wiki/FAQ#what-are-the-extra-considerations-to-be-applied-to-applications-which-interact-with-libusb-from-multiple-threads
@@ -601,12 +703,19 @@ public:
         countDevices = static_cast<size_type>(CALL_LOG_ERROR_THROW(libusb_get_device_list, context, &deviceList));
     }
 
+    /// @brief Construct a device_list from a usb_context
+    /// @param context usb_context from which to generate the device list
     explicit device_list(const usb_context& context) noexcept(false) : device_list{context.get()} {}
 
-    // wrap an existing libusb_device** list and its count
+    /// @brief Wrap an existing libusb_device** list and its count, then take ownership of it
+    /// @param deviceList raw libusb_device** list
+    /// @param countDevices count of libusb_device* device pointers in the list
     device_list(pointer deviceList, size_type countDevices) noexcept : deviceList{deviceList}, countDevices{countDevices} {}
 
+    ////////////////////
     // container methods
+    ////////////////////
+
     size_type size() const noexcept {
         return countDevices;
     }
@@ -711,6 +820,7 @@ inline usb_device device_handle::get_device() const noexcept {
     return usb_device{libusb_get_device(get())};
 }
 
+// TODO should a short packet on IN endpoint indicate the device is finished and this function quickly return vs. wait for timeout/error?
 template <mvLog_t Loglevel, bool Throw, unsigned int ChunkTimeoutMs, bool ZeroLengthPacketEnding, unsigned int TimeoutMs, typename BufferValueType>
 inline std::pair<libusb_error, intmax_t> device_handle::bulk_transfer(const unsigned char endpoint,
                                                                        BufferValueType* const buffer,
