@@ -25,6 +25,7 @@
 #include <tuple>
 #include <chrono>
 #include <cstring>
+#include <cassert>
 
 using dp::libusb::config_descriptor;
 using dp::libusb::device_handle;
@@ -152,8 +153,8 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t deviceRequi
         span<deviceDesc_t> foundDevices{foundDevicesBuffer, static_cast<size_t>(sizeFoundDevicesBufferEntities)};
         auto* foundDevice = foundDevices.begin();
         for (const auto candidateDevice : deviceList) {
-            // skip invalid devices https://github.com/libusb/libusb/issues/1287
-            if(!candidateDevice) continue;
+            // disallow invalid devices https://github.com/libusb/libusb/issues/1287
+            assert(candidateDevice);
 
             // setup device i/o and query device
             try {
@@ -258,8 +259,8 @@ usb_device acquireDeviceByPath(const char* const path) {
         // Loop over all usb devices
         const std::string requiredPath(path);
         for(auto candidateDevice : deviceList) {
-            // skip invalid devices https://github.com/libusb/libusb/issues/1287
-            if(!candidateDevice) continue;
+            // disallow invalid devices https://github.com/libusb/libusb/issues/1287
+            assert(candidateDevice);
 
             // compare device path with required path
             if(requiredPath == getLibusbDevicePath(candidateDevice)) {
