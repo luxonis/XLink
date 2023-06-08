@@ -54,16 +54,24 @@ struct unique_resource_deleter {
     }
 };
 
-/// @brief base unique_resource_ptr type used to wrap native API resources; behavior is undefined
-///        using operator->() and operator*() when get() == nullptr
+/// @brief base unique_resource_ptr class to wrap native API resources; behavior is undefined
+///        using operator->() or operator*() when get() == nullptr
 /// @tparam Resource native API resource type; the type of the resource managed by this unique_resource_ptr
 /// @tparam Dispose native API function used to release the resource; must be a function pointer
 template<typename Resource, void(*Dispose)(Resource*)>
-using unique_resource_ptr = std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>;
+class unique_resource_ptr : public std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>> {
+private:
+    using _base = std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>;
 
-// TODO delete base unique_resource_ptr constructors that conflict with ref counts
-// e.g. usb_device(pointer, const deleter_type &) = delete;
-//      usb_device(pointer, deleter_type &&) = delete;
+public:
+    // inherit base constructors
+    using _base::unique_ptr;
+
+    // delete base unique_resource_ptr constructors that would conflict with ref counts
+    unique_resource_ptr(typename _base::pointer, const typename _base::deleter_type &) = delete;
+    unique_resource_ptr(typename _base::pointer, typename _base::deleter_type &&) = delete;
+};
+
 
 /// @brief libusb resources, structs, and functions with RAII resource management and exceptions
 namespace libusb {
@@ -93,7 +101,7 @@ public:
     transfer_error(int libusbErrorCode, const char* what, intmax_t transferred) noexcept :
         usb_error{libusbErrorCode, what}, transferred{transferred} {}
 private:
-    intmax_t transferred; // number of bytes transferred
+    intmax_t transferred{}; // number of bytes transferred
 };
 
 // tag dispatch for throwing or not throwing exceptions
@@ -166,7 +174,7 @@ private:
 
     static constexpr int DEFAULT_CHUNK_SIZE = 1024 * 1024;  // must be multiple of endpoint max packet size
     static constexpr int DEFAULT_CHUNK_SIZE_USB1 = 64;      // must be multiple of endpoint max packet size
-    static constexpr decltype(libusb_endpoint_descriptor::wMaxPacketSize) DEFAULT_MAX_PACKET_SIZE = 512;
+    static constexpr decltype(libusb_endpoint_descriptor::wMaxPacketSize) DEFAULT_MAX_PACKET_SIZE = 512; // USB 1.1 = 64, USB 2.0 = 512, USB 3+ = 1024
     static constexpr std::array<decltype(libusb_endpoint_descriptor::wMaxPacketSize), 32> DEFAULT_MAX_PACKET_ARRAY{
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
         DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE, DEFAULT_MAX_PACKET_SIZE,
@@ -202,17 +210,43 @@ private:
     }
 
 public:
-    // inherit base constructors, delete base constructors that conflict with libusb ref counts
-    using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
-    device_handle(pointer, const deleter_type &) = delete;
-    device_handle(pointer, deleter_type &&) = delete;
+    ////////////////
+    // constructors
+    ////////////////
+
+    // inherit base constructors
+    using _base::unique_resource_ptr;
 
     /// @brief Create a device_handle from a raw libusb_device_handle*
     /// @param handle raw libusb_device_handle* to wrap and manage ownership
     /// @note This constructor will not manage previously claimed interfaces and
     ///       will default to DEFAULT_MAX_PACKET_SIZE for all endpoints
-    explicit device_handle(libusb_device_handle* handle) noexcept(false)
+    explicit device_handle(pointer handle) noexcept(false)
         : _base{handle}, chunkSize{handle ? get_chunk_size(get_device_descriptor().bcdUSB) : DEFAULT_CHUNK_SIZE} {}
+
+    // move constructor
+    device_handle(device_handle &&other) noexcept :
+        _base{std::move(other)},
+        chunkSize{std::exchange(other.chunkSize, DEFAULT_CHUNK_SIZE)},
+        maxPacketSize{exchange_maxPacketSize(other.maxPacketSize)},
+        claimedInterfaces{std::move(other.claimedInterfaces)}
+    {}
+
+    // move assign
+    device_handle &operator=(device_handle &&other) noexcept {
+        if (this != &other) {
+            _base::operator=(std::move(other));
+            chunkSize = std::exchange(other.chunkSize, DEFAULT_CHUNK_SIZE);
+            maxPacketSize = exchange_maxPacketSize(other.maxPacketSize);
+            claimedInterfaces = std::move(other.claimedInterfaces);
+        }
+        return *this;
+    }
+
+    // destructor
+    ~device_handle() noexcept {
+        reset();
+    }
 
     /// @brief Create a device_handle from a raw libusb_device*
     /// @param device raw libusb_device* from which to open a new handle and manage its ownership
@@ -221,7 +255,7 @@ public:
         CALL_LOG_ERROR_THROW(libusb_open, device, out_param(static_cast<_base&>(*this)));
 
         // cache the device's bcdUSB version for use in transfer methods
-        // call libusb_get_device_descriptor() directly since we already have the raw libusb_device*
+        // call libusb_get_device_descriptor() directly since already have the raw libusb_device*
         libusb_device_descriptor descriptor{};
         CALL_LOG_ERROR_THROW(libusb_get_device_descriptor, device, &descriptor);
         chunkSize = get_chunk_size(descriptor.bcdUSB);
@@ -243,27 +277,9 @@ public:
     /// @param device usb_device from which to open a new handle and manage its ownership
     explicit device_handle(const usb_device& device) noexcept(noexcept(device_handle{std::declval<libusb_device*>()}));
 
-    // copy and move constructors and assignment operators
-    device_handle(const device_handle&) = delete;
-    device_handle& operator=(const device_handle&) = delete;
-    device_handle(device_handle &&other) noexcept :
-        _base{std::move(other)},
-        chunkSize{std::exchange(other.chunkSize, DEFAULT_CHUNK_SIZE)},
-        maxPacketSize{exchange_maxPacketSize(other.maxPacketSize)},
-        claimedInterfaces{std::move(other.claimedInterfaces)}
-    {}
-    device_handle &operator=(device_handle &&other) noexcept {
-        if (this != &other) {
-            _base::operator=(std::move(other));
-            chunkSize = std::exchange(other.chunkSize, DEFAULT_CHUNK_SIZE);
-            maxPacketSize = exchange_maxPacketSize(other.maxPacketSize);
-            claimedInterfaces = std::move(other.claimedInterfaces);
-        }
-        return *this;
-    }
-    ~device_handle() noexcept {
-        reset();
-    }
+    ///////////
+    // methods
+    ///////////
 
     /// @brief Release handle and its claimed interfaces, then replace with ptr
     /// @param ptr raw resource pointer used to replace the currently managed resource
@@ -277,7 +293,7 @@ public:
         _base::reset(ptr);
 
         // reset defaults
-        // do not know what interfaces or endpoints are in use, therefore we don't know their max packet size
+        // do not know what interfaces or endpoints are in use, therefore don't know their max packet size
         chunkSize = ptr == nullptr ? DEFAULT_CHUNK_SIZE : get_chunk_size(get_device_descriptor().bcdUSB);
         maxPacketSize = DEFAULT_MAX_PACKET_ARRAY;
         claimedInterfaces.clear();
@@ -488,10 +504,8 @@ private:
     using _base = unique_resource_ptr<libusb_device, libusb_unref_device>;
 
 public:
-    // inherit base constructors, delete base constructors that conflict with libusb ref counts
-    using unique_resource_ptr<libusb_device, libusb_unref_device>::unique_resource_ptr;
-    usb_device(pointer, const deleter_type &) = delete;
-    usb_device(pointer, deleter_type &&) = delete;
+    // inherit base constructors
+    using _base::unique_resource_ptr;
 
     /// @brief construct a usb_device from a raw libusb_device* pointer and shares ownership
     /// @param ptr raw libusb_device* pointer
@@ -892,21 +906,8 @@ inline std::pair<libusb_error, intmax_t> device_handle::bulk_transfer(const unsi
                 // * number of bytes remining for storage in the outgoing buffer
                 iterationTransferredBytes = static_cast<int>(std::min<intmax_t>(iterationTransferredBytes, bufferSizeBytes));
 
-                // did the transfer happen with the overflow buffer? Possible only on IN transfers (device to host)
+                // did the transfer happen with the overflow buffer?
                 if(iterationBuffer == overflowBuffer.data()) {
-                    // validate the data transmitted into the overflow buffer is not larger than remaining space in outgoing buffer
-                    // However in testing, if I start an 84 byte incoming transfer, so it is all in one packet, so I use the overflow buffer to receive
-                    // since it is not %=0, so I tell the libusbapi 512 bytes buffer to avoid overflows, then libusb comes back with 512 bytes instead
-                    // of the 84 I would expect. Either libusb or the device sent the data. When I inspected the 512 packet, I could see
-                    // the first 84 bytes seemed formatted and regular, and then the 85 bytes and later seemed patterned. Maybe that is
-                    // uninitialized data.
-                    //if(iterationTransferredBytes > bufferSizeBytes) {
-                    //    rcNum = LIBUSB_ERROR_OVERFLOW;
-                    //    mvLog(Loglevel, FAIL_FORMAT, endpoint, DIRECTION_TEXT[is_direction_in(endpoint)], transferredBytes, completeSizeBytes, "final packet won't fit into outgoing buffer");
-                    //    throw_conditional_transfer_error(LIBUSB_ERROR_OVERFLOW, transferredBytes, std::integral_constant<bool, Throw>{});
-                    //    break;
-                    //}
-
                     // copy the "partial" packet from the overflow buffer into the outgoing buffer
                     std::copy_n(overflowBuffer.data(),
                                 iterationTransferredBytes,

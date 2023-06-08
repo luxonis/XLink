@@ -6,15 +6,17 @@ Licensed under the Apache License, Version 2.0 http://www.apache.org/licenses/LI
 ## Overview
 
 `dp::libusb` wraps the C apis of [libusb](https://libusb.info/) with C++ unique resource classes
-that follow RAII semantics to automatically dispose resources. A simple type `dp::unique_resource_ptr`
-derives from `std::unique_ptr` and takes a C-function as a template parameter for the C api
-to dispose the resource. Most `dp::libusb` classes derive from this resource type.
-
-Many raw libusb types, e.g. `libusb_device_descriptor`, are used in their simple POD form.
-Some resources are not implemented, e.g. asynchronous device I/O.
+that follow RAII semantics for ownership and automatic disposal of resources. A simple class
+`dp::unique_resource_ptr` derives from `std::unique_ptr` with an additional template
+parameter for a C-function pointer to dispose the resource. Most `dp::libusb` classes derive
+from this base resource type.
 
 `dp::libusb` is currently focused on the needs of XLink; the protocol to communicate with
-Intel Movidius/Myriad devices.
+Intel Movidius/Myriad devices. A `std::shared_ptr` base for resources was considered for
+some use cases. It was not implemented due to the limited needs of XLink.
+
+Many raw libusb types, e.g. `libusb_device_descriptor`, are used in their simple POD form.
+Some libusb resources are not implemented, e.g. asynchronous device I/O.
 
 ## Rules
 
