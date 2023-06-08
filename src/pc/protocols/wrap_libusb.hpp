@@ -64,8 +64,8 @@ private:
     using _base = std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>;
 
 public:
-    // inherit base constructors
-    using _base::unique_ptr;
+    // inherit base constructors, long form due to Clang fail using _base
+    using std::unique_ptr<Resource, unique_resource_deleter<Resource, Dispose>>::unique_ptr;
 
     // delete base unique_resource_ptr constructors that would conflict with ref counts
     unique_resource_ptr(typename _base::pointer, const typename _base::deleter_type &) = delete;
@@ -214,8 +214,8 @@ public:
     // constructors
     ////////////////
 
-    // inherit base constructors
-    using _base::unique_resource_ptr;
+    // inherit base constructors, long form due to Clang fail using _base
+    using unique_resource_ptr<libusb_device_handle, libusb_close>::unique_resource_ptr;
 
     /// @brief Create a device_handle from a raw libusb_device_handle*
     /// @param handle raw libusb_device_handle* to wrap and manage ownership
@@ -504,8 +504,8 @@ private:
     using _base = unique_resource_ptr<libusb_device, libusb_unref_device>;
 
 public:
-    // inherit base constructors
-    using _base::unique_resource_ptr;
+    // inherit base constructors, long form due to Clang fail using _base
+    using unique_resource_ptr<libusb_device, libusb_unref_device>::unique_resource_ptr;
 
     /// @brief construct a usb_device from a raw libusb_device* pointer and shares ownership
     /// @param ptr raw libusb_device* pointer
