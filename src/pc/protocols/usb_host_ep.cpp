@@ -133,25 +133,29 @@ int usbEpPlatformClose(void *fdKey)
     int error;
 
     if (isServer) {
-	if (usbFdRead != -1){
-	    close(usbFdRead);
-	    usbFdRead = -1;
-	}
+#if defined(_WIN32)
+    	return X_LINK_ERROR;
+#else
+    	if (usbFdRead != -1){
+	        close(usbFdRead);
+	        usbFdRead = -1;
+    	}
 
-	if (usbFdWrite != -1){
-	    close(usbFdWrite);
-	    usbFdWrite = -1;
-	}
+	    if (usbFdWrite != -1){
+    	    close(usbFdWrite);
+	        usbFdWrite = -1;
+	    }
+#endif
     } else {
-	error = libusb_release_interface(dev_handle, INTERFACE_XLINK);
-	if (error != LIBUSB_SUCCESS) {
-	    libusb_exit(ctx);
+	    error = libusb_release_interface(dev_handle, INTERFACE_XLINK);
+	    if (error != LIBUSB_SUCCESS) {
+            libusb_exit(ctx);
 
-	    return error;
-	}
+	        return error;
+	    }
 
-	/* Release the device and exit */
-	libusb_close(dev_handle);
+	    /* Release the device and exit */
+	    libusb_close(dev_handle);
     }
 
     libusb_exit(ctx);
@@ -166,14 +170,17 @@ int usbEpPlatformRead(void *fdKey, void *data, int size)
     int rc = 0;
 
     if (isServer) {
-	if(usbFdRead < 0)
-	{
-	    return -1;
-	}
-
-	rc = read(usbFdRead, data, size);
+	    if(usbFdRead < 0)
+    	{
+	        return -1;
+	    }
+#if defined(_WIN32)
+    	return X_LINK_ERROR;
+#else
+	    rc = read(usbFdRead, data, size);
+#endif
     } else {
-	rc = libusb_bulk_transfer(dev_handle, usbFdRead, (unsigned char*)data, size, &rc, TIMEOUT);
+	    rc = libusb_bulk_transfer(dev_handle, usbFdRead, (unsigned char*)data, size, &rc, TIMEOUT);
     }
 
     return rc;
@@ -184,15 +191,17 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
     int rc = 0;
 
     if (isServer) {
-	if(usbFdWrite < 0)
-	{
-	    return -1;
-	}
-
-	rc = write(usbFdWrite, data, size);
-
+	    if(usbFdWrite < 0)
+	    {
+	        return -1;
+    	}
+#if defined(_WIN32)
+    	return X_LINK_ERROR;
+#else
+	    rc = write(usbFdWrite, data, size);
+#endif
     } else {
-	rc = libusb_bulk_transfer(dev_handle, usbFdWrite, (unsigned char*)data, size, &rc, TIMEOUT);
+    	rc = libusb_bulk_transfer(dev_handle, usbFdWrite, (unsigned char*)data, size, &rc, TIMEOUT);
     }
 
     return rc;
