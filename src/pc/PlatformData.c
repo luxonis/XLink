@@ -57,6 +57,8 @@ extern int usbFdWrite;
 extern int usbFdRead;
 #endif  /*USE_USB_VSC*/
 
+#include "usb_host_ep.h"
+
 // ------------------------------------
 // Wrappers declaration. Begin.
 // ------------------------------------
