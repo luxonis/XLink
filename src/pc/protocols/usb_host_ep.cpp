@@ -8,9 +8,12 @@
 #include "usb_host_ep.h"
 #include "../PlatformDeviceFd.h"
 
+#if not defined(_WIN32)
 #include <unistd.h>
-#include <stdlib.h>
 #include <fcntl.h>
+#endif
+
+#include <stdlib.h>
 
 #include <libusb-1.0/libusb.h>
 
@@ -95,6 +98,9 @@ int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
 int usbEpPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
 {
+#if defined(_WIN32)
+	return X_LINK_ERROR;
+#else
     isServer = true;
 
     char outPath[256];
@@ -118,6 +124,7 @@ int usbEpPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) usbFdRead);
 
     return 0;
+#endif
 }
 
 
