@@ -79,7 +79,7 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
     }
-
+    
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
@@ -90,6 +90,9 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 
         case X_LINK_TCP_IP:
             return tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
+
+	case X_LINK_USB_EP:
+	    return usbEpPlatformWrite(deviceHandle->xLinkFD, data, size);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -112,6 +115,9 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 
         case X_LINK_TCP_IP:
             return tcpipPlatformRead(deviceHandle->xLinkFD, data, size);
+
+	case X_LINK_USB_EP:
+	    return usbEpPlatformRead(deviceHandle->xLinkFD, data, size);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
