@@ -212,6 +212,7 @@ XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
     link->peerState = XLINK_UP;
     link->hostClosedFD = 0;
     handler->linkId = link->id;
+
     return X_LINK_SUCCESS;
 }
 
@@ -686,6 +687,7 @@ const char* XLinkProtocolToStr(XLinkProtocol_t val) {
         case X_LINK_PCIE: return "X_LINK_PCIE";
         case X_LINK_IPC: return "X_LINK_IPC";
         case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
+	case X_LINK_USB_EP: return "X_LINK_USB_EP";
         case X_LINK_NMB_OF_PROTOCOLS: return "X_LINK_NMB_OF_PROTOCOLS";
         case X_LINK_ANY_PROTOCOL: return "X_LINK_ANY_PROTOCOL";
         default:
