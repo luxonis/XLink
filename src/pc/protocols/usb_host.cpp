@@ -109,6 +109,13 @@ extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRe
     // Also protects usb_mx_id_cache
     std::lock_guard<std::mutex> l(mutex);
 
+    // No RVC3 devices on USB now, return 0
+    if(in_deviceRequirements.platform == X_LINK_RVC3){
+        *out_amountOfFoundDevices = 0;
+        return X_LINK_PLATFORM_SUCCESS;
+    }
+
+
     // Get list of usb devices
     static libusb_device **devs = NULL;
     auto numDevices = libusb_get_device_list(context, &devs);
