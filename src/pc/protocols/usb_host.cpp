@@ -34,10 +34,13 @@ static constexpr std::chrono::milliseconds DEFAULT_CONNECT_TIMEOUT{20000};
 static constexpr std::chrono::milliseconds DEFAULT_SEND_FILE_TIMEOUT{10000};
 static constexpr auto USB1_CHUNKSZ = 64;
 
-static constexpr int USB_ENDPOINT_IN = 0x81;
-static constexpr int USB_ENDPOINT_OUT = 0x01;
+//static constexpr int USB_ENDPOINT_IN = 0x81;
+static constexpr int USB_ENDPOINT_IN = 0x01;
+//static constexpr int USB_ENDPOINT_OUT = 0x01;
+static constexpr int USB_ENDPOINT_OUT = 0x81;
 
-static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
+//static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
+static constexpr int XLINK_USB_DATA_TIMEOUT = 1000;
 
 static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
@@ -237,6 +240,7 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libu
 
         // Check path only
         std::string devicePath = getLibusbDevicePath(devs[i]);
+
         // Check if compare with name
         std::string requiredName(name);
         if(requiredName.length() > 0 && requiredName == devicePath){
@@ -850,7 +854,6 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 #endif  /*USE_LINK_JTAG*/
 #else
-
     libusb_device_handle* usbHandle = nullptr;
     xLinkPlatformErrorCode_t ret = usbLinkOpen(devPathWrite, usbHandle);
 
@@ -865,6 +868,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     *fd = createPlatformDeviceFdKey(usbHandle);
 
 #endif  /*USE_USB_VSC*/
+
 
     return 0;
 }
@@ -921,6 +925,7 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 
 int usb_read(libusb_device_handle *f, void *data, size_t size)
 {
+    printf("requested read. %d\r\n", size);
     const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
     {
@@ -928,6 +933,7 @@ int usb_read(libusb_device_handle *f, void *data, size_t size)
         if(ss > chunk_size)
             ss = chunk_size;
         int rc = libusb_bulk_transfer(f, USB_ENDPOINT_IN,(unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+	printf("result of transfer: %d\r\n", rc);
         if(rc)
             return rc;
         data = ((char *)data) + bt;
@@ -938,6 +944,9 @@ int usb_read(libusb_device_handle *f, void *data, size_t size)
 
 int usb_write(libusb_device_handle *f, const void *data, size_t size)
 {
+    printf("requested write. %d\r\n", size);
+    int bt, ss = (int)size;
+    
     const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
     {
@@ -945,6 +954,7 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size)
         if(ss > chunk_size)
             ss = chunk_size;
         int rc = libusb_bulk_transfer(f, USB_ENDPOINT_OUT, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+	printf("result of transfer: %d\r\n", rc);
         if(rc)
             return rc;
         data = (char *)data + bt;
@@ -1021,6 +1031,7 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
     {
         return -1;
     }
+
     while(byteCount < size)
     {
        int toWrite = (PACKET_LENGTH && (size - byteCount > PACKET_LENGTH)) \
@@ -1035,6 +1046,7 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
        byteCount += toWrite;
        unsigned char acknowledge;
        int rc;
+	
        rc = read(usbFdWrite, &acknowledge, sizeof(acknowledge));
 
        if ( rc < 0)

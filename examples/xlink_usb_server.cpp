@@ -37,10 +37,9 @@ int main(int argc, const char** argv){
     }
 
     XLinkHandler_t handler;
-    handler.devicePath = "/dev/usb-ffs/xlink"; 
+    handler.devicePath = "/dev/usb-ffs/depthai_device";
     handler.protocol = X_LINK_USB_EP;
     XLinkServer(&handler, "eps", X_LINK_BOOTED, X_LINK_MYRIAD_X);
-
 
     // loop through streams
     auto s = XLinkOpenStream(0, "test_0", sizeof(DUMMY_DATA) * 2);

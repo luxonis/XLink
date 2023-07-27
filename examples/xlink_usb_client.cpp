@@ -26,7 +26,8 @@ int main(int argc, char** argv) {
     mvLogDefaultLevelSet(MVLOG_ERROR);
 
     deviceDesc_t deviceDesc;
-    strcpy(deviceDesc.name, "usbdev");
+    strcpy(deviceDesc.name, "1.4");
+//    deviceDesc.protocol = X_LINK_USB_VSC;
     deviceDesc.protocol = X_LINK_USB_EP;
 
     printf("Device name: %s\n", deviceDesc.name);

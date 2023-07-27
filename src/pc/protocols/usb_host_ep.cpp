@@ -26,7 +26,7 @@
 #define PRODUCT_ID 0x1234
 
 /* Interface number for ffs.xlink */
-#define INTERFACE_XLINK 2
+#define INTERFACE_XLINK 0
 
 /* Base ndpoint address used for output */
 #define ENDPOINT_OUT_BASE 0x01
@@ -35,7 +35,7 @@
 #define ENDPOINT_IN_BASE 0x81
 
 /* Transfer timeout */
-#define TIMEOUT 2000
+#define TIMEOUT 200
 
 static int usbFdRead, usbFdWrite;
 static bool isServer;
@@ -88,8 +88,8 @@ int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void
      * In the way we initialized our usb-gadget on our device
      * We know ncm is claiming the first 2 interfaces
      */
-    usbFdWrite = ENDPOINT_OUT_BASE + 1; /* +1 because NCM claims 1 OUT endpoint */
-    usbFdRead = ENDPOINT_IN_BASE + 2; /* +2 because NCM claims 2 IN endpoints */
+    usbFdWrite = ENDPOINT_OUT_BASE;
+    usbFdRead = ENDPOINT_IN_BASE;
 
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) usbFdRead);
 
@@ -111,8 +111,8 @@ int usbEpPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     strcpy(inPath, devPathWrite);
     strcat(inPath, "/ep2");
 
-    int outfd = open(outPath, O_WRONLY);
-    int infd = open(inPath, O_RDONLY);
+    int outfd = open(outPath, O_RDWR);
+    int infd = open(inPath, O_RDWR);
 
     if(outfd < 0 || infd < 0) {
 	return -1;
@@ -170,6 +170,7 @@ int usbEpPlatformRead(void *fdKey, void *data, int size)
     int rc = 0;
 
     if (isServer) {
+	    printf("Server read requested: %d\n", size);
 	    if(usbFdRead < 0)
     	{
 	        return -1;
@@ -178,12 +179,21 @@ int usbEpPlatformRead(void *fdKey, void *data, int size)
     	return X_LINK_ERROR;
 #else
 	    rc = read(usbFdRead, data, size);
+    
+	    printf("Amount read data: %d\n", rc);
 #endif
     } else {
-	    rc = libusb_bulk_transfer(dev_handle, usbFdRead, (unsigned char*)data, size, &rc, TIMEOUT);
+	    int amount;
+	    printf("Client read requested: %d\n", size);
+	    rc = libusb_bulk_transfer(dev_handle, usbFdRead, (unsigned char*)data, size, &amount, TIMEOUT);
+
+	    printf("Amount read data: %d\n", amount);
     }
 
-    return rc;
+    printf("Read return code: %d.\n", rc);
+
+	if(rc < 0) return rc;
+    return 0;
 }
 
 int usbEpPlatformWrite(void *fdKey, void *data, int size)
@@ -191,6 +201,7 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
     int rc = 0;
 
     if (isServer) {
+	    printf("Server write requested: %d\n", size);
 	    if(usbFdWrite < 0)
 	    {
 	        return -1;
@@ -199,12 +210,21 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
     	return X_LINK_ERROR;
 #else
 	    rc = write(usbFdWrite, data, size);
+    
+	    printf("Amount written data: %d\n", rc);
 #endif
     } else {
-    	rc = libusb_bulk_transfer(dev_handle, usbFdWrite, (unsigned char*)data, size, &rc, TIMEOUT);
+	    int amount;
+	    printf("Client write requested: %d\n", size);
+    	rc = libusb_bulk_transfer(dev_handle, usbFdWrite, (unsigned char*)data, size, &amount, TIMEOUT);
+	    
+	printf("Amount written data: %d\n", amount);
     }
+	    
+printf("Write return code: %d.\n", rc);
 
-    return rc;
+	if(rc < 0) return rc;
+    return 0;
 }
 
 
