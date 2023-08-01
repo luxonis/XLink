@@ -34,13 +34,10 @@ static constexpr std::chrono::milliseconds DEFAULT_CONNECT_TIMEOUT{20000};
 static constexpr std::chrono::milliseconds DEFAULT_SEND_FILE_TIMEOUT{10000};
 static constexpr auto USB1_CHUNKSZ = 64;
 
-//static constexpr int USB_ENDPOINT_IN = 0x81;
-static constexpr int USB_ENDPOINT_IN = 0x01;
-//static constexpr int USB_ENDPOINT_OUT = 0x01;
-static constexpr int USB_ENDPOINT_OUT = 0x81;
+static constexpr int USB_ENDPOINT_IN = 0x81;
+static constexpr int USB_ENDPOINT_OUT = 0x01;
 
-//static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
-static constexpr int XLINK_USB_DATA_TIMEOUT = 1000;
+static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
 
 static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
@@ -925,7 +922,6 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 
 int usb_read(libusb_device_handle *f, void *data, size_t size)
 {
-    printf("requested read. %d\r\n", size);
     const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
     {
@@ -933,7 +929,6 @@ int usb_read(libusb_device_handle *f, void *data, size_t size)
         if(ss > chunk_size)
             ss = chunk_size;
         int rc = libusb_bulk_transfer(f, USB_ENDPOINT_IN,(unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
-	printf("result of transfer: %d\r\n", rc);
         if(rc)
             return rc;
         data = ((char *)data) + bt;
@@ -944,7 +939,6 @@ int usb_read(libusb_device_handle *f, void *data, size_t size)
 
 int usb_write(libusb_device_handle *f, const void *data, size_t size)
 {
-    printf("requested write. %d\r\n", size);
     int bt, ss = (int)size;
     
     const int chunk_size = DEFAULT_CHUNKSZ;
@@ -954,7 +948,6 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size)
         if(ss > chunk_size)
             ss = chunk_size;
         int rc = libusb_bulk_transfer(f, USB_ENDPOINT_OUT, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
-	printf("result of transfer: %d\r\n", rc);
         if(rc)
             return rc;
         data = (char *)data + bt;
