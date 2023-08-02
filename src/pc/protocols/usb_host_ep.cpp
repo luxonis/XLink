@@ -11,12 +11,14 @@
 #if not defined(_WIN32)
 #include <unistd.h>
 #include <fcntl.h>
-#endif
 
 #include <stdlib.h>
 #include <cstring>
 
-static int usbFdRead, usbFdWrite;
+struct fdPair {
+	int usbFdRead;
+	int usbFdWrite;
+};
 
 int usbEpInitialize() {
     return 0;
@@ -29,87 +31,112 @@ int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
 int usbEpPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
 {
-#if defined(_WIN32)
-    return X_LINK_ERROR;
-#else
-    char outPath[256];
-    strcpy(outPath, devPathWrite);
-    strcat(outPath, "/ep1");
+    fdPair *pair = new fdPair;
 
-    char inPath[256];
-    strcpy(inPath, devPathWrite);
-    strcat(inPath, "/ep2");
+    pair->usbFdRead = -1;
+    pair->usbFdWrite = -1;
 
-    int outfd = open(outPath, O_RDWR);
-    int infd = open(inPath, O_RDWR);
-
-    if(outfd < 0 || infd < 0) {
-	return -1;
+    if(devPathRead != NULL)
+    {
+	pair->usbFdRead = open(devPathRead, O_RDONLY);
     }
 
-    usbFdRead = infd;
-    usbFdWrite = outfd;
+    if(devPathWrite != NULL)
+    {
+	pair->usbFdWrite = open(devPathWrite, O_WRONLY);
+    }
 
-    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) usbFdRead);
+    *fd = createPlatformDeviceFdKey((void*)pair);
 
     return 0;
-#endif
 }
 
 
 int usbEpPlatformClose(void *fdKey)
 {
+    fdPair *pair;
+    getPlatformDeviceFdFromKey(fdKey, (void**)&pair);
+
     int error;
 
-#if defined(_WIN32)
-    return X_LINK_ERROR;
-#else
-    if (usbFdRead != -1){
-	close(usbFdRead);
-	usbFdRead = -1;
+    if (pair->usbFdRead > -1) {
+	close(pair->usbFdRead);
+	pair->usbFdRead = -1;
     }
 
-    if (usbFdWrite != -1){
-	close(usbFdWrite);
-	usbFdWrite = -1;
+    if (pair->usbFdWrite > -1) {
+	close(pair->usbFdWrite);
+	pair->usbFdWrite = -1;
     }
-#endif
+
+    destroyPlatformDeviceFdKey(fdKey);
+    delete pair;
 
     return EXIT_SUCCESS;
 }
 
 int usbEpPlatformRead(void *fdKey, void *data, int size)
 {
+    fdPair *pair;
+    getPlatformDeviceFdFromKey(fdKey, (void**)&pair);
+
     int rc = 0;
 
-    if(usbFdRead < 0)
+    if(pair->usbFdRead < 0)
     {
 	return -1;
     }
-#if defined(_WIN32)
-    return X_LINK_ERROR;
-#else
-    rc = read(usbFdRead, data, size);
 
-#endif
+    rc = read(pair->usbFdRead, data, size);
+
     return rc;
 }
 
 int usbEpPlatformWrite(void *fdKey, void *data, int size)
 {
+    fdPair *pair;
+    getPlatformDeviceFdFromKey(fdKey, (void**)&pair);
+
     int rc = 0;
 
-    if(usbFdWrite < 0)
+    if(pair->usbFdWrite < 0)
     {
 	return -1;
     }
-#if defined(_WIN32)
-    return X_LINK_ERROR;
-#else
-    rc = write(usbFdWrite, data, size);
 
-#endif
+    rc = write(pair->usbFdWrite, data, size);
     return rc;
 }
 
+#else
+int usbEpInitialize() {
+    return X_LINK_ERROR;
+}
 
+int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
+{
+    return X_LINK_ERROR;
+}
+
+int usbEpPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
+{
+    return X_LINK_ERROR;
+}
+
+
+int usbEpPlatformClose(void *fdKey)
+{
+    return X_LINK_ERROR;
+}
+
+int usbEpPlatformRead(void *fdKey, void *data, int size)
+{
+    return X_LINK_ERROR;
+}
+
+int usbEpPlatformWrite(void *fdKey, void *data, int size)
+{
+    return X_LINK_ERROR;
+}
+
+#endif
