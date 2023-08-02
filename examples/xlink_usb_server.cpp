@@ -32,7 +32,9 @@ int main(int argc, const char** argv){
     }
 
     XLinkHandler_t handler;
-    handler.devicePath = "/dev/usb-ffs/depthai_device";
+    // Write is ep1, read is ep2
+    handler.devicePath = "/dev/usb-ffs/depthai_device/ep1";
+    handler.devicePath2 = "/dev/usb-ffs/depthai_device/ep2";
     handler.protocol = X_LINK_USB_EP;
     auto serverRet = XLinkServer(&handler, "eps", X_LINK_BOOTED, X_LINK_MYRIAD_X);
     printf("Connection returned: %s\n", XLinkErrorToStr(serverRet));
@@ -51,15 +53,6 @@ int main(int argc, const char** argv){
     } else {
 	printf("Write failed...\n");
     }
-
-    streamPacketDesc_t p;
-    auto r = XLinkReadMoveData(s, &p);
-    if (r == X_LINK_SUCCESS) {
-	printf("Read successful: 0x%08X\n", w);
-    } else {
-	printf("Read failed...\n");
-    }
-    XLinkDeallocateMoveData(p.data, p.length);
 
     // Wait to make sure we caugth up to all requests
     std::this_thread::sleep_for(std::chrono::seconds(2));

@@ -56,21 +56,21 @@ int main(int argc, char** argv) {
 	printf("Open stream OK - id: 0x%08X\n",  s);
     }
 
+    streamPacketDesc_t p;
+    auto r = XLinkReadMoveData(s, &p);
+    if (r == X_LINK_SUCCESS) {
+	printf("Read successful: 0x%08X\n", r);
+    } else {
+	printf("Read failed...\n");
+    }
+    XLinkDeallocateMoveData(p.data, p.length);
+
     auto w = XLinkWriteData(s, (uint8_t*) &s, sizeof(s));
     if (w == X_LINK_SUCCESS) {
 	printf("Write successful: 0x%08X\n", w);
     } else {
 	printf("Write failed...\n");
     }
-
-    streamPacketDesc_t p;
-    auto r = XLinkReadMoveData(s, &p);
-    if (r == X_LINK_SUCCESS) {
-	printf("Read successful: 0x%08X\n", w);
-    } else {
-	printf("Read failed...\n");
-    }
-    XLinkDeallocateMoveData(p.data, p.length);
 
     return 0;
 }
