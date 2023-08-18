@@ -32,6 +32,9 @@ include(cmake/Flags.cmake)
 option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 # Build tests
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
+
+# Compile with USB protocol capabilities
+option(XLINK_ENABLE_LIBUSB "Enable USB protocol which requires libusb library" ON)
 # Debug option
 set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instead of Hunter")
 # Debug option
@@ -44,8 +47,11 @@ endif()
 message(STATUS "Configuring XLink with the following options:")
 message(STATUS "  XLINK_BUILD_EXAMPLES: ${XLINK_BUILD_EXAMPLES}")
 message(STATUS "  XLINK_BUILD_TESTS: ${XLINK_BUILD_TESTS}")
-message(STATUS "  XLINK_LIBUSB_LOCAL: ${XLINK_LIBUSB_LOCAL}")
-message(STATUS "  XLINK_LIBUSB_SYSTEM: ${XLINK_LIBUSB_SYSTEM}")
+message(STATUS "  XLINK_ENABLE_LIBUSB: ${XLINK_ENABLE_LIBUSB}")
+if(XLINK_ENABLE_LIBUSB)
+    message(STATUS "  XLINK_LIBUSB_LOCAL: ${XLINK_LIBUSB_LOCAL}")
+    message(STATUS "  XLINK_LIBUSB_SYSTEM: ${XLINK_LIBUSB_SYSTEM}")
+endif()
 
 # Create library target
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
@@ -58,27 +64,37 @@ endif()
 # Add dependencies
 include(cmake/XLinkDependencies.cmake)
 
-if(XLINK_LIBUSB_SYSTEM)
-    # Find system libusb
-    find_path(LIBUSB_INCLUDE_DIR NAMES libusb.h PATH_SUFFIXES "include" "libusb" "libusb-1.0")
-    find_library(LIBUSB_LIBRARY NAMES usb-1.0 PATH_SUFFIXES "lib")
-    if(NOT LIBUSB_INCLUDE_DIR OR NOT LIBUSB_LIBRARY)
-        message(FATAL_ERROR "libusb is required")
+if(XLINK_ENABLE_LIBUSB)
+    if(XLINK_LIBUSB_SYSTEM)
+        # Find system libusb
+        find_path(LIBUSB_INCLUDE_DIR NAMES libusb.h PATH_SUFFIXES "include" "libusb" "libusb-1.0")
+        find_library(LIBUSB_LIBRARY NAMES usb-1.0 PATH_SUFFIXES "lib")
+        if(NOT LIBUSB_INCLUDE_DIR OR NOT LIBUSB_LIBRARY)
+            message(FATAL_ERROR "libusb is required")
+        endif()
+        target_include_directories(${TARGET_NAME}
+            PRIVATE "${LIBUSB_INCLUDE_DIR}"
+        )
+        target_link_libraries(${TARGET_NAME}
+            PUBLIC ${LIBUSB_LIBRARY}
+        )
+    else()
+        # Link to CMake libusb
+        target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
+        if(WIN32 AND NOT MINGW)
+            target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib Pathcch.lib)
+            # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
+            target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
+        endif()
     endif()
-    target_include_directories(${TARGET_NAME}
-        PRIVATE "${LIBUSB_INCLUDE_DIR}"
-    )
-    target_link_libraries(${TARGET_NAME}
-        PUBLIC ${LIBUSB_LIBRARY}
-    )
-else()
-    # Link to CMake libusb
-    target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
-    if(WIN32 AND NOT MINGW)
-        target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib Pathcch.lib)
-        # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
-        target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
+
+    # Add compile define stating a local libusb usage
+    if(XLINK_LIBUSB_LOCAL)
+        target_compile_definitions(${TARGET_NAME} PRIVATE XLINK_LIBUSB_LOCAL)
     endif()
+
+    # Add compile define stating libusb is enabled
+    target_compile_definitions(${TARGET_NAME} PRIVATE XLINK_ENABLE_LIBUSB)
 endif()
 
 if(WIN32)
@@ -119,10 +135,6 @@ target_include_directories(${TARGET_NAME}
         ${XLINK_PRIVATE_INCLUDE}
         ${XLINK_INCLUDE}/XLink
 )
-
-if(XLINK_LIBUSB_LOCAL)
-    target_compile_definitions(${TARGET_NAME} PRIVATE XLINK_LIBUSB_LOCAL)
-endif()
 
 target_compile_definitions(${TARGET_NAME}
     PRIVATE
@@ -223,8 +235,10 @@ install(
 #Install include folder
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 # Install Hunter dependencies
-if(NOT XLINK_LIBUSB_LOCAL AND NOT XLINK_LIBUSB_SYSTEM)
-    install(DIRECTORY "${HUNTER_INSTALL_PREFIX}/" DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/dependencies")
+if(XLINK_ENABLE_LIBUSB)
+    if(NOT XLINK_LIBUSB_LOCAL AND NOT XLINK_LIBUSB_SYSTEM)
+        install(DIRECTORY "${HUNTER_INSTALL_PREFIX}/" DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/dependencies")
+    endif()
 endif()
 # Install export group (information about targets)
 install(EXPORT ${PROJECT_EXPORT_GROUP}

@@ -25,3 +25,12 @@ if(APPLE)
     list(APPEND XLINK_SOURCES "${XLINK_ROOT_DIR}/src/pc/MacOS/pthread_semaphore.c")
 endif()
 
+# Remove USB protocol if specified
+if(NOT XLINK_ENABLE_LIBUSB)
+    list(REMOVE_ITEM XLINK_SOURCES
+        "${XLINK_ROOT_DIR}/src/pc/protocols/usb_host.cpp"
+        "${XLINK_ROOT_DIR}/src/pc/Win/src/win_usb_host.cpp"
+    )
+    # message(FATAL_ERROR "Sources: ${XLINK_SOURCES}")
+endif()
+

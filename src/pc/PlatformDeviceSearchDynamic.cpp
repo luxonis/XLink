@@ -16,11 +16,6 @@
 #define MVLOG_UNIT_NAME PlatformDeviceSearchDynamic
 #include "XLinkLog.h"
 
-
-extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
-                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                     unsigned int *out_amountOfFoundDevices);
-
 xLinkPlatformErrorCode_t XLinkPlatformFindDevicesDynamic(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, unsigned sizeFoundDevices,
                                                      unsigned int *out_amountOfFoundDevices, int timeoutMs, bool (*cb)(deviceDesc_t*, unsigned int)) {
