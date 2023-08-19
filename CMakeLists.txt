@@ -40,6 +40,11 @@ set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instea
 # Debug option
 option(XLINK_LIBUSB_SYSTEM "Use system libusb library instead of Hunter" OFF)
 
+# Specify exporting all symbols on Windows (WIP: shared library on windows doesn't yet work fully (eg logging))
+if(WIN32 AND BUILD_SHARED_LIBS)
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON CACHE BOOL "")
+endif()
+
 if(XLINK_LIBUSB_LOCAL AND XLINK_LIBUSB_SYSTEM)
     message(FATAL_ERROR "XLINK_LIBUSB_LOCAL and XLINK_LIBUSB_SYSTEM options are mutually exclusive!")
 endif()
