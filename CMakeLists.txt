@@ -25,16 +25,12 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "Installation Directory" FORCE)
 endif()
 
-include(cmake/XLink.cmake)
-include(cmake/Flags.cmake)
-
+# Compile with USB protocol capabilities
+option(XLINK_ENABLE_LIBUSB "Enable USB protocol which requires libusb library" ON)
 # Build examples
 option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 # Build tests
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
-
-# Compile with USB protocol capabilities
-option(XLINK_ENABLE_LIBUSB "Enable USB protocol which requires libusb library" ON)
 # Debug option
 set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instead of Hunter")
 # Debug option
@@ -57,6 +53,10 @@ if(XLINK_ENABLE_LIBUSB)
     message(STATUS "    XLINK_LIBUSB_LOCAL: ${XLINK_LIBUSB_LOCAL}")
     message(STATUS "    XLINK_LIBUSB_SYSTEM: ${XLINK_LIBUSB_SYSTEM}")
 endif()
+
+# Include XLink sources & flags helpers
+include(cmake/XLink.cmake)
+include(cmake/Flags.cmake)
 
 # Create library target
 add_library(${TARGET_NAME} ${XLINK_SOURCES})
