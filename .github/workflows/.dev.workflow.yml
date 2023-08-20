@@ -22,6 +22,10 @@ jobs:
         include:
           - os: windows-latest
             compiler: mingw
+            libusb: true
+          - os: windows-latest
+            compiler: mingw
+            libusb: false
 
     steps:
     - uses: actions/checkout@v2
