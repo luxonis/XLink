@@ -50,11 +50,11 @@ jobs:
 
     - name: configure
       if: matrix.compiler == 'default'
-      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.shared }}
+      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.libusb }}
 
     - name: configure
       if: matrix.compiler == 'mingw'
-      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.shared }} -G"MinGW Makefiles"
+      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.libusb }} -G"MinGW Makefiles"
 
     - name: build
       run: cmake --build build --parallel
