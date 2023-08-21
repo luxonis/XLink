@@ -14,9 +14,8 @@ macro(add_example example_name example_src)
             message(WARNING "Automatic DLL copying not available")
         else()
             set(depthai_dll_libraries "$<TARGET_RUNTIME_DLLS:${example_name}>")
-            set(dll_copy_command "$<$<BOOL:${depthai_dll_libraries}>:${CMAKE_COMMAND}\;-E\;copy_if_different\;${depthai_dll_libraries}\;$<TARGET_FILE_DIR:${example_name}>>")
             add_custom_command(TARGET ${example_name} POST_BUILD COMMAND
-                ${dll_copy_command}
+                "$<$<BOOL:${depthai_dll_libraries}>:${CMAKE_COMMAND};-E;copy_if_different;${depthai_dll_libraries};$<TARGET_FILE_DIR:${example_name}>>"
                 COMMAND_EXPAND_LISTS
                 VERBATIM
             )
