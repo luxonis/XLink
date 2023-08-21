@@ -18,14 +18,14 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
         compiler: [default]
-        libusb: [true, false]
+        libusb: [ON, OFF]
         include:
           - os: windows-latest
             compiler: mingw
-            libusb: true
+            libusb: ON
           - os: windows-latest
             compiler: mingw
-            libusb: false
+            libusb: OFF
 
     steps:
     - uses: actions/checkout@v2
