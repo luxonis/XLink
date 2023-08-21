@@ -33,12 +33,12 @@ jobs:
         submodules: 'recursive'
 
     - name: Install libusb
-      if: matrix.os == 'macos-latest' && matrix.libusb == true
+      if: matrix.os == 'macos-latest' && matrix.libusb == 'ON'
       run: |
         brew install libusb
 
     - name: Install libusb
-      if: matrix.os == 'ubuntu-latest' && matrix.libusb == true
+      if: matrix.os == 'ubuntu-latest' && matrix.libusb == 'ON'
       run: |
         sudo apt-get install libusb-1.0-0-dev libusb-1.0-0
 
@@ -50,11 +50,11 @@ jobs:
 
     - name: configure
       if: matrix.compiler == 'default'
-      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.shared}}
+      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.shared }}
 
     - name: configure
       if: matrix.compiler == 'mingw'
-      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.shared}} -G"MinGW Makefiles"
+      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.shared }} -G"MinGW Makefiles"
 
     - name: build
       run: cmake --build build --parallel
