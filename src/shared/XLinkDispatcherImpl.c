@@ -3,6 +3,7 @@
 //
 
 #include <string.h>
+#include <time.h>
 #include "stdlib.h"
 
 #include "XLinkMacros.h"
@@ -49,6 +50,10 @@ int dispatcherEventSend(xLinkEvent_t *event)
     mvLog(MVLOG_DEBUG, "Send event: %s, size %d, streamId %ld.\n",
         TypeToStr(event->header.type), event->header.size, event->header.streamId);
 
+    struct timespec stime;
+    clock_gettime(CLOCK_MONOTONIC, &stime);
+    event->header.tsec = (uint64_t)stime.tv_sec;
+    event->header.tnsec = (uint32_t)stime.tv_sec;
     int rc = XLinkPlatformWrite(&event->deviceHandle,
         &event->header, sizeof(event->header));
 
@@ -69,10 +74,13 @@ int dispatcherEventSend(xLinkEvent_t *event)
     return 0;
 }
 
-int dispatcherEventReceive(xLinkEvent_t* event){
+int dispatcherEventReceive(xLinkEvent_t* event, struct timespec* out_time){
     // static xLinkEvent_t prevEvent = {0};
     int rc = XLinkPlatformRead(&event->deviceHandle,
         &event->header, sizeof(event->header));
+    if(out_time != NULL) {
+        clock_gettime(CLOCK_MONOTONIC, out_time);
+    }
 
     // mvLog(MVLOG_DEBUG,"Incoming event %p: %s %d %p prevEvent: %s %d %p\n",
     //       event,

@@ -107,7 +107,7 @@ typedef enum{
 #define INVALID_STREAM_ID 0xDEADDEAD
 #define INVALID_STREAM_ID_OUT_OF_MEMORY 0xDEADFFFF
 #define INVALID_LINK_ID   0xFF
-#define MAX_STREAM_NAME_LENGTH 64
+#define MAX_STREAM_NAME_LENGTH 52
 
 typedef uint32_t streamId_t;
 typedef uint8_t linkId_t;

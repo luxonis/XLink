@@ -35,7 +35,9 @@ static XLinkError_t checkEventHeader(xLinkEventHeader_t header);
 
 static float timespec_diff(struct timespec *start, struct timespec *stop);
 static XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs);
+static XLinkError_t addEvent_(xLinkEvent_t *event, unsigned int timeoutMs, struct timespec* out_time);
 static XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs);
+static XLinkError_t addEventWithPerf_(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs, struct timespec* out_time);
 static XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigned int msTimeout);
 static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_link);
 
@@ -232,8 +234,7 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* const packet)
-{
+XLinkError_t XLinkReadMoveDataWithTime(streamId_t const streamId, streamPacketDesc_t* packet, struct timespec* out_time) {
     XLINK_RET_IF(packet == NULL);
 
     float opTime = 0;
@@ -245,7 +246,7 @@ XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* co
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_READ_REQ,
                      0, NULL, link->deviceHandle);
     event.header.flags.bitField.moveSemantic = 1;
-    XLINK_RET_IF(addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT));
+    XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, out_time));
 
     if (!event.data)
     {
@@ -274,6 +275,11 @@ XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* co
         packet->length = 0;
     }
     return retVal;
+}
+
+XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* const packet)
+{
+    return XLinkReadMoveDataWithTime(streamId, packet, NULL);
 }
 
 XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t const streamId, streamPacketDesc_t* const packet, const unsigned int msTimeout)
@@ -417,11 +423,11 @@ float timespec_diff(struct timespec *start, struct timespec *stop)
     return start->tv_nsec/ 1000000000.0f + start->tv_sec;
 }
 
-XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
+XLinkError_t addEvent_(xLinkEvent_t *event, unsigned int timeoutMs, struct timespec* out_time)
 {
     ASSERT_XLINK(event);
 
-    xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, event);
+    xLinkEvent_t* ev = DispatcherAddEvent_(EVENT_LOCAL, event, out_time);
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
             TypeToStr(event->header.type), event->header.id, event->header.streamName);
@@ -466,20 +472,28 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
 
     return X_LINK_SUCCESS;
 }
+XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
+{
+    return addEvent_(event, timeoutMs, NULL);
+}
 
-XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs)
+XLinkError_t addEventWithPerf_(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs, struct timespec* out_time)
 {
     ASSERT_XLINK(opTime);
 
     struct timespec start, end;
     clock_gettime(CLOCK_REALTIME, &start);
 
-    XLINK_RET_IF_FAIL(addEvent(event, timeoutMs));
+    XLINK_RET_IF_FAIL(addEvent_(event, timeoutMs, out_time));
 
     clock_gettime(CLOCK_REALTIME, &end);
     *opTime = timespec_diff(&start, &end);
 
     return X_LINK_SUCCESS;
+}
+XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs)
+{
+    return addEventWithPerf_(event, opTime, timeoutMs, NULL);
 }
 
 XLinkError_t addEventTimeout(xLinkEvent_t *event, struct timespec abstime)

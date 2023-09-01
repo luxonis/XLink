@@ -286,6 +286,8 @@ XLinkError_t XLinkReleaseSpecificData(streamId_t streamId, streamPacketDesc_t* p
  */
 XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* const packet);
 
+XLinkError_t XLinkReadMoveDataWithTime(streamId_t const streamId, streamPacketDesc_t* packet, struct timespec* out_time);
+
 /**
  * @brief Reads data from local stream and moves ownership. Will only have something if it was written to by the remote
  * @note Caller is responsible for deallocating with XLinkDeallocateMoveData(streamPacketDesc_t::data, streamPacketDesc_t::length)
