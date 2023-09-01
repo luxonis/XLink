@@ -3,7 +3,6 @@
 //
 
 #include <string.h>
-#include <time.h>
 #include "stdlib.h"
 
 #include "XLinkMacros.h"
@@ -11,6 +10,12 @@
 #include "XLinkPlatform.h"
 #include "XLinkDispatcherImpl.h"
 #include "XLinkPrivateFields.h"
+
+#if (defined(_WIN32) || defined(_WIN64) )
+#include "win_time.h"
+#else
+#include "time.h"
+#endif
 
 #ifdef MVLOG_UNIT_NAME
 #undef MVLOG_UNIT_NAME
