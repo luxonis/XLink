@@ -695,7 +695,6 @@ static void* eventReader(void* ctx)
     xLinkSchedulerState_t *curr = (xLinkSchedulerState_t*)ctx;
     XLINK_RET_ERR_IF(curr == NULL, NULL);
 
-    xLinkEventPriv_t* eventP;
     xLinkEvent_t event = { 0 };// to fix error C4700 in win
     event.header.id = -1;
     event.deviceHandle = curr->deviceHandle;
@@ -703,16 +702,8 @@ static void* eventReader(void* ctx)
     mvLog(MVLOG_INFO,"eventReader thread started");
 
     while (!curr->resetXLink) {
-        eventP = dispatcherGetNextEvent(curr);
-        if(eventP == NULL) {
-            mvLog(MVLOG_ERROR,"Dispatcher received NULL event!");
-    #ifdef __PC__
-            break; //Mean that user reset XLink.
-    #else
-            continue;
-    #endif
-        }
-        int sc = glControlFunc->eventReceive(&event, eventP->time);
+        struct timespec* time = malloc(sizeof(struct timespec));
+        int sc = glControlFunc->eventReceive(&event, time);
 
         mvLog(MVLOG_DEBUG,"Reading %s (scheduler %d, fd %p, event id %d, event stream_id %u, event size %u)\n",
               TypeToStr(event.header.type), curr->schedulerId, event.deviceHandle.xLinkFD, event.header.id, event.header.streamId, event.header.size);
@@ -726,7 +717,7 @@ static void* eventReader(void* ctx)
             continue;
         }
 
-        DispatcherAddEvent(EVENT_REMOTE, &event);
+        DispatcherAddEvent_(EVENT_REMOTE, &event, time);
 
         if (event.header.type == XLINK_RESET_REQ) {
             curr->resetXLink = 1;
@@ -1243,6 +1234,10 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
         }
 
         res = getResp(&event->packet, &response.packet);
+
+        if (event->origin == EVENT_REMOTE && event->time != NULL) {
+            free(event->time);
+        }
         if (isEventTypeRequest(event)) {
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
             if (event->origin == EVENT_LOCAL) { //we need to do this for locals only
