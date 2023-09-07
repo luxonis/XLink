@@ -11,6 +11,7 @@
 #define _XLINKPUBLICDEFINES_H
 #include <stdint.h>
 #include <stdbool.h>
+#include <time.h>
 #ifdef __cplusplus
 extern "C"
 {
@@ -126,6 +127,8 @@ typedef struct streamPacketDesc_t
 {
     uint8_t* data;
     uint32_t length;
+    struct timespec trsend;
+    struct timespec treceive;
 } streamPacketDesc_t;
 
 typedef struct XLinkProf_t

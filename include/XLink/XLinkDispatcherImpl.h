@@ -8,7 +8,7 @@
 #include "XLinkPrivateDefines.h"
 
 int dispatcherEventSend (xLinkEvent_t*);
-int dispatcherEventReceive (xLinkEvent_t*, struct timespec* time);
+int dispatcherEventReceive(xLinkEvent_t*);
 int dispatcherLocalEventGetResponse (xLinkEvent_t*,
                         xLinkEvent_t*);
 int dispatcherRemoteEventGetResponse (xLinkEvent_t*,

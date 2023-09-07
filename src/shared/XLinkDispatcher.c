@@ -58,7 +58,6 @@ typedef struct xLinkEventPriv_t {
     xLinkEvent_t *retEv;
     xLinkEventState_t isServed;
     xLinkEventOrigin_t origin;
-    struct timespec* time;
     XLink_sem_t* sem;
     void* data;
 } xLinkEventPriv_t;
@@ -165,10 +164,6 @@ static xLinkEventPriv_t* getNextQueueElemToProc(eventQueueHandler_t *q );
 static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
                                             eventQueueHandler_t *q, xLinkEvent_t* event,
                                             XLink_sem_t* sem, xLinkEventOrigin_t o);
-static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
-                                            eventQueueHandler_t *q, xLinkEvent_t* event,
-                                            XLink_sem_t* sem, xLinkEventOrigin_t o,
-                                            struct timespec* out_time);
 
 static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr);
 
@@ -361,7 +356,7 @@ int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle){
     return dispatcherDeviceFdDown(curr);
 }
 
-xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event, struct timespec* out_time)
+xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
 {
     xLinkSchedulerState_t* curr = findCorrespondingScheduler(event->deviceHandle.xLinkFD);
     XLINK_RET_ERR_IF(curr == NULL, NULL);
@@ -397,9 +392,9 @@ xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event
         const uint32_t tmpMoveSem = event->header.flags.bitField.moveSemantic;
         event->header.flags.raw = 0;
         event->header.flags.bitField.moveSemantic = tmpMoveSem;
-        ev = addNextQueueElemToProc_(curr, &curr->lQueue, event, sem, origin, out_time);
+        ev = addNextQueueElemToProc(curr, &curr->lQueue, event, sem, origin);
     } else {
-        ev = addNextQueueElemToProc_(curr, &curr->rQueue, event, NULL, origin, out_time);
+        ev = addNextQueueElemToProc(curr, &curr->rQueue, event, NULL, origin);
     }
     if (XLink_sem_post(&curr->addEventSem)) {
         mvLog(MVLOG_ERROR,"can't post semaphore\n");
@@ -408,10 +403,6 @@ xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event
         mvLog(MVLOG_ERROR, "can't post semaphore\n");
     }
     return ev;
-}
-xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
-{
-    return DispatcherAddEvent_(origin, event, NULL);
 }
 
 int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int timeoutMs)
@@ -702,12 +693,10 @@ static void* eventReader(void* ctx)
     mvLog(MVLOG_INFO,"eventReader thread started");
 
     while (!curr->resetXLink) {
-        struct timespec* time = malloc(sizeof(struct timespec));
-        int sc = glControlFunc->eventReceive(&event, time);
+        int sc = glControlFunc->eventReceive(&event);
 
         mvLog(MVLOG_DEBUG,"Reading %s (scheduler %d, fd %p, event id %d, event stream_id %u, event size %u)\n",
               TypeToStr(event.header.type), curr->schedulerId, event.deviceHandle.xLinkFD, event.header.id, event.header.streamId, event.header.size);
-
         if (sc) {
             mvLog(MVLOG_DEBUG,"Failed to receive event (err %d)", sc);
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
@@ -717,7 +706,7 @@ static void* eventReader(void* ctx)
             continue;
         }
 
-        DispatcherAddEvent_(EVENT_REMOTE, &event, time);
+        DispatcherAddEvent(EVENT_REMOTE, &event);
 
         if (event.header.type == XLINK_RESET_REQ) {
             curr->resetXLink = 1;
@@ -927,6 +916,8 @@ static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState
                   TypeToStr(header->type));
             //propagate back flags
             header->flags = evHeader->flags;
+            header->tsec = evHeader->tsec;
+            header->tnsec = evHeader->tnsec;
             postAndMarkEventServed(&curr->lQueue.q[i]);
             break;
         }
@@ -991,10 +982,10 @@ static xLinkEventPriv_t* getNextQueueElemToProc(eventQueueHandler_t *q ){
  * @brief Add event to Queue
  * @note It called from dispatcherAddEvent
  */
-static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
+static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
                                             eventQueueHandler_t *q, xLinkEvent_t* event,
-                                            XLink_sem_t* sem, xLinkEventOrigin_t o,
-                                            struct timespec* out_time){
+                                            XLink_sem_t* sem, xLinkEventOrigin_t o)
+{
     xLinkEvent_t* ev;
     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
     xLinkEventPriv_t* eventP = getNextElementWithState(q->base, q->end, q->cur, EVENT_SERVED);
@@ -1009,7 +1000,6 @@ static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
     eventP->sem = sem;
     eventP->packet = *event;
     eventP->origin = o;
-    eventP->time = out_time;
     if (o == EVENT_LOCAL) {
         // XLink API caller provided buffer for return the final result to
         eventP->retEv = event;
@@ -1021,13 +1011,6 @@ static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
     CIRCULAR_INCREMENT_BASE(q->cur, q->end, q->base);
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, NULL);
     return ev;
-}
-
-static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
-                                            eventQueueHandler_t *q, xLinkEvent_t* event,
-                                            XLink_sem_t* sem, xLinkEventOrigin_t o)
-{
-    return addNextQueueElemToProc_(curr, q, event, sem, o, NULL);
 }
 
 static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr)
@@ -1201,7 +1184,6 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
             continue;
 #endif
         }
-
         if(event->packet.deviceHandle.xLinkFD
            != curr->deviceHandle.xLinkFD) {
             mvLog(MVLOG_FATAL,"The file descriptor mismatch between the event and the scheduler.\n"
@@ -1235,9 +1217,6 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
 
         res = getResp(&event->packet, &response.packet);
 
-        if (event->origin == EVENT_REMOTE && event->time != NULL) {
-            free(event->time);
-        }
         if (isEventTypeRequest(event)) {
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
             if (event->origin == EVENT_LOCAL) { //we need to do this for locals only

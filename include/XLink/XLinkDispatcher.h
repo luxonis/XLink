@@ -21,7 +21,7 @@ typedef int (*getRespFunction) (xLinkEvent_t*,
                 xLinkEvent_t*);
 typedef struct {
     int (*eventSend) (xLinkEvent_t*);
-    int (*eventReceive) (xLinkEvent_t*, struct timespec*);
+    int (*eventReceive) (xLinkEvent_t*);
     getRespFunction localGetResponse;
     getRespFunction remoteGetResponse;
     void (*closeLink) (void* fd, int fullClose);
@@ -34,7 +34,6 @@ int DispatcherClean(xLinkDeviceHandle_t *deviceHandle);
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle);
 
 xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event);
-xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event, struct timespec* out_time);
 int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int timeoutMs);
 int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct timespec abstime);
 
