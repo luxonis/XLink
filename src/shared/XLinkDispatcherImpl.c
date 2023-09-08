@@ -709,8 +709,8 @@ int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, stru
     {
         stream->packets[stream->firstPacketFree].data = buffer;
         stream->packets[stream->firstPacketFree].length = size;
-        stream->packets[stream->firstPacketFree].trsend = trsend;
-        stream->packets[stream->firstPacketFree].treceive = treceive;
+        stream->packets[stream->firstPacketFree].tRemoteSent = trsend;
+        stream->packets[stream->firstPacketFree].tReceived = treceive;
         CIRCULAR_INCREMENT(stream->firstPacketFree, XLINK_MAX_PACKETS_PER_STREAM);
         stream->availablePackets++;
         return 0;
