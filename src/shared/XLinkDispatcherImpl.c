@@ -11,11 +11,7 @@
 #include "XLinkDispatcherImpl.h"
 #include "XLinkPrivateFields.h"
 
-#if (defined(_WIN32) || defined(_WIN64) )
-#include "win_time.h"
-#else
-#include "time.h"
-#endif
+#include "XLinkTime.h"
 
 #ifdef MVLOG_UNIT_NAME
 #undef MVLOG_UNIT_NAME
@@ -56,7 +52,7 @@ int dispatcherEventSend(xLinkEvent_t *event)
         TypeToStr(event->header.type), event->header.size, event->header.streamId);
 
     struct timespec stime;
-    clock_gettime(CLOCK_MONOTONIC, &stime);
+    getMonotonicTimestamp(&stime);
     event->header.tsec = (uint64_t)stime.tv_sec;
     event->header.tnsec = (uint32_t)stime.tv_nsec;
     int rc = XLinkPlatformWrite(&event->deviceHandle,
@@ -84,7 +80,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     int rc = XLinkPlatformRead(&event->deviceHandle,
         &event->header, sizeof(event->header));
     struct timespec treceive;
-    clock_gettime(CLOCK_MONOTONIC, &treceive);
+    getMonotonicTimestamp(&treceive);
 
     // mvLog(MVLOG_DEBUG,"Incoming event %p: %s %d %p prevEvent: %s %d %p\n",
     //       event,
