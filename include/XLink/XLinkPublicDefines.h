@@ -11,7 +11,7 @@
 #define _XLINKPUBLICDEFINES_H
 #include <stdint.h>
 #include <stdbool.h>
-#include <time.h>
+#include "XLinkTime.h"
 #ifdef __cplusplus
 extern "C"
 {
@@ -127,8 +127,8 @@ typedef struct streamPacketDesc_t
 {
     uint8_t* data;
     uint32_t length;
-    struct timespec tRemoteSent; /// remote timestamp of when the packet was sent. Related to remote clock. Note: not directly related to local clock
-    struct timespec tReceived; /// local timestamp of when the packet was received. Related to local monotonic clock
+    XLinkTimespec tRemoteSent; /// remote timestamp of when the packet was sent. Related to remote clock. Note: not directly related to local clock
+    XLinkTimespec tReceived; /// local timestamp of when the packet was received. Related to local monotonic clock
 } streamPacketDesc_t;
 
 typedef struct XLinkProf_t

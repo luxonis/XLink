@@ -2,7 +2,7 @@
 
 #include "XLinkTime.h"
 
-void getMonotonicTimestamp(struct timespec* ts) {
+void getMonotonicTimestamp(XLinkTimespec* ts) {
     auto now = std::chrono::steady_clock::now();
     auto epoch = now.time_since_epoch();
     ts->tv_sec = std::chrono::duration_cast<std::chrono::seconds>(epoch).count();

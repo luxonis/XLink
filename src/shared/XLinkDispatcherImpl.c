@@ -31,9 +31,9 @@ static streamPacketDesc_t* movePacketFromStream(streamDesc_t *stream);
 static streamPacketDesc_t* getPacketFromStream(streamDesc_t* stream);
 static int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize);
 static int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize, uint8_t* data);
-static int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, struct timespec trsend, struct timespec treceive);
+static int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, XLinkTimespec trsend, XLinkTimespec treceive);
 
-static int handleIncomingEvent(xLinkEvent_t* event, struct timespec treceive);
+static int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive);
 
 // ------------------------------------
 // Helpers declaration. End.
@@ -51,7 +51,7 @@ int dispatcherEventSend(xLinkEvent_t *event)
     mvLog(MVLOG_DEBUG, "Send event: %s, size %d, streamId %ld.\n",
         TypeToStr(event->header.type), event->header.size, event->header.streamId);
 
-    struct timespec stime;
+    XLinkTimespec stime;
     getMonotonicTimestamp(&stime);
     event->header.tsec = (uint64_t)stime.tv_sec;
     event->header.tnsec = (uint32_t)stime.tv_nsec;
@@ -79,7 +79,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     // static xLinkEvent_t prevEvent = {0};
     int rc = XLinkPlatformRead(&event->deviceHandle,
         &event->header, sizeof(event->header));
-    struct timespec treceive;
+    XLinkTimespec treceive;
     getMonotonicTimestamp(&treceive);
 
     // mvLog(MVLOG_DEBUG,"Incoming event %p: %s %d %p prevEvent: %s %d %p\n",
@@ -700,7 +700,7 @@ int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize
     return 0;
 }
 
-int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, struct timespec trsend, struct timespec treceive) {
+int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, XLinkTimespec trsend, XLinkTimespec treceive) {
     if (stream->availablePackets + stream->blockedPackets < XLINK_MAX_PACKETS_PER_STREAM)
     {
         stream->packets[stream->firstPacketFree].data = buffer;
@@ -714,7 +714,7 @@ int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, stru
     return -1;
 }
 
-int handleIncomingEvent(xLinkEvent_t* event, struct timespec treceive) {
+int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive) {
     //this function will be dependent whether this is a client or a Remote
     //specific actions to this peer
     mvLog(MVLOG_DEBUG, "%s, size %u, streamId %u.\n", TypeToStr(event->header.type), event->header.size, event->header.streamId);
@@ -744,7 +744,7 @@ int handleIncomingEvent(xLinkEvent_t* event, struct timespec treceive) {
     XLINK_OUT_WITH_LOG_IF(sc < 0, mvLog(MVLOG_ERROR,"%s() Read failed %d\n", __func__, sc));
 
     event->data = buffer;
-    XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size, (struct timespec){event->header.tsec, event->header.tnsec}, treceive),
+    XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size, (XLinkTimespec){event->header.tsec, event->header.tnsec}, treceive),
         mvLog(MVLOG_WARN,"No more place in stream. release packet\n"));
     rc = 0;
 
