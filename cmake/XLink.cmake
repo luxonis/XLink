@@ -9,8 +9,9 @@ file(GLOB PC_SRC_CPP         "${XLINK_ROOT_DIR}/src/pc/*.cpp")
 file(GLOB PC_PROTO_SRC       "${XLINK_ROOT_DIR}/src/pc/protocols/*.c")
 file(GLOB PC_PROTO_SRC_CPP   "${XLINK_ROOT_DIR}/src/pc/protocols/*.cpp")
 file(GLOB_RECURSE SHARED_SRC "${XLINK_ROOT_DIR}/src/shared/*.c")
+file(GLOB_RECURSE SHARED_SRC_CPP "${XLINK_ROOT_DIR}/src/shared/*.cpp")
 
-list(APPEND XLINK_SOURCES ${PC_SRC} ${PC_SRC_CPP} ${PC_PROTO_SRC} ${PC_PROTO_SRC_CPP} ${SHARED_SRC})
+list(APPEND XLINK_SOURCES ${PC_SRC} ${PC_SRC_CPP} ${PC_PROTO_SRC} ${PC_PROTO_SRC_CPP} ${SHARED_SRC} ${SHARED_SRC_CPP})
 
 if(WIN32)
     set(XLINK_PLATFORM_INCLUDE ${XLINK_ROOT_DIR}/src/pc/Win/include)

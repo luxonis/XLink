@@ -697,7 +697,7 @@ static void* eventReader(void* ctx)
 
         mvLog(MVLOG_DEBUG,"Reading %s (scheduler %d, fd %p, event id %d, event stream_id %u, event size %u)\n",
               TypeToStr(event.header.type), curr->schedulerId, event.deviceHandle.xLinkFD, event.header.id, event.header.streamId, event.header.size);
-
+        
         if (sc) {
             mvLog(MVLOG_DEBUG,"Failed to receive event (err %d)", sc);
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
@@ -917,6 +917,8 @@ static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState
                   TypeToStr(header->type));
             //propagate back flags
             header->flags = evHeader->flags;
+            header->tsec = evHeader->tsec;
+            header->tnsec = evHeader->tnsec;
             postAndMarkEventServed(&curr->lQueue.q[i]);
             break;
         }
@@ -983,7 +985,8 @@ static xLinkEventPriv_t* getNextQueueElemToProc(eventQueueHandler_t *q ){
  */
 static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
                                             eventQueueHandler_t *q, xLinkEvent_t* event,
-                                            XLink_sem_t* sem, xLinkEventOrigin_t o){
+                                            XLink_sem_t* sem, xLinkEventOrigin_t o)
+{
     xLinkEvent_t* ev;
     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
     xLinkEventPriv_t* eventP = getNextElementWithState(q->base, q->end, q->cur, EVENT_SERVED);
@@ -1182,7 +1185,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
             continue;
 #endif
         }
-
+        
         if(event->packet.deviceHandle.xLinkFD
            != curr->deviceHandle.xLinkFD) {
             mvLog(MVLOG_FATAL,"The file descriptor mismatch between the event and the scheduler.\n"
@@ -1215,6 +1218,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
         }
 
         res = getResp(&event->packet, &response.packet);
+
         if (isEventTypeRequest(event)) {
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
             if (event->origin == EVENT_LOCAL) { //we need to do this for locals only
