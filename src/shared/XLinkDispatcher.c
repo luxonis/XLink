@@ -917,7 +917,8 @@ static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState
                   TypeToStr(header->type));
             //propagate back flags
             header->flags = evHeader->flags;
-            header->tsec = evHeader->tsec;
+            header->tsecLsb = evHeader->tsecLsb;
+            header->tsecMsb = evHeader->tsecMsb;
             header->tnsec = evHeader->tnsec;
             postAndMarkEventServed(&curr->lQueue.q[i]);
             break;
