@@ -1,4 +1,3 @@
-#include <bits/stdint-uintn.h>
 #include <cstddef>
 #include "XLinkPrivateDefines.h"
 
