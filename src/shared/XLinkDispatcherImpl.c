@@ -53,7 +53,8 @@ int dispatcherEventSend(xLinkEvent_t *event)
 
     XLinkTimespec stime;
     getMonotonicTimestamp(&stime);
-    event->header.tsec = (uint64_t)stime.tv_sec;
+    event->header.tsecLsb = (uint32_t)stime.tv_sec;
+    event->header.tsecMsb = (uint32_t)(stime.tv_sec >> 32);
     event->header.tnsec = (uint32_t)stime.tv_nsec;
     int rc = XLinkPlatformWrite(&event->deviceHandle,
         &event->header, sizeof(event->header));
@@ -112,7 +113,8 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response)
 {
     streamDesc_t* stream;
     response->header.id = event->header.id;
-    response->header.tsec = event->header.tsec;
+    response->header.tsecLsb = event->header.tsecLsb;
+    response->header.tsecMsb = event->header.tsecMsb;
     response->header.tnsec = event->header.tnsec;
     mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
     switch (event->header.type){
@@ -280,7 +282,8 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
 {
     response->header.id = event->header.id;
     response->header.flags.raw = 0;
-    response->header.tsec = event->header.tsec;
+    response->header.tsecLsb = event->header.tsecLsb;
+    response->header.tsecMsb = event->header.tsecMsb;
     response->header.tnsec = event->header.tnsec;
     mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
 
@@ -744,7 +747,8 @@ int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive) {
     XLINK_OUT_WITH_LOG_IF(sc < 0, mvLog(MVLOG_ERROR,"%s() Read failed %d\n", __func__, sc));
 
     event->data = buffer;
-    XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size, (XLinkTimespec){event->header.tsec, event->header.tnsec}, treceive),
+    uint64_t tsec = event->header.tsecLsb | ((uint64_t)event->header.tsecMsb << 32);
+    XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size, (XLinkTimespec){tsec, event->header.tnsec}, treceive),
         mvLog(MVLOG_WARN,"No more place in stream. release packet\n"));
     rc = 0;
 
