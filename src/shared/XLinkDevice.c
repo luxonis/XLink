@@ -535,7 +535,13 @@ static linkId_t getNextAvailableLinkUniqueId()
         }
         if (i >= MAX_LINKS)
         {
-            return nextUniqueLinkId;
+            linkId_t id = nextUniqueLinkId;
+            nextUniqueLinkId++;
+            if (nextUniqueLinkId == INVALID_LINK_ID)
+            {
+                nextUniqueLinkId = 0;
+            }
+            return id;
         }
         nextUniqueLinkId++;
         if (nextUniqueLinkId == INVALID_LINK_ID)
