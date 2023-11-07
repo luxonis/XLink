@@ -771,7 +771,7 @@ static void* eventSchedulerRun(void* ctx)
         return NULL;
     }
 #ifndef __APPLE__
-    char eventReaderThreadName[MVLOG_MAXIMUM_THREAD_NAME_SIZE];
+    char eventReaderThreadName[MVLOG_MAXIMUM_THREAD_NAME_SIZE + 8];
     snprintf(eventReaderThreadName, sizeof(eventReaderThreadName), "EventRead%.2dThr", schedulerId);
     sc = pthread_setname_np(readerThreadId, eventReaderThreadName);
     if (sc != 0) {
