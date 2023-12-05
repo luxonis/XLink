@@ -135,8 +135,8 @@ typedef struct XLinkProf_t
 {
     float totalReadTime;
     float totalWriteTime;
-    unsigned long totalReadBytes;
-    unsigned long totalWriteBytes;
+    uint64_t totalReadBytes;
+    uint64_t totalWriteBytes;
     unsigned long totalBootCount;
     float totalBootTime;
 } XLinkProf_t;
