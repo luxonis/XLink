@@ -36,3 +36,6 @@ add_example(boot_bootloader boot_bootloader.cpp)
 
 # Boot firmware
 add_example(boot_firmware boot_firmware.cpp)
+
+# Boot firmware
+add_example(device_connect_reset device_connect_reset.cpp)
