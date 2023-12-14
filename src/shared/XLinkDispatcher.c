@@ -689,7 +689,7 @@ static void* eventReader(void* ctx)
 
         mvLog(MVLOG_DEBUG,"Reading %s (scheduler %d, fd %p, event id %d, event stream_id %u, event size %u)\n",
               TypeToStr(event.header.type), curr->schedulerId, event.deviceHandle.xLinkFD, event.header.id, event.header.streamId, event.header.size);
-
+        
         if (sc) {
             mvLog(MVLOG_DEBUG,"Failed to receive event (err %d)", sc);
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
@@ -742,7 +742,7 @@ static void* eventSchedulerRun(void* ctx)
         return NULL;
     }
 #ifndef __APPLE__
-    char eventReaderThreadName[MVLOG_MAXIMUM_THREAD_NAME_SIZE];
+    char eventReaderThreadName[MVLOG_MAXIMUM_THREAD_NAME_SIZE + 8];
     snprintf(eventReaderThreadName, sizeof(eventReaderThreadName), "EventRead%.2dThr", schedulerId);
     sc = pthread_setname_np(readerThreadId, eventReaderThreadName);
     if (sc != 0) {
@@ -892,6 +892,9 @@ static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState
                   TypeToStr(header->type));
             //propagate back flags
             header->flags = evHeader->flags;
+            header->tsecLsb = evHeader->tsecLsb;
+            header->tsecMsb = evHeader->tsecMsb;
+            header->tnsec = evHeader->tnsec;
             postAndMarkEventServed(&curr->lQueue.q[i]);
             break;
         }
@@ -958,7 +961,8 @@ static xLinkEventPriv_t* getNextQueueElemToProc(eventQueueHandler_t *q ){
  */
 static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
                                             eventQueueHandler_t *q, xLinkEvent_t* event,
-                                            XLink_sem_t* sem, xLinkEventOrigin_t o){
+                                            XLink_sem_t* sem, xLinkEventOrigin_t o)
+{
     xLinkEvent_t* ev;
     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
     xLinkEventPriv_t* eventP = getNextElementWithState(q->base, q->end, q->cur, EVENT_SERVED);
@@ -1153,7 +1157,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
             mvLog(MVLOG_ERROR,"Dispatcher received NULL event!");
             break; // Means that user reset XLink.
         }
-
+        
         if(event->packet.deviceHandle.xLinkFD
            != curr->deviceHandle.xLinkFD) {
             mvLog(MVLOG_FATAL,"The file descriptor mismatch between the event and the scheduler.\n"

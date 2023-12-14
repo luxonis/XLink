@@ -25,9 +25,6 @@ static pciePlatformState_t xlinkDeviceStateToPciePlatformState(const XLinkDevice
 static xLinkPlatformErrorCode_t parseUsbBootError(usbBootError_t rc);
 static xLinkPlatformErrorCode_t parsePCIeHostError(pcieHostError_t rc);
 
-xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
-                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                     unsigned int *out_amountOfFoundDevices);
 static xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
                                                   XLinkDeviceState_t state,
                                                   const deviceDesc_t in_deviceRequirements,

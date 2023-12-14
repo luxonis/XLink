@@ -102,7 +102,7 @@ static const char* xlink_libusb_strerror(int x);
 std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev);
 #endif
 
-extern "C" xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
+xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                      unsigned int *out_amountOfFoundDevices) {
 
