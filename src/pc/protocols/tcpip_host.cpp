@@ -89,9 +89,10 @@ typedef enum
 /* Device platform */
 typedef enum
 {
-    TCPIP_HOST_PLATFORM_INVALID = 0,
-    TCPIP_HOST_PLATFORM_MYRIAD_X = 2,
-    TCPIP_HOST_PLATFORM_RVC3 = 3,
+  TCPIP_HOST_PLATFORM_INVALID = 0,
+  TCPIP_HOST_PLATFORM_MYRIAD_X = 2,
+  TCPIP_HOST_PLATFORM_RVC3 = 3,
+  TCPIP_HOST_PLATFORM_RVC4 = 4,
 } tcpipHostDevicePlatform_t;
 /* Device response payload */
 typedef struct
@@ -215,6 +216,7 @@ static XLinkPlatform_t tcpip_convert_device_platform(uint32_t platform)
     {
     case TCPIP_HOST_PLATFORM_MYRIAD_X: return X_LINK_MYRIAD_X;
     case TCPIP_HOST_PLATFORM_RVC3: return X_LINK_RVC3;
+    case TCPIP_HOST_PLATFORM_RVC4: return X_LINK_RVC4;
     default:
         return X_LINK_ANY_PLATFORM;
         break;
@@ -225,6 +227,7 @@ static tcpipHostDevicePlatform_t tcpip_convert_device_platform(XLinkPlatform_t p
     switch (platform) {
         case X_LINK_MYRIAD_X: return TCPIP_HOST_PLATFORM_MYRIAD_X;
         case X_LINK_RVC3: return TCPIP_HOST_PLATFORM_RVC3;
+        case X_LINK_RVC4: return TCPIP_HOST_PLATFORM_RVC4;
         case X_LINK_ANY_PLATFORM: return TCPIP_HOST_PLATFORM_INVALID;
         case X_LINK_MYRIAD_2: return TCPIP_HOST_PLATFORM_INVALID;
     }

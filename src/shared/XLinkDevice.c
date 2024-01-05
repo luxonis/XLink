@@ -3,6 +3,7 @@
 //
 
 #include <errno.h>
+#include "XLinkPublicDefines.h"
 #include "stdio.h"
 #include "stdint.h"
 #include "string.h"
@@ -704,6 +705,7 @@ const char* XLinkPlatformToStr(XLinkPlatform_t val) {
         case X_LINK_MYRIAD_2: return "X_LINK_MYRIAD_2";
         case X_LINK_MYRIAD_X: return "X_LINK_MYRIAD_X";
         case X_LINK_RVC3: return "X_LINK_RVC3";
+        case X_LINK_RVC4: return "X_LINK_RVC4";
         default:
             return "INVALID_ENUM_VALUE";
             break;
