@@ -44,3 +44,9 @@ add_example(xlink_server xlink_server.cpp)
 
 # Server example
 add_example(xlink_server2 xlink_server2.cpp)
+
+# Server example
+add_example(xlink_usb_server xlink_usb_server.cpp)
+
+# Client example
+add_example(xlink_usb_client xlink_usb_client.cpp)

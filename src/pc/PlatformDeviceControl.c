@@ -8,6 +8,7 @@
 #include "XLinkPlatform.h"
 #include "XLinkPlatformErrorUtils.h"
 #include "usb_host.h"
+#include "usb_host_ep.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
 #include "XLinkStringUtils.h"
@@ -82,17 +83,22 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler)
 {
     // Set that all protocols are initialized at first
     for(int i = 0; i < X_LINK_NMB_OF_PROTOCOLS; i++) {
-        xlinkSetProtocolInitialized(i, 1);
+	xlinkSetProtocolInitialized(i, 1);
     }
 
     // check for failed initialization; LIBUSB_SUCCESS = 0
     if (usbInitialize(globalHandler->options) != 0) {
-        xlinkSetProtocolInitialized(X_LINK_USB_VSC, 0);
+	xlinkSetProtocolInitialized(X_LINK_USB_VSC, 0);
+    }
+
+    // Initialize the USB EPs if present
+    if(usbEpInitialize() != 0) {
+	xlinkSetProtocolInitialized(X_LINK_USB_EP, 0);
     }
 
     // Initialize tcpip protocol if necessary
     if(tcpip_initialize() != TCPIP_HOST_SUCCESS) {
-        xlinkSetProtocolInitialized(X_LINK_TCP_IP, 0);
+	xlinkSetProtocolInitialized(X_LINK_TCP_IP, 0);
     }
 
     return X_LINK_PLATFORM_SUCCESS;
@@ -170,6 +176,7 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
     if(!XLinkIsProtocolInitialized(protocol)) {
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
     }
+
     switch (protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
@@ -181,6 +188,9 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
         case X_LINK_TCP_IP:
             return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
 
+	case X_LINK_USB_EP:
+	    return usbEpPlatformConnect(devPathRead, devPathWrite, fd);
+
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
@@ -191,6 +201,9 @@ xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char
     switch (protocol) {
         case X_LINK_TCP_IP:
             return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+
+	case X_LINK_USB_EP:
+	    return usbEpPlatformServer(devPathRead, devPathWrite, fd);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -239,6 +252,9 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
 
         case X_LINK_TCP_IP:
             return tcpipPlatformClose(deviceHandle->xLinkFD);
+	
+	case X_LINK_USB_EP:
+	    return usbEpPlatformClose(deviceHandle->xLinkFD);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;

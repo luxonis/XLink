@@ -62,6 +62,7 @@ typedef enum{
     X_LINK_PCIE,
     X_LINK_IPC,
     X_LINK_TCP_IP,
+    X_LINK_USB_EP,
     X_LINK_NMB_OF_PROTOCOLS,
     X_LINK_ANY_PROTOCOL
 } XLinkProtocol_t;

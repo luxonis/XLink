@@ -244,6 +244,7 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libu
 
         // Check path only
         std::string devicePath = getLibusbDevicePath(devs[i]);
+
         // Check if compare with name
         std::string requiredName(name);
         if(requiredName.length() > 0 && requiredName == devicePath){
@@ -857,7 +858,6 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     return 0;
 #endif  /*USE_LINK_JTAG*/
 #else
-
     libusb_device_handle* usbHandle = nullptr;
     xLinkPlatformErrorCode_t ret = usbLinkOpen(devPathWrite, usbHandle);
 
@@ -872,6 +872,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     *fd = createPlatformDeviceFdKey(usbHandle);
 
 #endif  /*USE_USB_VSC*/
+
 
     return 0;
 }
@@ -945,6 +946,8 @@ int usb_read(libusb_device_handle *f, void *data, size_t size)
 
 int usb_write(libusb_device_handle *f, const void *data, size_t size)
 {
+    int bt, ss = (int)size;
+    
     const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
     {
@@ -1028,6 +1031,7 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
     {
         return -1;
     }
+
     while(byteCount < size)
     {
        int toWrite = (PACKET_LENGTH && (size - byteCount > PACKET_LENGTH)) \
@@ -1042,6 +1046,7 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
        byteCount += toWrite;
        unsigned char acknowledge;
        int rc;
+	
        rc = read(usbFdWrite, &acknowledge, sizeof(acknowledge));
 
        if ( rc < 0)
