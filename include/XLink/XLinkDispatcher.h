@@ -20,7 +20,7 @@ extern "C"
 #endif
 typedef int (*getRespFunction) (xLinkEvent_t*, xLinkEvent_t*, bool);
 typedef struct {
-    int (*eventSend) (xLinkEvent_t*);
+    int (*eventSend) (xLinkEvent_t*, XLinkTimespec* sendTime);
     int (*eventReceive) (xLinkEvent_t*);
     getRespFunction localGetResponse;
     getRespFunction remoteGetResponse;
@@ -36,6 +36,7 @@ int DispatcherClean(xLinkDeviceHandle_t *deviceHandle);
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle);
 
 xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event);
+xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event, XLinkTimespec* outTime);
 int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int timeoutMs);
 int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct timespec abstime);
 

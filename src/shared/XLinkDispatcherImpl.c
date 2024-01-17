@@ -147,13 +147,15 @@ function_epilogue:
 }
 
 //adds a new event with parameters and returns event id
-int dispatcherEventSend(xLinkEvent_t *event)
+int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
 {
     mvLog(MVLOG_DEBUG, "Send event: %s, size %d, streamId %ld.\n",
         TypeToStr(event->header.type), event->header.size, event->header.streamId);
 
     XLinkTimespec stime;
     getMonotonicTimestamp(&stime);
+    if (sendTime != NULL) *sendTime = stime;
+
     event->header.tsecLsb = (uint32_t)stime.tv_sec;
     event->header.tsecMsb = (uint32_t)(stime.tv_sec >> 32);
     event->header.tnsec = (uint32_t)stime.tv_nsec;
