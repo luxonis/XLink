@@ -20,7 +20,7 @@ extern "C"
 #endif
 typedef int (*getRespFunction) (xLinkEvent_t*, xLinkEvent_t*, bool);
 typedef struct {
-    int (*eventSend) (xLinkEvent_t*, XLinkTimespec* sendTime);
+    int (*eventSend) (xLinkEvent_t*, XLinkTimespec*);
     int (*eventReceive) (xLinkEvent_t*);
     getRespFunction localGetResponse;
     getRespFunction remoteGetResponse;
