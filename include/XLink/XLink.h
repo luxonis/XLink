@@ -302,7 +302,7 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId);
  */
 XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer, int size);
 
-XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int size, XLinkTimespec* outTSend);
+XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int size, struct timespec* outTSend);
 
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream

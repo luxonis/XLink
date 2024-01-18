@@ -114,7 +114,7 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId)
 }
 
 XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer,
-                            int size, XLinkTimespec* outTSend)
+                            int size, struct timespec* outTSend)
 {
     XLINK_RET_IF(buffer == NULL);
 
@@ -127,7 +127,10 @@ XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer,
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_REQ,
         size,(void*)buffer, link->deviceHandle);
 
-    XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
+    XLinkTimespec tsend;
+    XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, &tsend));
+    outTSend->tv_sec = tsend.tv_sec;
+    outTSend->tv_nsec = tsend.tv_nsec;
 
     if( glHandler->profEnable) {
         glHandler->profilingData.totalWriteBytes += size;
