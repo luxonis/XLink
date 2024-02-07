@@ -10,6 +10,7 @@
 #ifndef _XLINK_H
 #define _XLINK_H
 #include "XLinkPublicDefines.h"
+#include "XLinkTime.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -300,6 +301,8 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId);
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer, int size);
+
+XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int size, XLinkTimespec* outTSend);
 
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream

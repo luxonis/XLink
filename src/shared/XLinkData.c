@@ -32,7 +32,9 @@
 static XLinkError_t checkEventHeader(xLinkEventHeader_t header);
 static float timespec_diff(struct timespec *start, struct timespec *stop);
 static XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs);
+static XLinkError_t addEvent_(xLinkEvent_t *event, unsigned int timeoutMs, XLinkTimespec* outTime);
 static XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs);
+static XLinkError_t addEventWithPerf_(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs, XLinkTimespec* outTime);
 static XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigned int msTimeout);
 static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_link);
 
@@ -111,8 +113,8 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId)
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
-                            int size)
+XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer,
+                            int size, XLinkTimespec* outTSend)
 {
     XLINK_RET_IF(buffer == NULL);
 
@@ -125,9 +127,9 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_REQ,
         size,(void*)buffer, link->deviceHandle);
 
-    XLINK_RET_IF(addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT));
+    XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
 
-    if (glHandler->profEnable) {
+    if( glHandler->profEnable) {
         glHandler->profilingData.totalWriteBytes += size;
         glHandler->profilingData.totalWriteTime += opTime;
     }
@@ -135,6 +137,12 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
     link->profilingData.totalWriteTime += size;
 
     return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
+                            int size)
+{
+    return XLinkWriteData_(streamId, buffer, size, NULL);
 }
 
 XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, int buffer1Size, const uint8_t* buffer2, int buffer2Size)
@@ -436,11 +444,11 @@ float timespec_diff(struct timespec *start, struct timespec *stop)
     return start->tv_nsec/ 1000000000.0f + start->tv_sec;
 }
 
-XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
+XLinkError_t addEvent_(xLinkEvent_t *event, unsigned int timeoutMs, XLinkTimespec* outTime)
 {
     ASSERT_XLINK(event);
 
-    xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, event);
+    xLinkEvent_t* ev = DispatcherAddEvent_(EVENT_LOCAL, event, outTime);
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
             TypeToStr(event->header.type), event->header.id, event->header.streamName);
@@ -478,27 +486,34 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
             return X_LINK_TIMEOUT;
         }
     }
-
     XLINK_RET_ERR_IF(
         event->header.flags.bitField.ack != 1,
         X_LINK_COMMUNICATION_FAIL);
 
     return X_LINK_SUCCESS;
 }
+XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
+{
+    return addEvent_(event, timeoutMs, NULL);
+}
 
-XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs)
+XLinkError_t addEventWithPerf_(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs, XLinkTimespec* outTime)
 {
     ASSERT_XLINK(opTime);
 
     struct timespec start, end;
     clock_gettime(CLOCK_REALTIME, &start);
 
-    XLINK_RET_IF_FAIL(addEvent(event, timeoutMs));
+    XLINK_RET_IF_FAIL(addEvent_(event, timeoutMs, outTime));
 
     clock_gettime(CLOCK_REALTIME, &end);
     *opTime = timespec_diff(&start, &end);
 
     return X_LINK_SUCCESS;
+}
+XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs)
+{
+    return addEventWithPerf_(event, opTime, timeoutMs, NULL);
 }
 
 XLinkError_t addEventTimeout(xLinkEvent_t *event, struct timespec abstime)

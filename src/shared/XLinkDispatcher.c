@@ -9,6 +9,7 @@
 ///
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE // fix for warning: implicit declaration of function 'pthread_setname_np'
+#include "XLinkTime.h"
 #endif
 
 #include <errno.h>
@@ -58,6 +59,7 @@ typedef struct xLinkEventPriv_t {
     xLinkEvent_t *retEv;
     xLinkEventState_t isServed;
     xLinkEventOrigin_t origin;
+    XLinkTimespec* sendTime;
     XLink_sem_t* sem;
     void* data;
 } xLinkEventPriv_t;
@@ -165,6 +167,11 @@ static xLinkEventPriv_t* getNextQueueElemToProc(eventQueueHandler_t *q );
 static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
                                             eventQueueHandler_t *q, xLinkEvent_t* event,
                                             XLink_sem_t* sem, xLinkEventOrigin_t o);
+static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
+                                            eventQueueHandler_t *q, xLinkEvent_t* event,
+                                            XLink_sem_t* sem, xLinkEventOrigin_t o,
+                                            XLinkTimespec* outTime);
+
 
 static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr);
 
@@ -351,7 +358,7 @@ int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle){
     return dispatcherDeviceFdDown(curr);
 }
 
-xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
+xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event, XLinkTimespec* outTime)
 {
     xLinkSchedulerState_t* curr = findCorrespondingScheduler(event->deviceHandle.xLinkFD);
     XLINK_RET_ERR_IF(curr == NULL, NULL);
@@ -387,9 +394,9 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
         const uint32_t tmpMoveSem = event->header.flags.bitField.moveSemantic;
         event->header.flags.raw = 0;
         event->header.flags.bitField.moveSemantic = tmpMoveSem;
-        ev = addNextQueueElemToProc(curr, &curr->lQueue, event, sem, origin);
+        ev = addNextQueueElemToProc_(curr, &curr->lQueue, event, sem, origin, outTime);
     } else {
-        ev = addNextQueueElemToProc(curr, &curr->rQueue, event, NULL, origin);
+        ev = addNextQueueElemToProc_(curr, &curr->rQueue, event, NULL, origin, outTime);
     }
     if (XLink_sem_post(&curr->addEventSem)) {
         mvLog(MVLOG_ERROR,"can't post semaphore\n");
@@ -398,6 +405,10 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
         mvLog(MVLOG_ERROR, "can't post semaphore\n");
     }
     return ev;
+}
+xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
+{
+    return DispatcherAddEvent_(origin, event, NULL);
 }
 
 int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int timeoutMs)
@@ -959,10 +970,10 @@ static xLinkEventPriv_t* getNextQueueElemToProc(eventQueueHandler_t *q ){
  * @brief Add event to Queue
  * @note It called from dispatcherAddEvent
  */
-static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
+static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
                                             eventQueueHandler_t *q, xLinkEvent_t* event,
-                                            XLink_sem_t* sem, xLinkEventOrigin_t o)
-{
+                                            XLink_sem_t* sem, xLinkEventOrigin_t o,
+                                            XLinkTimespec* outTime) {
     xLinkEvent_t* ev;
     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
     xLinkEventPriv_t* eventP = getNextElementWithState(q->base, q->end, q->cur, EVENT_SERVED);
@@ -980,14 +991,22 @@ static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
     if (o == EVENT_LOCAL) {
         // XLink API caller provided buffer for return the final result to
         eventP->retEv = event;
+        eventP->sendTime = outTime;
     }else{
         eventP->retEv = NULL;
+        eventP->sendTime = NULL;
     }
     q->cur = eventP;
     eventP->isServed = EVENT_ALLOCATED;
     CIRCULAR_INCREMENT_BASE(q->cur, q->end, q->base);
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, NULL);
     return ev;
+}
+static xLinkEvent_t* addNextQueueElemToProc(xLinkSchedulerState_t* curr,
+                                            eventQueueHandler_t *q, xLinkEvent_t* event,
+                                            XLink_sem_t* sem, xLinkEventOrigin_t o)
+{
+    return addNextQueueElemToProc_(curr, q, event, sem, o, NULL);
 }
 
 static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr)
@@ -1212,7 +1231,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
                 }
 
                 XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
-                if (glControlFunc->eventSend(toSend) != 0) {
+                if (glControlFunc->eventSend(toSend, event->sendTime) != 0) {
                     // Error out
                     curr->resetXLink = 1;
                     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
