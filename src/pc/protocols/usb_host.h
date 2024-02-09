@@ -35,6 +35,11 @@ typedef enum usbBootError {
     USB_BOOT_TIMEOUT
 } usbBootError_t;
 
+#ifdef XLINK_ENABLE_LIBUSB
+
+xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
+                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
+                                                     unsigned int *out_amountOfFoundDevices);
 int usbInitialize(void* options);
 int usbInitialize_customdir(void** hContext);
 
@@ -48,6 +53,28 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 
 int usbPlatformRead(void *fd, void *data, int size);
 int usbPlatformWrite(void *fd, void *data, int size);
+
+#else
+
+// Error out on these function calls
+static inline int usbInitialize(void* options) { return -1; }
+static inline xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* path) { return X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED; }
+
+static inline int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd) { return -1; }
+static inline int usbPlatformClose(void *fd) { return -1; }
+static inline int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) { return -1; }
+
+static inline int usbPlatformRead(void *fd, void *data, int size) { return -1; }
+static inline int usbPlatformWrite(void *fd, void *data, int size) { return -1; }
+
+static inline xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
+                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
+                                                     unsigned int *out_amountOfFoundDevices) {
+                                                        return X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED;
+                                                     }
+
+#endif
+
 
 #ifdef __cplusplus
 }

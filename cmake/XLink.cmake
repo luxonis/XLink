@@ -26,3 +26,18 @@ if(APPLE)
     list(APPEND XLINK_SOURCES "${XLINK_ROOT_DIR}/src/pc/MacOS/pthread_semaphore.c")
 endif()
 
+# Provides custom getifaddrs if platform is less than 24
+if(ANDROID AND ANDROID_PLATFORM LESS 24)
+    set(XLINK_PLATFORM_INCLUDE "${XLINK_ROOT_DIR}/src/pc/Android")
+    list(APPEND XLINK_SOURCES "${XLINK_ROOT_DIR}/src/pc/Android/ifaddrs.c")
+endif()
+
+# Remove USB protocol if specified
+if(NOT XLINK_ENABLE_LIBUSB)
+    list(REMOVE_ITEM XLINK_SOURCES
+        "${XLINK_ROOT_DIR}/src/pc/protocols/usb_host.cpp"
+        "${XLINK_ROOT_DIR}/src/pc/Win/src/win_usb_host.cpp"
+    )
+    # message(FATAL_ERROR "Sources: ${XLINK_SOURCES}")
+endif()
+

@@ -11,6 +11,8 @@
 #include "XLinkDispatcherImpl.h"
 #include "XLinkPrivateFields.h"
 
+#include "XLinkTime.h"
+
 #ifdef MVLOG_UNIT_NAME
 #undef MVLOG_UNIT_NAME
 #define MVLOG_UNIT_NAME xLink
@@ -29,9 +31,9 @@ static streamPacketDesc_t* movePacketFromStream(streamDesc_t *stream);
 static streamPacketDesc_t* getPacketFromStream(streamDesc_t* stream);
 static int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize);
 static int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize, uint8_t* data);
-static int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size);
+static int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, XLinkTimespec trsend, XLinkTimespec treceive);
 
-static int handleIncomingEvent(xLinkEvent_t* event);
+static int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive);
 
 // ------------------------------------
 // Helpers declaration. End.
@@ -145,11 +147,18 @@ function_epilogue:
 }
 
 //adds a new event with parameters and returns event id
-int dispatcherEventSend(xLinkEvent_t *event)
+int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
 {
     mvLog(MVLOG_DEBUG, "Send event: %s, size %d, streamId %ld.\n",
         TypeToStr(event->header.type), event->header.size, event->header.streamId);
 
+    XLinkTimespec stime;
+    getMonotonicTimestamp(&stime);
+    if (sendTime != NULL) *sendTime = stime;
+
+    event->header.tsecLsb = (uint32_t)stime.tv_sec;
+    event->header.tsecMsb = (uint32_t)(stime.tv_sec >> 32);
+    event->header.tnsec = (uint32_t)stime.tv_nsec;
     int rc = XLinkPlatformWrite(&event->deviceHandle,
         &event->header, sizeof(event->header));
 
@@ -173,6 +182,8 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     // static xLinkEvent_t prevEvent = {0};
     int rc = XLinkPlatformRead(&event->deviceHandle,
         &event->header, sizeof(event->header));
+    XLinkTimespec treceive;
+    getMonotonicTimestamp(&treceive);
 
     // mvLog(MVLOG_DEBUG,"Incoming event %p: %s %d %p prevEvent: %s %d %p\n",
     //       event,
@@ -196,7 +207,7 @@ int dispatcherEventReceive(xLinkEvent_t* event){
     // }
     // prevEvent = *event;
 
-    return handleIncomingEvent(event);
+    return handleIncomingEvent(event, treceive);
 }
 
 //this function should be called only for local requests
@@ -204,6 +215,9 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response,
 {
     streamDesc_t* stream;
     response->header.id = event->header.id;
+    response->header.tsecLsb = event->header.tsecLsb;
+    response->header.tsecMsb = event->header.tsecMsb;
+    response->header.tnsec = event->header.tnsec;
     mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
     switch (event->header.type){
         case XLINK_WRITE_REQ:
@@ -371,6 +385,9 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
 {
     response->header.id = event->header.id;
     response->header.flags.raw = 0;
+    response->header.tsecLsb = event->header.tsecLsb;
+    response->header.tsecMsb = event->header.tsecMsb;
+    response->header.tnsec = event->header.tnsec;
     mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
 
     switch (event->header.type)
@@ -791,11 +808,13 @@ int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize
     return 0;
 }
 
-int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size) {
+int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, XLinkTimespec trsend, XLinkTimespec treceive) {
     if (stream->availablePackets + stream->blockedPackets < XLINK_MAX_PACKETS_PER_STREAM)
     {
         stream->packets[stream->firstPacketFree].data = buffer;
         stream->packets[stream->firstPacketFree].length = size;
+        stream->packets[stream->firstPacketFree].tRemoteSent = trsend;
+        stream->packets[stream->firstPacketFree].tReceived = treceive;
         CIRCULAR_INCREMENT(stream->firstPacketFree, XLINK_MAX_PACKETS_PER_STREAM);
         stream->availablePackets++;
         return 0;
@@ -803,7 +822,7 @@ int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size) {
     return -1;
 }
 
-int handleIncomingEvent(xLinkEvent_t* event) {
+int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive) {
     //this function will be dependent whether this is a client or a Remote
     //specific actions to this peer
     mvLog(MVLOG_DEBUG, "%s, size %u, streamId %u.\n", TypeToStr(event->header.type), event->header.size, event->header.streamId);
@@ -833,7 +852,8 @@ int handleIncomingEvent(xLinkEvent_t* event) {
     XLINK_OUT_WITH_LOG_IF(sc < 0, mvLog(MVLOG_ERROR,"%s() Read failed %d\n", __func__, sc));
 
     event->data = buffer;
-    XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size),
+    uint64_t tsec = event->header.tsecLsb | ((uint64_t)event->header.tsecMsb << 32);
+    XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size, (XLinkTimespec){tsec, event->header.tnsec}, treceive),
         mvLog(MVLOG_WARN,"No more place in stream. release packet\n"));
     rc = 0;
 

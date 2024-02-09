@@ -131,6 +131,9 @@ typedef struct xLinkEventHeader_t{
     eventId_t           id;
     xLinkEventType_t    type;
     char                streamName[MAX_STREAM_NAME_LENGTH];
+    uint32_t            tnsec;
+    uint32_t            tsecLsb;
+    uint32_t            tsecMsb;
     streamId_t          streamId;
     uint32_t            size;
     union{
