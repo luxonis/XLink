@@ -56,6 +56,8 @@ static const int statuswaittimeout = 5;
 #include <unistd.h>
 #endif
 
+static bool tcp_nodelay = true;
+
 #endif /* USE_TCP_IP */
 
 // ------------------------------------
@@ -324,6 +326,28 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
         close(sock);
     }
 
+    if (tcp_nodelay) {
+        int enable = 1;
+        sc = setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(enable));
+        if(sc < 0) {
+            perror("setsockopt nodelay");
+            close(sock);
+        }
+
+        sc = setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &enable, sizeof(enable));
+        if(sc < 0) {
+            perror("setsockopt nodelay");
+            close(sock);
+        }
+
+        sc = setsockopt(sock, SOL_SOCKET, SO_ZEROCOPY, &enable, sizeof(enable));
+        if(sc < 0) {
+            perror("setsockopt zerocopy");
+            close(sock);
+        }
+
+    }
+
     // Disable sigpipe reception on send
     #if defined(SO_NOSIGPIPE)
         const int set = 1;
@@ -352,6 +376,28 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     if(connfd < 0)
     {
         perror("accept");
+    }
+
+    if (tcp_nodelay) {
+        int enable = 1;
+        sc = setsockopt(connfd, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(enable));
+        if(sc < 0) {
+            perror("setsockopt nodelay");
+            close(connfd);
+        }
+
+        sc = setsockopt(connfd, IPPROTO_TCP, TCP_QUICKACK, &enable, sizeof(enable));
+        if(sc < 0) {
+            perror("setsockopt nodelay");
+            close(connfd);
+        }
+
+        sc = setsockopt(connfd, SOL_SOCKET, SO_ZEROCOPY, &enable, sizeof(enable));
+        if(sc < 0) {
+            perror("setsockopt zerocopy");
+            close(connfd);
+        }
+
     }
 
     // Store the socket and create a "unique" key instead
@@ -423,6 +469,19 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     if(setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
     {
         perror("setsockopt TCP_NODELAY");
+        tcpip_close_socket(sock);
+        return -1;
+    }
+    if(setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &on, sizeof(on)) < 0)
+    {
+        perror("setsockopt nodelay");
+        tcpip_close_socket(sock);
+        return -1;
+    }
+
+    if(setsockopt(sock, SOL_SOCKET, SO_ZEROCOPY, &on, sizeof(on)) < 0)
+    {
+        perror("setsockopt zerocopy");
         tcpip_close_socket(sock);
         return -1;
     }
