@@ -53,6 +53,8 @@ using TCPIP_SOCKET = int;
 
 #endif
 
+static bool tcp_nodelay = true;
+
 /* Host-to-device command list */
 typedef enum
 {
@@ -954,6 +956,30 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
         return X_LINK_PLATFORM_ERROR;
     }
 
+    if (tcp_nodelay) {
+        int enable = 1;
+        sc = tcpip_setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(enable));
+        if(sc < 0) {
+            mvLog(MVLOG_ERROR, "setsockopt nodelay");
+            tcpip_close_socket(sock);
+        }
+
+        #if defined(TCP_QUICKACK)
+            sc = tcpip_setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &enable, sizeof(enable));
+            if(sc < 0) {
+                mvLog(MVLOG_ERROR, "tcpip_setsockopt nodelay");
+                tcpip_close_socket(sock);
+            }
+        #endif
+
+        // sc = tcpip_setsockopt(sock, SOL_SOCKET, SO_ZEROCOPY, &enable, sizeof(enable));
+        // if(sc < 0) {
+        //     mvLog(MVLOG_ERROR, "tcpip_setsockopt zerocopy");
+        //     tcpip_close_socket(sock);
+        // }
+
+    }
+
     // Disable sigpipe reception on send
     #if defined(SO_NOSIGPIPE)
         const int set = 1;
@@ -999,6 +1025,30 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
 
     socklen_portable len = (socklen_portable) sizeof(client);
     int connfd = accept(sock, (struct sockaddr*) &client, &len);
+
+    if (tcp_nodelay) {
+        int enable = 1;
+        sc = tcpip_setsockopt(connfd, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof(enable));
+        if(sc < 0) {
+            mvLog(MVLOG_ERROR, "tcpip_setsockopt nodelay");
+            tcpip_close_socket(connfd);
+        }
+
+        #if defined(TCP_QUICKACK)
+            sc = tcpip_setsockopt(connfd, IPPROTO_TCP, TCP_QUICKACK, &enable, sizeof(enable));
+            if(sc < 0) {
+                mvLog(MVLOG_ERROR, "tcpip_setsockopt nodelay");
+                tcpip_close_socket(connfd);
+            }
+        #endif
+
+        // sc = tcpip_setsockopt(connfd, SOL_SOCKET, SO_ZEROCOPY, &enable, sizeof(enable));
+        // if(sc < 0) {
+        //     mvLog(MVLOG_ERROR, "tcpip_setsockopt zerocopy");
+        //     tcpip_close_socket(connfd);
+        // }
+
+    }
     // Regardless of return, close the listening socket
     tcpip_close_socket(sock);
     // Then check if connection was accepted succesfully
@@ -1069,11 +1119,13 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     }
 
     int on = 1;
-    if(tcpip_setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
-    {
-        perror("setsockopt TCP_NODELAY");
-        tcpip_close_socket(sock);
-        return -1;
+    if(tcp_nodelay) {
+        if(tcpip_setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
+        {
+            perror("setsockopt TCP_NODELAY");
+            tcpip_close_socket(sock);
+            return -1;
+        }
     }
 
 #if defined(TCP_QUICKACK)
