@@ -14,6 +14,7 @@
 #include "usb_host.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
+#include "local_memshd.h"
 #include "PlatformDeviceFd.h"
 #include "inttypes.h"
 
@@ -91,6 +92,9 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
         case X_LINK_TCP_IP:
             return tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
 
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformWrite(deviceHandle->xLinkFD, data, size);
+
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
@@ -112,6 +116,9 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 
         case X_LINK_TCP_IP:
             return tcpipPlatformRead(deviceHandle->xLinkFD, data, size);
+	
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformRead(deviceHandle->xLinkFD, data, size);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;

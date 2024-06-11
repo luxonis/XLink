@@ -10,6 +10,7 @@
 #include "usb_host.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
+#include "local_memshd.h"
 #include "XLinkStringUtils.h"
 #include "PlatformDeviceFd.h"
 
@@ -94,6 +95,13 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler)
     if(tcpip_initialize() != TCPIP_HOST_SUCCESS) {
         xlinkSetProtocolInitialized(X_LINK_TCP_IP, 0);
     }
+
+#if defined(__unix__)
+    // Initialize the shared memory protocol if necessary
+    if (shdmem_initialize() != 0) {
+	xlinkSetProtocolInitialized(X_LINK_LOCAL_SHDMEM, 0);
+    }
+#endif
 
     return X_LINK_PLATFORM_SUCCESS;
 }
@@ -181,6 +189,9 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
         case X_LINK_TCP_IP:
             return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
 
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformConnect(devPathRead, devPathWrite, fd);
+
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
@@ -191,6 +202,9 @@ xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char
     switch (protocol) {
         case X_LINK_TCP_IP:
             return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformServer(devPathRead, devPathWrite, fd);
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
