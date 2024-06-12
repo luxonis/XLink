@@ -305,6 +305,18 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer, in
 XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int size, XLinkTimespec* outTSend);
 
 /**
+ * @brief Sends a package to initiate the writing of a file descriptor
+ * @warning Actual size of the written data is ALIGN_UP(size, 64)
+ * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
+ * @param[in] buffer - FD to be transmitted
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkWriteFd(streamId_t const streamId, const long* buffer);
+
+XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, XLinkTimespec* outTSend);
+
+
+/**
  * @brief Sends a package to initiate the writing of data to a remote stream
  * @warning Actual size of the written data is ALIGN_UP(size, 64)
  * @param[in] streamId – stream link Id obtained from XLinkOpenStream call

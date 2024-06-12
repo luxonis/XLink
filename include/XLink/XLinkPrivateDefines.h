@@ -89,6 +89,7 @@ typedef enum
     XLINK_CLOSE_STREAM_REQ,
     XLINK_PING_REQ,
     XLINK_RESET_REQ,
+    XLINK_WRITE_FD_REQ, // only for the shared mem protocol
     XLINK_REQUEST_LAST,
     //note that is important to separate request and response
     XLINK_WRITE_RESP,
