@@ -10,6 +10,8 @@
 #include "XLink/XLink.h"
 #include "XLink/XLinkPublicDefines.h"
 #include "XLink/XLinkLog.h"
+    
+const long MAXIMUM_SHM_SIZE = 4096;
 
 XLinkGlobalHandler_t xlinkGlobalHandler = {};
 
@@ -34,19 +36,20 @@ int main(int argc, const char** argv){
         return 1;
     }
 
-    const char *shm_name = "/my_shared_memory";
-    long shm_fd = shm_open(shm_name, O_CREAT | O_RDWR, 0666);
-    if (shm_fd < 0) {
+    const char *shmName = "/xlink_shared_memory";
+    long shmFd = shm_open(shmName, O_CREAT | O_RDWR, 0666);
+    if (shmFd < 0) {
 	    perror("shm_open");
 	    return 1;
     }
-    ftruncate(shm_fd, 4096);
 
-    void *addr = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    ftruncate(shmFd, MAXIMUM_SHM_SIZE);
+
+    void *addr = mmap(NULL, MAXIMUM_SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shmFd, 0);
     if (addr == MAP_FAILED) {
 	    perror("mmap");
-	    close(shm_fd);
-	    shm_unlink(shm_name);
+	    close(shmFd);
+	    shm_unlink(shmName);
 	    return 1;
     }
 
@@ -54,11 +57,11 @@ int main(int argc, const char** argv){
     const char *message = "Hello from Process A!";
     memcpy(addr, message, strlen(message) + 1);
 
-    printf("Shm FD: %d\n", shm_fd);
+    printf("Shm FD: %d\n", shmFd);
 
     auto s = XLinkOpenStream(0, "test", 1024);
     assert(s != INVALID_STREAM_ID);
-    auto w = XLinkWriteFd(s, &shm_fd); 
+    auto w = XLinkWriteFd(s, &shmFd); 
     assert(w == X_LINK_SUCCESS);
 
     return 0;

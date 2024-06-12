@@ -12,6 +12,8 @@
 #include "XLink/XLinkPublicDefines.h"
 #include "XLink/XLinkLog.h"
 
+const long MAXIMUM_SHM_SIZE = 4096;
+
 XLinkGlobalHandler_t xlinkGlobalHandler = {};
 
 int main(int argc, const char** argv){
@@ -42,19 +44,19 @@ int main(int argc, const char** argv){
     auto r = XLinkReadData(s, &packet);
     assert(r == X_LINK_SUCCESS);
 
-    long received_fd = *(long*)packet->data;
-    printf("Received fd: %d\n", received_fd);
+    long receivedFd = *(long*)packet->data;
+    printf("Received fd: %d\n", receivedFd);
 
     // Map the shared memory
-    void *shared_mem_addr =
-	    mmap(NULL, 4096, PROT_READ, MAP_SHARED, received_fd, 0);
-    if (shared_mem_addr == MAP_FAILED) {
+    void *sharedMemAddr =
+	    mmap(NULL, MAXIMUM_SHM_SIZE, PROT_READ, MAP_SHARED, receivedFd, 0);
+    if (sharedMemAddr == MAP_FAILED) {
 	    perror("mmap");
 	    return 1;
     }
 
     // Read and print the message from shared memory
-    printf("Message from Process A: %s\n", static_cast<char *>(shared_mem_addr));
+    printf("Message from Process A: %s\n", static_cast<char *>(sharedMemAddr));
 
     return 0;
 }
