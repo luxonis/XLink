@@ -92,8 +92,10 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
         case X_LINK_TCP_IP:
             return tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
 
+#if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformWrite(deviceHandle->xLinkFD, data, size);
+#endif
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -117,8 +119,10 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
         case X_LINK_TCP_IP:
             return tcpipPlatformRead(deviceHandle->xLinkFD, data, size);
 	
+#if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformRead(deviceHandle->xLinkFD, data, size);
+#endif
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
