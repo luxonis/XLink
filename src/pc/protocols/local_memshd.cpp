@@ -5,6 +5,11 @@
 
 #include "local_memshd.h"
 #include "../PlatformDeviceFd.h"
+
+#define MVLOG_UNIT_NAME local_memshd
+#include "XLinkLog.h"
+
+#if defined(__unix__)
 #include <cstddef>
 #include <cstring>
 #include <fcntl.h>
@@ -13,11 +18,6 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <errno.h>
-
-#define MVLOG_UNIT_NAME local_memshd
-#include "XLinkLog.h"
-
-#if defined(__unix__)
 
 int shdmem_initialize() {
     printf("Shared mem initialize function called\n");
@@ -84,7 +84,7 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
 
     // Store the socket and create a "unique" key instead
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
-    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) socketFd);
+    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) clientFd);
 
     return 0;
 
