@@ -41,6 +41,8 @@ int main(int argc, const char** argv){
 
     auto s = XLinkOpenStream(0, "test", 1024);
     assert(s != INVALID_STREAM_ID);
+    
+    // Read the data packet containing the FD
     auto r = XLinkReadData(s, &packet);
     assert(r == X_LINK_SUCCESS);
 
@@ -57,6 +59,11 @@ int main(int argc, const char** argv){
 
     // Read and print the message from shared memory
     printf("Message from Process A: %s\n", static_cast<char *>(sharedMemAddr));
+
+    auto w = XLinkWriteData(s, (uint8_t*)&s, sizeof(s));
+    assert(w == X_LINK_SUCCESS);
+
+    munmap(sharedMemAddr, MAXIMUM_SHM_SIZE);
 
     return 0;
 }

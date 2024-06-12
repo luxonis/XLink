@@ -12,6 +12,7 @@
 #include "XLink/XLinkLog.h"
     
 const long MAXIMUM_SHM_SIZE = 4096;
+const char *SHARED_MEMORY_NAME = "/xlink_shared_memory";
 
 XLinkGlobalHandler_t xlinkGlobalHandler = {};
 
@@ -36,7 +37,7 @@ int main(int argc, const char** argv){
         return 1;
     }
 
-    const char *shmName = "/xlink_shared_memory";
+    const char *shmName = SHARED_MEMORY_NAME;
     long shmFd = shm_open(shmName, O_CREAT | O_RDWR, 0666);
     if (shmFd < 0) {
 	    perror("shm_open");
@@ -61,8 +62,18 @@ int main(int argc, const char** argv){
 
     auto s = XLinkOpenStream(0, "test", 1024);
     assert(s != INVALID_STREAM_ID);
+
+    // Send the FD through the XLinkWriteFd function
     auto w = XLinkWriteFd(s, &shmFd); 
     assert(w == X_LINK_SUCCESS);
+    
+    streamPacketDesc_t *packet;
+    auto r = XLinkReadData(s, &packet);
+    assert(w == X_LINK_SUCCESS);
+
+    munmap(addr, MAXIMUM_SHM_SIZE);
+    close(shmFd);
+    unlink(shmName);
 
     return 0;
 }
