@@ -17,9 +17,7 @@
 #define MVLOG_UNIT_NAME local_memshd
 #include "XLinkLog.h"
 
-#if !defined(__unix__)
-#warning "The LOCAL_MEMSHD protocol is only available on linux"
-#else
+#if defined(__unix__)
 
 int shdmem_initialize() {
     printf("Shared mem initialize function called\n");

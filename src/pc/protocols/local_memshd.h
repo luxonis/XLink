@@ -13,9 +13,7 @@
 #include "XLinkPublicDefines.h"
 
 
-#if !defined(__unix__)
-#warning "The LOCAL_MEMSHD protocol is only available on linux"
-#else
+#if defined(__unix__)
 
 #ifdef __cplusplus
 extern "C" {
