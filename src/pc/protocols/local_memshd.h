@@ -28,9 +28,9 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
 
 int shdmemPlatformRead(void *fd, void *data, int size);
 int shdmemPlatformWrite(void *fd, void *data, int size);
+
+int shdmemPlatformWriteFd(void *fd, void *data);
  
-
-
 #ifdef __cplusplus
 }
 #endif

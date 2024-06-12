@@ -102,6 +102,23 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
     }
 }
 
+int XLinkPlatformWriteFD(xLinkDeviceHandle_t *deviceHandle, void *data)
+{
+    if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+    }
+
+    switch (deviceHandle->protocol) {
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformWriteFd(deviceHandle->xLinkFD, data);
+#endif
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+}
+
 int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 {
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {

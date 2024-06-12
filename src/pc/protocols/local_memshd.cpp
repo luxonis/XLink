@@ -107,9 +107,22 @@ int shdmemPlatformRead(void *fd, void *data, int size) {
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
 
+    char ancillaryElementBuffer[CMSG_SPACE(sizeof(long))];
+    msg.msg_control = ancillaryElementBuffer;
+    msg.msg_controllen = sizeof(ancillaryElementBuffer);
+
     if(recvmsg(socketFd, &msg, 0) < 0) {
 	perror("Failed to recieve message");
         return 1;
+    }
+
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+    if (cmsg && cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
+	long recvFd = *((long*)CMSG_DATA(cmsg));
+	printf("We received ad FD: %d\n", recvFd);
+	
+	/* We have recieved a FD */
+	*(long*)data = recvFd;
     }
 
     return 0;
@@ -131,6 +144,41 @@ int shdmemPlatformWrite(void *fd, void *data, int size) {
     iov.iov_len = size;
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
+
+    if(sendmsg(socketFd, &msg, 0) < 0) {
+	perror("Failed to send message");
+        return 1;
+    }
+
+    return 0;
+}
+
+int shdmemPlatformWriteFd(void *fd, void *data) {
+    printf("Shared mem write fd function called\n");
+
+    long socketFd = 0;
+    if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
+    	printf("Failed\n");
+	return 1;
+    }
+    printf("FD: 0x%x Data: 0x%x Size: %d\n", socketFd, data, sizeof(long));
+
+    struct msghdr msg = {};
+    struct iovec iov;
+    char buf[1] = {0}; // Buffer for single byte of data to send
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    char ancillaryElementBuffer[CMSG_SPACE(sizeof(long))];
+    msg.msg_control = ancillaryElementBuffer;
+    msg.msg_controllen = sizeof(ancillaryElementBuffer);
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    cmsg->cmsg_len = CMSG_LEN(sizeof(long));
+    *((long*)CMSG_DATA(cmsg)) = *(long*)data;
 
     if(sendmsg(socketFd, &msg, 0) < 0) {
 	perror("Failed to send message");

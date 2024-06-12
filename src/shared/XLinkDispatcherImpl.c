@@ -173,6 +173,12 @@ int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
             mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
             return rc;
         }
+    } else if (event->header.type == XLINK_WRITE_FD_REQ) {
+        rc = XLinkPlatformWriteFD(&event->deviceHandle, event->data);
+        if(rc < 0) {
+            mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
+            return rc;
+        }   
     }
 
     return 0;
@@ -221,6 +227,7 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response,
     mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
     switch (event->header.type){
         case XLINK_WRITE_REQ:
+	case XLINK_WRITE_FD_REQ:
         {
             //in case local tries to write after it issues close (writeSize is zero)
             stream = getStreamById(event->deviceHandle.xLinkFD, event->header.streamId);
@@ -357,7 +364,7 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response,
             mvLog(MVLOG_DEBUG,"XLINK_PING_REQ - do nothing\n");
             break;
         }
-        case XLINK_WRITE_RESP:
+	case XLINK_WRITE_RESP:
         case XLINK_READ_RESP:
         case XLINK_READ_REL_RESP:
         case XLINK_READ_REL_SPEC_RESP:
@@ -392,6 +399,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
 
     switch (event->header.type)
     {
+	case XLINK_WRITE_FD_REQ:
         case XLINK_WRITE_REQ:
             {
                 //let remote write immediately as we have a local buffer for the data
@@ -832,7 +840,7 @@ int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive) {
                && event->header.type < XLINK_RESP_LAST);
 
     // Then read the data buffer, which is contained only in the XLINK_WRITE_REQ event
-    if(event->header.type != XLINK_WRITE_REQ) {
+    if(event->header.type != XLINK_WRITE_REQ && event->header.type != XLINK_WRITE_FD_REQ) {
         return 0;
     }
 

@@ -502,6 +502,7 @@ char* TypeToStr(int type)
     switch(type)
     {
         case XLINK_WRITE_REQ:     return "XLINK_WRITE_REQ";
+        case XLINK_WRITE_FD_REQ:     return "XLINK_WRITE_FD_REQ";
         case XLINK_READ_REQ:      return "XLINK_READ_REQ";
         case XLINK_READ_REL_REQ:  return "XLINK_READ_REL_REQ";
         case XLINK_READ_REL_SPEC_REQ:  return "XLINK_READ_REL_SPEC_REQ";
