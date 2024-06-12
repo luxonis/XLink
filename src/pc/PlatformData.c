@@ -153,40 +153,6 @@ void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment)
 #endif
 }
 
-int XLinkPlatformWriteFD(xLinkDeviceHandle_t *deviceHandle, long *fd)
-{
-    if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
-    }
-
-    switch (deviceHandle->protocol) {
-#if defined(__unix__)
-	case X_LINK_LOCAL_SHDMEM:
-	    return shdmemPlatformWriteFD(deviceHandle->xLinkFD, fd);
-#endif
-
-        default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
-    }
-}
-
-int XLinkPlatformReadFD(xLinkDeviceHandle_t *deviceHandle, long *fd)
-{
-    if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
-    }
-
-    switch (deviceHandle->protocol) {
-#if defined(__unix__)
-	case X_LINK_LOCAL_SHDMEM:
-	    return shdmemPlatformReadFD(deviceHandle->xLinkFD, fd);
-#endif
-
-        default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
-    }
-}
-
 // ------------------------------------
 // XLinkPlatform API implementation. End.
 // ------------------------------------

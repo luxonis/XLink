@@ -91,9 +91,6 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size);
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment);
 void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment);
 
-int XLinkPlatformWriteFD(xLinkDeviceHandle_t *deviceHandle, long *fd);
-int XLinkPlatformReadFD(xLinkDeviceHandle_t *deviceHandle, long *fd);
-
 // ------------------------------------
 // Data management. End.
 // ------------------------------------

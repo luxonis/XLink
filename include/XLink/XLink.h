@@ -413,11 +413,6 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
  */
 XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int timeoutMs);
 
-/*** TODO SHDMEM ADD DESCRIPTION ***/
-XLinkError_t XLinkWriteFD(streamId_t const streamId, long *fd);
-XLinkError_t XLinkWriteFD_(streamId_t streamId, long *fd, XLinkTimespec* outTSend);
-XLinkError_t XLinkReadFD(streamId_t const streamId, long *fd);
-
 // ------------------------------------
 // Device streams management. End.
 // ------------------------------------
