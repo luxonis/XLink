@@ -20,18 +20,19 @@
 #include <errno.h>
 
 int shdmem_initialize() {
-    printf("Shared mem initialize function called\n");
-    return 0;
+    mvLog(MVLOG_DEBUG, "Shared memory initialized\n");
+    return X_LINK_SUCCESS;
 }
 
 int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd) {
-    printf("Shared mem platform connect function called\n");
-
     const char *socketPath = devPathWrite;
+
+    mvLog(MVLOG_DEBUG, "Shared memory connect invoked with socket path %s\n", socketPath);
+
     int socketFd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (socketFd < 0) {
-	perror("Socket creation failed");
-	return 1;
+	mvLog(MVLOG_FATAL, "Socket creation failed");
+	return X_LINK_ERROR;
     }
 
     struct sockaddr_un sockAddr;
@@ -40,27 +41,25 @@ int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, voi
     strcpy(sockAddr.sun_path, socketPath);
 
     if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof(sockAddr)) < 0) {
-	perror("Connect failed");
-	return 1;
+	mvLog(MVLOG_FATAL, "Socket connection failed");
+	return X_LINK_ERROR;
     }
 
     // Store the socket and create a "unique" key instead
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) socketFd);
 
-    return 0;
+    return X_LINK_SUCCESS;
 }
 
 int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd) {
-    printf("Shared mem platform server function called\n");
-
     const char *socketPath = devPathWrite;
-    printf("Socket path: %s\n", socketPath);
+    mvLog(MVLOG_DEBUG, "Shared memory server invoked with socket path %s\n", socketPath);
 
     int socketFd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (socketFd < 0) {
-	    perror("socket creation failed");
-	    return 1;
+	    mvLog(MVLOG_FATAL, "Socket creation failed");
+	    return X_LINK_ERROR;
     }
 
     struct sockaddr_un addrUn;
@@ -70,35 +69,32 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
     unlink(socketPath);
 
     if (bind(socketFd, (struct sockaddr *)&addrUn, sizeof(addrUn)) < 0) {
-	    perror("bind failed");
-	    return 1;
+	    mvLog(MVLOG_FATAL, "Socket bind failed");
+	    return X_LINK_ERROR;
     }
 
     listen(socketFd, 1);
-    printf("Waiting for a connection...\n");
+    mvLog(MVLOG_DEBUG, "Waiting for a connection...\n");
     int clientFd = accept(socketFd, NULL, NULL);
     if (clientFd < 0) {
-	    perror("accept failed");
-	    return 1;
+	    mvLog(MVLOG_FATAL, "Socket accept failed");
+	    return X_LINK_ERROR;
     }
 
     // Store the socket and create a "unique" key instead
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) clientFd);
 
-    return 0;
+    return X_LINK_SUCCESS;
 
 }
 
 int shdmemPlatformRead(void *fd, void *data, int size) {
-    printf("Shared mem read function called\n");
- 
     long socketFd = 0;
     if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
-    	printf("Failed\n");
-	return 1;
+    	mvLog(MVLOG_DEBUG, "Failed\n");
+	return X_LINK_ERROR;
     }
-    printf("FD: 0x%x Data: 0x%x Size: %d\n", socketFd, data, size);
 
     struct msghdr msg = {};
     struct iovec iov;
@@ -112,31 +108,28 @@ int shdmemPlatformRead(void *fd, void *data, int size) {
     msg.msg_controllen = sizeof(ancillaryElementBuffer);
 
     if(recvmsg(socketFd, &msg, 0) < 0) {
-	perror("Failed to recieve message");
-        return 1;
+	mvLog(MVLOG_ERROR, "Failed to recieve message");
+        return X_LINK_ERROR;
     }
 
     struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
     if (cmsg && cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
 	long recvFd = *((long*)CMSG_DATA(cmsg));
-	printf("We received ad FD: %d\n", recvFd);
+	mvLog(MVLOG_DEBUG, "We received ad FD: %d\n", recvFd);
 	
 	/* We have recieved a FD */
 	*(long*)data = recvFd;
     }
 
-    return 0;
+    return X_LINK_SUCCESS;
 }
 
 int shdmemPlatformWrite(void *fd, void *data, int size) {
-    printf("Shared mem write function called\n");
-
     long socketFd = 0;
     if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
-    	printf("Failed\n");
-	return 1;
+    	mvLog(MVLOG_ERROR, "Failed to get the socket FD\n");
+	return X_LINK_ERROR;
     }
-    printf("FD: 0x%x Data: 0x%x Size: %d\n", socketFd, data, size);
 
     struct msghdr msg = {};
     struct iovec iov;
@@ -146,22 +139,19 @@ int shdmemPlatformWrite(void *fd, void *data, int size) {
     msg.msg_iovlen = 1;
 
     if(sendmsg(socketFd, &msg, 0) < 0) {
-	perror("Failed to send message");
-        return 1;
+	mvLog(MVLOG_ERROR, "Failed to send message\n");
+        return X_LINK_ERROR;
     }
 
-    return 0;
+    return X_LINK_SUCCESS;
 }
 
 int shdmemPlatformWriteFd(void *fd, void *data) {
-    printf("Shared mem write fd function called\n");
-
     long socketFd = 0;
     if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
-    	printf("Failed\n");
-	return 1;
+    	mvLog(MVLOG_ERROR, "Failed to get the socket FD\n");
+	return X_LINK_ERROR;
     }
-    printf("FD: 0x%x Data: 0x%x Size: %d\n", socketFd, data, sizeof(long));
 
     struct msghdr msg = {};
     struct iovec iov;
@@ -181,11 +171,11 @@ int shdmemPlatformWriteFd(void *fd, void *data) {
     *((long*)CMSG_DATA(cmsg)) = *(long*)data;
 
     if(sendmsg(socketFd, &msg, 0) < 0) {
-	perror("Failed to send message");
-        return 1;
+	mvLog(MVLOG_ERROR, "Failed to send message");
+        return X_LINK_ERROR;
     }
 
-    return 0;
+    return X_LINK_SUCCESS;
 }
 
 #endif /* !defined(__unix__) */
