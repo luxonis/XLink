@@ -31,7 +31,7 @@ int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, voi
     int socketFd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (socketFd < 0) {
 	perror("Socket creation failed");
-	return 1;
+	return -1;
     }
 
     struct sockaddr_un sockAddr;
@@ -41,7 +41,7 @@ int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, voi
 
     if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof(sockAddr)) < 0) {
 	perror("Connect failed");
-	return 1;
+	return -1;
     }
 
     // Store the socket and create a "unique" key instead
@@ -60,7 +60,7 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
     int socketFd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (socketFd < 0) {
 	    perror("socket creation failed");
-	    return 1;
+	    return -1;
     }
 
     struct sockaddr_un addrUn;
@@ -71,7 +71,7 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
 
     if (bind(socketFd, (struct sockaddr *)&addrUn, sizeof(addrUn)) < 0) {
 	    perror("bind failed");
-	    return 1;
+	    return -1;
     }
 
     listen(socketFd, 1);
@@ -79,7 +79,7 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
     int clientFd = accept(socketFd, NULL, NULL);
     if (clientFd < 0) {
 	    perror("accept failed");
-	    return 1;
+	    return -1;
     }
 
     // Store the socket and create a "unique" key instead
@@ -96,7 +96,7 @@ int shdmemPlatformRead(void *fd, void *data, int size) {
     long socketFd = 0;
     if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
     	printf("Failed\n");
-	return 1;
+	return -1;
     }
     printf("FD: 0x%x Data: 0x%x Size: %d\n", socketFd, data, size);
 
@@ -109,7 +109,7 @@ int shdmemPlatformRead(void *fd, void *data, int size) {
 
     if(recvmsg(socketFd, &msg, 0) < 0) {
 	perror("Failed to recieve message");
-        return 1;
+        return -1;
     }
 
     return 0;
@@ -121,7 +121,7 @@ int shdmemPlatformWrite(void *fd, void *data, int size) {
     long socketFd = 0;
     if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
     	printf("Failed\n");
-	return 1;
+	return -1;
     }
     printf("FD: 0x%x Data: 0x%x Size: %d\n", socketFd, data, size);
 
@@ -134,7 +134,82 @@ int shdmemPlatformWrite(void *fd, void *data, int size) {
 
     if(sendmsg(socketFd, &msg, 0) < 0) {
 	perror("Failed to send message");
-        return 1;
+        return -1;
+    }
+
+    return 0;
+}
+
+int shdmemPlatformReadFD(void *fd, long *passedFd) {
+    printf("Shared mem read FD function called\n");
+
+    while(true);
+
+    long socketFd = 0;
+    if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
+	printf("Failed\n");
+	return -1;
+    }
+    printf("FD: 0x%x Data: 0x%x\n", socketFd, *passedFd);
+
+    struct msghdr msg = {};
+    struct iovec iov;
+    char buf[1];
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    char ancillaryElementBuffer[CMSG_SPACE(sizeof(long))];
+    msg.msg_control = ancillaryElementBuffer;
+    msg.msg_controllen = sizeof(ancillaryElementBuffer);
+
+    if (recvmsg(socketFd, &msg, 0) < 0) {
+	perror("Failed to receive message");
+	return -1;
+    }
+
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+    if (cmsg && cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS) {
+	    *passedFd = *((int *)CMSG_DATA(cmsg));
+	    return 0;
+    }
+    while(true);
+
+    return -1; // Return an invalid fd on failure
+}
+
+int shdmemPlatformWriteFD(void *fd, long *passedFd) {
+    printf("Shared mem write FD function called\n");
+
+    long socketFd = 0;
+    if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
+    	printf("Failed\n");
+	return -1;
+    }
+    printf("FD: 0x%x Data: 0x%x\n", socketFd, *passedFd);
+
+    struct msghdr msg = {};
+    struct iovec iov;
+    char buf[1] = {0}; // Buffer for single byte of data to send
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    char ancillaryElementBuffer[CMSG_SPACE(sizeof(long))];
+    msg.msg_control = ancillaryElementBuffer;
+    msg.msg_controllen = sizeof(ancillaryElementBuffer);
+
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+    *((long*)CMSG_DATA(cmsg)) = *passedFd;
+
+    if (sendmsg(socketFd, &msg, 0) < 0) {
+	    perror("Failed to send message");
+	    return -1;
     }
 
     return 0;

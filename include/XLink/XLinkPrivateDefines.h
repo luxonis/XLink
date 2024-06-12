@@ -89,6 +89,9 @@ typedef enum
     XLINK_CLOSE_STREAM_REQ,
     XLINK_PING_REQ,
     XLINK_RESET_REQ,
+    /* Shared memory fd related events */
+    XLINK_WRITE_FD_REQ,
+    XLINK_READ_FD_REQ,
     XLINK_REQUEST_LAST,
     //note that is important to separate request and response
     XLINK_WRITE_RESP,
@@ -98,6 +101,9 @@ typedef enum
     XLINK_CLOSE_STREAM_RESP,
     XLINK_PING_RESP,
     XLINK_RESET_RESP,
+    /* Shared memory fd related events */
+    XLINK_WRITE_FD_RESP,
+    XLINK_READ_FD_RESP,
     XLINK_RESP_LAST,
 
     /*X_LINK_IPC related events*/

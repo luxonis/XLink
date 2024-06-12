@@ -509,6 +509,8 @@ char* TypeToStr(int type)
         case XLINK_CLOSE_STREAM_REQ: return "XLINK_CLOSE_STREAM_REQ";
         case XLINK_PING_REQ:         return "XLINK_PING_REQ";
         case XLINK_RESET_REQ:        return "XLINK_RESET_REQ";
+	case XLINK_WRITE_FD_REQ: return "XLINK_WRITE_FD_REQ";
+	case XLINK_READ_FD_REQ: return "XLINK_READ_FD_REQ";
         case XLINK_REQUEST_LAST:     return "XLINK_REQUEST_LAST";
         case XLINK_WRITE_RESP:   return "XLINK_WRITE_RESP";
         case XLINK_READ_RESP:     return "XLINK_READ_RESP";
@@ -518,6 +520,8 @@ char* TypeToStr(int type)
         case XLINK_CLOSE_STREAM_RESP:  return "XLINK_CLOSE_STREAM_RESP";
         case XLINK_PING_RESP:  return "XLINK_PING_RESP";
         case XLINK_RESET_RESP: return "XLINK_RESET_RESP";
+	case XLINK_WRITE_FD_RESP:   return "XLINK_WRITE_FD_RESP";
+        case XLINK_READ_FD_RESP:     return "XLINK_READ_FD_RESP";
         case XLINK_RESP_LAST:  return "XLINK_RESP_LAST";
         default:
             break;
