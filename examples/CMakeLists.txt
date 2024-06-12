@@ -46,4 +46,9 @@ add_example(xlink_server xlink_server.cpp)
 # Server example
 add_example(xlink_server2 xlink_server2.cpp)
 # Boot firmware
-add_example(device_connect_reset device_connect_reset.cpp)
+add_example(device_connect_reset device_connect_reset.cpp
+
+# Local shared memory example
+add_example(xlink_server_local xlink_server_local.cpp)
+add_example(xlink_client_local xlink_client_local.cpp)
+
