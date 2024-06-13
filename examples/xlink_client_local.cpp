@@ -46,7 +46,7 @@ int main(int argc, const char** argv){
     auto r = XLinkReadData(s, &packet);
     assert(r == X_LINK_SUCCESS);
 
-    long receivedFd = *(long*)packet->data;
+    long receivedFd = packet->fd;
     printf("Received fd: %d\n", receivedFd);
 
     // Map the shared memory
