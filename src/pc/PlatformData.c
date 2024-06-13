@@ -36,6 +36,9 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 #endif
 
 #ifdef USE_LINK_JTAG
@@ -118,13 +121,43 @@ int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data)
         case X_LINK_PCIE:
         case X_LINK_TCP_IP:
 	    {
+		long fd = *(long*)data;
+
 	        // Determine file size through fstat
+		struct stat fileStats;
+		fstat(fd, &fileStats);
+		int size = fileStats.st_size;
+
 		// mmap the fine in memory
+		void *addr = mmap(NULL, 4096, PROT_READ, MAP_SHARED, fd, 0);
+		if (addr == MAP_FAILED) {
+		    mvLog(MVLOG_ERROR, "Failed to mmap file to stream it over\n");
+		    return X_LINK_ERROR;
+		}
+
 		// Use the respective write function to copy and send the message
+		int result = X_LINK_ERROR;
+		switch(deviceHandle->protocol) {
+		    case X_LINK_USB_VSC:
+		    case X_LINK_USB_CDC:
+			result = usbPlatformWrite(deviceHandle->xLinkFD, data, size);
+			break;
+		    case X_LINK_PCIE:
+			result = pciePlatformWrite(deviceHandle->xLinkFD, data, size);
+			break;
+		    case X_LINK_TCP_IP:
+			result = tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
+			break;
+		    default:
+			result = X_LINK_PLATFORM_INVALID_PARAMETERS;
+			break;
+		}
+
 		// Unmap file
-		// You're done
+		munmap(addr, size);
+	    
+		return result;
 	    }
-	    return X_LINK_ERROR;
 #endif
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
