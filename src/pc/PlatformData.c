@@ -119,7 +119,7 @@ int XLinkPlatformWriteFD(xLinkDeviceHandle_t *deviceHandle, void *data)
     }
 }
 
-int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
+int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, long *fd)
 {
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
@@ -138,7 +138,7 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 	
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
-	    return shdmemPlatformRead(deviceHandle->xLinkFD, data, size);
+	    return shdmemPlatformRead(deviceHandle->xLinkFD, data, size, fd);
 #endif
 
         default:

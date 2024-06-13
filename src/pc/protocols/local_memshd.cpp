@@ -24,7 +24,7 @@ int shdmem_initialize() {
     return X_LINK_SUCCESS;
 }
 
-int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd) {
+int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, void **desc) {
     const char *socketPath = devPathWrite;
 
     mvLog(MVLOG_DEBUG, "Shared memory connect invoked with socket path %s\n", socketPath);
@@ -47,12 +47,12 @@ int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, voi
 
     // Store the socket and create a "unique" key instead
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
-    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) socketFd);
+    *desc = createPlatformDeviceFdKey((void*) (uintptr_t) socketFd);
 
     return X_LINK_SUCCESS;
 }
 
-int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd) {
+int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void **desc) {
     const char *socketPath = devPathWrite;
     mvLog(MVLOG_DEBUG, "Shared memory server invoked with socket path %s\n", socketPath);
 
@@ -83,15 +83,15 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
 
     // Store the socket and create a "unique" key instead
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
-    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) clientFd);
+    *desc = createPlatformDeviceFdKey((void*) (uintptr_t) clientFd);
 
     return X_LINK_SUCCESS;
 
 }
 
-int shdmemPlatformRead(void *fd, void *data, int size) {
+int shdmemPlatformRead(void *desc, void *data, int size, long *fd) {
     long socketFd = 0;
-    if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
+    if(getPlatformDeviceFdFromKey(desc, (void**)&socketFd)) {
     	mvLog(MVLOG_DEBUG, "Failed\n");
 	return X_LINK_ERROR;
     }
@@ -117,16 +117,17 @@ int shdmemPlatformRead(void *fd, void *data, int size) {
 	long recvFd = *((long*)CMSG_DATA(cmsg));
 	mvLog(MVLOG_DEBUG, "We received ad FD: %d\n", recvFd);
 	
+	
 	/* We have recieved a FD */
-	*(long*)data = recvFd;
+	*fd = recvFd;
     }
 
     return X_LINK_SUCCESS;
 }
 
-int shdmemPlatformWrite(void *fd, void *data, int size) {
+int shdmemPlatformWrite(void *desc, void *data, int size) {
     long socketFd = 0;
-    if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
+    if(getPlatformDeviceFdFromKey(desc, (void**)&socketFd)) {
     	mvLog(MVLOG_ERROR, "Failed to get the socket FD\n");
 	return X_LINK_ERROR;
     }
@@ -146,9 +147,9 @@ int shdmemPlatformWrite(void *fd, void *data, int size) {
     return X_LINK_SUCCESS;
 }
 
-int shdmemPlatformWriteFd(void *fd, void *data) {
+int shdmemPlatformWriteFd(void *desc, void *data) {
     long socketFd = 0;
-    if(getPlatformDeviceFdFromKey(fd, (void**)&socketFd)) {
+    if(getPlatformDeviceFdFromKey(desc, (void**)&socketFd)) {
     	mvLog(MVLOG_ERROR, "Failed to get the socket FD\n");
 	return X_LINK_ERROR;
     }

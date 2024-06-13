@@ -31,7 +31,7 @@ static streamPacketDesc_t* movePacketFromStream(streamDesc_t *stream);
 static streamPacketDesc_t* getPacketFromStream(streamDesc_t* stream);
 static int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize);
 static int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize, uint8_t* data);
-static int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, XLinkTimespec trsend, XLinkTimespec treceive);
+static int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, long fd, XLinkTimespec trsend, XLinkTimespec treceive);
 
 static int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive);
 
@@ -186,8 +186,10 @@ int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
 
 int dispatcherEventReceive(xLinkEvent_t* event){
     // static xLinkEvent_t prevEvent = {0};
+    long fd = -1;
     int rc = XLinkPlatformRead(&event->deviceHandle,
-        &event->header, sizeof(event->header));
+        &event->header, sizeof(event->header), &fd);
+    (void)fd;
     XLinkTimespec treceive;
     getMonotonicTimestamp(&treceive);
 
@@ -746,6 +748,7 @@ streamPacketDesc_t* movePacketFromStream(streamDesc_t* stream)
         }
         ret->data = NULL;
         ret->length = 0;
+	ret->fd = -1;
 
         // copy fields of first unused packet
         *ret = stream->packets[stream->firstPacketUnused];
@@ -837,11 +840,12 @@ int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize
     return 0;
 }
 
-int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, XLinkTimespec trsend, XLinkTimespec treceive) {
+int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, long fd, XLinkTimespec trsend, XLinkTimespec treceive) {
     if (stream->availablePackets + stream->blockedPackets < XLINK_MAX_PACKETS_PER_STREAM)
     {
         stream->packets[stream->firstPacketFree].data = buffer;
         stream->packets[stream->firstPacketFree].length = size;
+        stream->packets[stream->firstPacketFree].fd = fd;
         stream->packets[stream->firstPacketFree].tRemoteSent = trsend;
         stream->packets[stream->firstPacketFree].tReceived = treceive;
         CIRCULAR_INCREMENT(stream->firstPacketFree, XLINK_MAX_PACKETS_PER_STREAM);
@@ -877,12 +881,13 @@ int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive) {
     XLINK_OUT_WITH_LOG_IF(buffer == NULL,
         mvLog(MVLOG_FATAL,"out of memory to receive data of size = %zu\n", event->header.size));
 
-    const int sc = XLinkPlatformRead(&event->deviceHandle, buffer, event->header.size);
+    long fd = -1;
+    const int sc = XLinkPlatformRead(&event->deviceHandle, buffer, event->header.size, &fd);
     XLINK_OUT_WITH_LOG_IF(sc < 0, mvLog(MVLOG_ERROR,"%s() Read failed %d\n", __func__, sc));
 
     event->data = buffer;
     uint64_t tsec = event->header.tsecLsb | ((uint64_t)event->header.tsecMsb << 32);
-    XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size, (XLinkTimespec){tsec, event->header.tnsec}, treceive),
+    XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size, fd, (XLinkTimespec){tsec, event->header.tnsec}, treceive),
         mvLog(MVLOG_WARN,"No more place in stream. release packet\n"));
     rc = 0;
 
