@@ -174,7 +174,7 @@ int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
             return rc;
         }
     } else if (event->header.type == XLINK_WRITE_FD_REQ) {
-        rc = XLinkPlatformWriteFD(&event->deviceHandle, event->data);
+        rc = XLinkPlatformWriteFd(&event->deviceHandle, event->data);
         if(rc < 0) {
             mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
             return rc;

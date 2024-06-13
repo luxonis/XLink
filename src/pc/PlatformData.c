@@ -102,7 +102,7 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
     }
 }
 
-int XLinkPlatformWriteFD(xLinkDeviceHandle_t *deviceHandle, void *data)
+int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data)
 {
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
@@ -112,8 +112,20 @@ int XLinkPlatformWriteFD(xLinkDeviceHandle_t *deviceHandle, void *data)
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformWriteFd(deviceHandle->xLinkFD, data);
-#endif
 
+	case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+        case X_LINK_PCIE:
+        case X_LINK_TCP_IP:
+	    {
+	        // Determine file size through fstat
+		// mmap the fine in memory
+		// Use the respective write function to copy and send the message
+		// Unmap file
+		// You're done
+	    }
+	    return X_LINK_ERROR;
+#endif
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
