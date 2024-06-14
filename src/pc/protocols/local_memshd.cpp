@@ -179,4 +179,10 @@ int shdmemPlatformWriteFd(void *desc, void *data) {
     return X_LINK_SUCCESS;
 }
 
+int shdmemSetProtocol(XLinkProtocol_t *protocol, const char* devPathRead, const char* devPathWrite) {
+    devPathWrite = devPathRead = SHDMEM_DEFAULT_SOCKET;
+    *protocol = X_LINK_LOCAL_SHDMEM;
+    return X_LINK_SUCCESS;
+}
+
 #endif /* !defined(__unix__) */

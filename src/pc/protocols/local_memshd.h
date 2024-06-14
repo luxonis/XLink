@@ -15,6 +15,8 @@
 
 #if defined(__unix__)
 
+#define SHDMEM_DEFAULT_SOCKET "/tmp/xlink.sock"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -29,6 +31,8 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
 int shdmemPlatformRead(void *desc, void *data, int size, long *fd);
 int shdmemPlatformWrite(void *desc, void *data, int size);
 int shdmemPlatformWriteFd(void *desc, void *data);
+
+int shdmemSetProtocol(XLinkProtocol_t *protocol, const char* devPathRead, const char* devPathWrite);
  
 #ifdef __cplusplus
 }

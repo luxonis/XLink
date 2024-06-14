@@ -188,7 +188,7 @@ XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
 
     link->deviceHandle.protocol = handler->protocol;
     int connectStatus = XLinkPlatformServer(handler->devicePath2, handler->devicePath,
-                                             link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
+                                             &link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
 
     if (connectStatus < 0) {
         /**
@@ -277,7 +277,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 
     link->deviceHandle.protocol = handler->protocol;
     int connectStatus = XLinkPlatformConnect(handler->devicePath2, handler->devicePath,
-                                             link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
+                                             &link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
     
     if (connectStatus < 0) {
         /**

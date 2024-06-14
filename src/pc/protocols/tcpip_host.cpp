@@ -1163,6 +1163,15 @@ int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmwa
     return -1;
 }
 
+// Checks whether ip is localhost
+bool tcpipIsLocalhost(const char *ip) {
+    if(strncmp(ip, "127.0.0.1", strlen("127.0.0.1")) == 0) {
+	return true;
+    }
+
+    return false;
+}
+
 
 // Discovery Service
 static std::thread serviceThread;

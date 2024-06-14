@@ -173,12 +173,12 @@ xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDes
 }
 
 
-xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
+xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t *protocol, void** fd)
 {
-    if(!XLinkIsProtocolInitialized(protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
+    if(!XLinkIsProtocolInitialized(*protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+*protocol;
     }
-    switch (protocol) {
+    switch (*protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
             return usbPlatformConnect(devPathRead, devPathWrite, fd);
@@ -187,8 +187,19 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
             return pciePlatformConnect(devPathRead, devPathWrite, fd);
 
         case X_LINK_TCP_IP:
-            return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
-
+#if defined(__unix__)
+	    if(tcpipIsLocalhost(devPathWrite)) {
+	    	if (shdmemPlatformConnect(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
+		    return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
+		} else {
+		    return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+		}
+	    } else {
+		return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+	    }
+#else
+            return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+#endif
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformConnect(devPathRead, devPathWrite, fd);
@@ -199,11 +210,23 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
     }
 }
 
-xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
+xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t *protocol, void** fd)
 {
-    switch (protocol) {
+    switch (*protocol) {
         case X_LINK_TCP_IP:
+#if defined(__unix__)
+	    if(tcpipIsLocalhost(devPathWrite)) {
+	    	if (shdmemPlatformServer(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
+		    return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
+		} else {
+		    return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+		}
+	    } else {
+		return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+	    }
+#else
             return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+#endif
 
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
