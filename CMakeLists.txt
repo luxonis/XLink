@@ -69,7 +69,6 @@ endif()
 # Add dependencies
 include(cmake/XLinkDependencies.cmake)
 
-
 if(XLINK_ENABLE_LIBUSB)
     if(XLINK_LIBUSB_SYSTEM)
         # Find system libusb
@@ -105,10 +104,6 @@ if(XLINK_ENABLE_LIBUSB)
 
     # Add compile define stating libusb is enabled
     target_compile_definitions(${TARGET_NAME} PRIVATE XLINK_ENABLE_LIBUSB)
-endif()
-
-if(WIN32 AND NOT MINGW)
-    target_link_libraries(${TARGET_NAME} PRIVATE Pathcch.lib)
 endif()
 
 if(WIN32)
