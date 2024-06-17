@@ -102,6 +102,9 @@ tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET socket);
 */
 xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count);
 
+xLinkPlatformErrorCode_t tcpip_create_search_context(void** pctx, const deviceDesc_t in_deviceRequirements);
+xLinkPlatformErrorCode_t tcpip_perform_search(void* ctx, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count);
+xLinkPlatformErrorCode_t tcpip_close_search_context(void* ctx);
 
 /**
  * Send a boot to bootloader message to device with address 'name'
