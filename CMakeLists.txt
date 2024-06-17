@@ -72,7 +72,7 @@ include(cmake/XLinkDependencies.cmake)
 if(XLINK_ENABLE_LIBUSB)
     if(XLINK_LIBUSB_SYSTEM)
         # Find system libusb
-        find_path(LIBUSB_INCLUDE_DIR NAMES "libusb-1.0/libusb.h)
+        find_path(LIBUSB_INCLUDE_DIR NAMES "libusb-1.0/libusb.h")
         find_library(LIBUSB_LIBRARY NAMES usb-1.0 PATH_SUFFIXES "lib")
         if(NOT LIBUSB_INCLUDE_DIR OR NOT LIBUSB_LIBRARY)
             message(FATAL_ERROR "libusb is required")
