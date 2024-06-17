@@ -87,10 +87,14 @@ if(XLINK_ENABLE_LIBUSB)
         # Link to CMake libusb
         target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
         if(WIN32 AND NOT MINGW)
-            target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib Pathcch.lib)
+            target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib)
             # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
             target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
         endif()
+    endif()
+    
+    if(WIN32 AND NOT MINGW)
+        target_link_libraries(${TARGET_NAME} PRIVATE Pathcch.lib)
     endif()
 
     # Add compile define stating a local libusb usage
