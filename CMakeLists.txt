@@ -82,7 +82,7 @@ else()
 endif()
 
 if(WIN32 AND NOT MINGW)
-    target_link_libraries(${TARGET_NAME} Pathcch.lib)
+    target_link_libraries(${TARGET_NAME} PRIVATE Pathcch.lib)
 endif()
 
 if(WIN32)
