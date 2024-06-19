@@ -146,6 +146,19 @@ function_epilogue:
     return writtenByteCount;
 }
 
+int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, void* data, int totalSize, void* data2, int data2Size)
+{
+    if(XLinkPlatformWriteFd(deviceHandle, data) != X_LINK_SUCCESS) {
+	return X_LINK_ERROR;
+    }
+ 
+    if(data2 != NULL || data2Size > 0) {
+	return XLinkPlatformWrite(deviceHandle, data2, data2Size);
+    }           
+
+    return X_LINK_SUCCESS;
+}
+
 //adds a new event with parameters and returns event id
 int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
 {
@@ -174,7 +187,7 @@ int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
             return rc;
         }
     } else if (event->header.type == XLINK_WRITE_FD_REQ) {
-        rc = XLinkPlatformWriteFd(&event->deviceHandle, event->data);
+        rc = writeFdEventMultipart(&event->deviceHandle, event->data, event->header.size, event->data2, event->data2Size);
         if(rc < 0) {
             mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
             return rc;
