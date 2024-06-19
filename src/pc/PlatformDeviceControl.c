@@ -178,6 +178,7 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
     if(!XLinkIsProtocolInitialized(*protocol)) {
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+*protocol;
     }
+
     switch (*protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
@@ -192,13 +193,13 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
 	    	if (shdmemPlatformConnect(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
 		    return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
 		} else {
-		    return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+		    return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
 		}
 	    } else {
-		return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+		return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
 	    }
 #else
-            return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+            return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
 #endif
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
