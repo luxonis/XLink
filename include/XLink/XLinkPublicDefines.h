@@ -139,7 +139,7 @@ typedef struct streamPacketDesc_t
 {
     uint8_t* data;
     uint32_t length;
-    uint32_t fd; // file descriptor
+    int32_t fd; // file descriptor
     XLinkTimespec tRemoteSent; /// remote timestamp of when the packet was sent. Related to remote clock. Note: not directly related to local clock
     XLinkTimespec tReceived; /// local timestamp of when the packet was received. Related to local monotonic clock
 } streamPacketDesc_t;
