@@ -179,7 +179,7 @@ XLinkError_t XLinkWriteFdData(streamId_t streamId, const long* fdBuffer, int fdS
     XLINK_RET_IF(getLinkByStreamId(streamId, &link));
     streamId = EXTRACT_STREAM_ID(streamId);
 
-    int totalSize = dataBuffer + sizeof(long);
+    int totalSize = dataSize + sizeof(long);
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_FD_REQ, totalSize, (void*)fdBuffer, link->deviceHandle);
     event.data2 = (void*)dataBuffer;
