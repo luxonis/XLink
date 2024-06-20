@@ -1165,7 +1165,8 @@ int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmwa
 
 // Checks whether ip is localhost
 bool tcpipIsLocalhost(const char *ip) {
-    if(strncmp(ip, "127.0.0.1", strlen("127.0.0.1")) == 0) {
+    if(strncmp(ip, "127.0.0.1", strlen("127.0.0.1")) == 0 ||
+       strncmp(ip, "0.0.0.0", strlen("0.0.0.0")) == 0) {
 	return true;
     }
 

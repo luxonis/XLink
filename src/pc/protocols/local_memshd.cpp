@@ -107,7 +107,8 @@ int shdmemPlatformRead(void *desc, void *data, int size, long *fd) {
     msg.msg_control = ancillaryElementBuffer;
     msg.msg_controllen = sizeof(ancillaryElementBuffer);
 
-    if(recvmsg(socketFd, &msg, 0) < 0) {
+    int bytes;
+    if(bytes = recvmsg(socketFd, &msg, 0) < 0) {
 	mvLog(MVLOG_ERROR, "Failed to recieve message");
         return X_LINK_ERROR;
     }
@@ -122,7 +123,7 @@ int shdmemPlatformRead(void *desc, void *data, int size, long *fd) {
 	*fd = recvFd;
     }
 
-    return X_LINK_SUCCESS;
+    return bytes;
 }
 
 int shdmemPlatformWrite(void *desc, void *data, int size) {
@@ -139,12 +140,13 @@ int shdmemPlatformWrite(void *desc, void *data, int size) {
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
 
-    if(sendmsg(socketFd, &msg, 0) < 0) {
+    int bytes;
+    if(bytes = sendmsg(socketFd, &msg, 0) < 0) {
 	mvLog(MVLOG_ERROR, "Failed to send message\n");
         return X_LINK_ERROR;
     }
 
-    return X_LINK_SUCCESS;
+    return bytes;
 }
 
 int shdmemPlatformWriteFd(void *desc, void *data) {
@@ -171,12 +173,13 @@ int shdmemPlatformWriteFd(void *desc, void *data) {
     cmsg->cmsg_len = CMSG_LEN(sizeof(long));
     *((long*)CMSG_DATA(cmsg)) = *(long*)data;
 
-    if(sendmsg(socketFd, &msg, 0) < 0) {
+    int bytes;
+    if(bytes = sendmsg(socketFd, &msg, 0) < 0) {
 	mvLog(MVLOG_ERROR, "Failed to send message");
         return X_LINK_ERROR;
     }
 
-    return X_LINK_SUCCESS;
+    return bytes;
 }
 
 int shdmemSetProtocol(XLinkProtocol_t *protocol, const char* devPathRead, const char* devPathWrite) {
