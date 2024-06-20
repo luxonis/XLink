@@ -29,7 +29,7 @@ int main(int argc, const char** argv){
     }
 
     XLinkHandler_t handler;
-    handler.devicePath = "127.0.0.1";
+    handler.devicePath = "0.0.0.0";
     handler.protocol = X_LINK_TCP_IP;
     status = XLinkServerOnly(&handler);
     if(X_LINK_SUCCESS != status) {
