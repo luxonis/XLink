@@ -89,6 +89,18 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
 
 }
 
+int shdmemPlatformClose(void **desc) {
+    long socketFd = 0;
+    if(getPlatformDeviceFdFromKey(desc, (void**)&socketFd)) {
+    	mvLog(MVLOG_DEBUG, "Failed\n");
+	return X_LINK_ERROR;
+    }
+
+    close(socketFd);
+
+    return X_LINK_SUCCESS;
+}
+
 int shdmemPlatformRead(void *desc, void *data, int size, long *fd) {
     long socketFd = 0;
     if(getPlatformDeviceFdFromKey(desc, (void**)&socketFd)) {

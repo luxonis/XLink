@@ -646,6 +646,8 @@ XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
             return X_LINK_INIT_USB_ERROR;
         case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED:
             return X_LINK_INIT_TCP_IP_ERROR;
+	case X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED:
+	    return X_LINK_INIT_LOCAL_SHDMEM_ERROR;
         case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED:
             return X_LINK_INIT_PCIE_ERROR;
         case X_LINK_PLATFORM_ERROR:
@@ -675,6 +677,7 @@ const char* XLinkErrorToStr(XLinkError_t val) {
         case X_LINK_NOT_IMPLEMENTED: return "X_LINK_NOT_IMPLEMENTED";
         case X_LINK_INIT_USB_ERROR: return "X_LINK_INIT_USB_ERROR";
         case X_LINK_INIT_TCP_IP_ERROR: return "X_LINK_INIT_TCP_IP_ERROR";
+        case X_LINK_INIT_LOCAL_SHDMEM_ERROR: return "X_LINK_INIT_LOCAL_SHDMEM_ERROR";
         case X_LINK_INIT_PCIE_ERROR: return "X_LINK_INIT_PCIE_ERROR";
         default:
             return "INVALID_ENUM_VALUE";
