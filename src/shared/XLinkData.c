@@ -139,12 +139,12 @@ XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer,
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkWriteFd(streamId_t const streamId, const long* buffer)
+XLinkError_t XLinkWriteFd(streamId_t const streamId, const long* buffer, int size)
 {
-    return XLinkWriteFd_(streamId, buffer, NULL);
+    return XLinkWriteFd_(streamId, buffer, size, NULL);
 }
 
-XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, XLinkTimespec* outTSend)
+XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, int size, XLinkTimespec* outTSend)
 {
     XLINK_RET_IF(buffer == NULL);
 
@@ -155,7 +155,7 @@ XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, XLinkTimespe
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_FD_REQ,
-        sizeof(long),(void*)buffer, link->deviceHandle);
+        size,(void*)buffer, link->deviceHandle);
 
     event.data2 = (void*)NULL;
     event.data2Size = -1;
@@ -163,11 +163,11 @@ XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, XLinkTimespe
     XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
 
     if( glHandler->profEnable) {
-        glHandler->profilingData.totalWriteBytes += sizeof(long);
+        glHandler->profilingData.totalWriteBytes += size;
         glHandler->profilingData.totalWriteTime += opTime;
     }
-    link->profilingData.totalWriteBytes += sizeof(long);
-    link->profilingData.totalWriteTime += sizeof(long);
+    link->profilingData.totalWriteBytes += size;
+    link->profilingData.totalWriteTime += size;
 
     return X_LINK_SUCCESS;
 }
@@ -182,7 +182,7 @@ XLinkError_t XLinkWriteFdData(streamId_t streamId, const long* fdBuffer, int fdS
     XLINK_RET_IF(getLinkByStreamId(streamId, &link));
     streamId = EXTRACT_STREAM_ID(streamId);
 
-    int totalSize = dataSize;
+    int totalSize = fdSize + dataSize;
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_FD_REQ, totalSize, (void*)fdBuffer, link->deviceHandle);
     event.data2 = (void*)dataBuffer;

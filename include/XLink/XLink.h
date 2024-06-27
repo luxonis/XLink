@@ -311,8 +311,8 @@ XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int siz
  * @param[in] buffer - FD to be transmitted
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkWriteFd(streamId_t const streamId, const long* buffer);
-XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, XLinkTimespec* outTSend);
+XLinkError_t XLinkWriteFd(streamId_t const streamId, const long* buffer, int size);
+XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, int size, XLinkTimespec* outTSend);
 XLinkError_t XLinkWriteFdData(streamId_t streamId, const long* fdBuffer, int fdSize, const uint8_t* dataBuffer, int dataSize);
 
 
