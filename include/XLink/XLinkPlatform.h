@@ -87,7 +87,7 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
 // ------------------------------------
 
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size);
-int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data);
+int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data, void *data2, int size2);
 int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, long *fd);
 
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment);

@@ -161,7 +161,7 @@ int shdmemPlatformWrite(void *desc, void *data, int size) {
     return bytes;
 }
 
-int shdmemPlatformWriteFd(void *desc, void *data) {
+int shdmemPlatformWriteFd(void *desc, void *data, void *data2, int size2) {
     long socketFd = 0;
     if(getPlatformDeviceFdFromKey(desc, (void**)&socketFd)) {
     	mvLog(MVLOG_ERROR, "Failed to get the socket FD\n");
@@ -171,19 +171,29 @@ int shdmemPlatformWriteFd(void *desc, void *data) {
     struct msghdr msg = {};
     struct iovec iov;
     char buf[1] = {0}; // Buffer for single byte of data to send
-    iov.iov_base = buf;
-    iov.iov_len = sizeof(buf);
+    if (data2 != NULL && size2 > 0) {
+	iov.iov_base = data2;
+        iov.iov_len = size2;
+    } else {
+        iov.iov_base = buf;
+        iov.iov_len = sizeof(buf);
+    }
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
 
-    char ancillaryElementBuffer[CMSG_SPACE(sizeof(long))];
-    msg.msg_control = ancillaryElementBuffer;
-    msg.msg_controllen = sizeof(ancillaryElementBuffer);
-    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-    cmsg->cmsg_level = SOL_SOCKET;
-    cmsg->cmsg_type = SCM_RIGHTS;
-    cmsg->cmsg_len = CMSG_LEN(sizeof(long));
-    *((long*)CMSG_DATA(cmsg)) = *(long*)data;
+    long fd = *(long*)data;
+    if (fd >= 0) {
+	char ancillaryElementBuffer[CMSG_SPACE(sizeof(long))];
+	msg.msg_control = ancillaryElementBuffer;
+	msg.msg_controllen = sizeof(ancillaryElementBuffer);
+
+	struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = SCM_RIGHTS;
+	cmsg->cmsg_len = CMSG_LEN(sizeof(long));
+
+	*((long*)CMSG_DATA(cmsg)) = fd;
+    }
 
     int bytes;
     if(bytes = sendmsg(socketFd, &msg, 0) < 0) {

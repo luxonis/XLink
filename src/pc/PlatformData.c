@@ -105,7 +105,7 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
     }
 }
 
-int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data)
+int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data, void *data2, int size2)
 {
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
@@ -114,7 +114,7 @@ int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data)
     switch (deviceHandle->protocol) {
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
-	    return shdmemPlatformWriteFd(deviceHandle->xLinkFD, data);
+	    return shdmemPlatformWriteFd(deviceHandle->xLinkFD, data, data2, size2);
 
 	case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
@@ -122,6 +122,9 @@ int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data)
         case X_LINK_TCP_IP:
 	    {
 		long fd = *(long*)data;
+		if (fd <= 0) {
+		    return X_LINK_ERROR;
+		}
 
 	        // Determine file size through fstat
 		struct stat fileStats;

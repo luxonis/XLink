@@ -31,7 +31,7 @@ int shdmemPlatformClose(void **desc);
 
 int shdmemPlatformRead(void *desc, void *data, int size, long *fd);
 int shdmemPlatformWrite(void *desc, void *data, int size);
-int shdmemPlatformWriteFd(void *desc, void *data);
+int shdmemPlatformWriteFd(void *desc, void *data, void *data2, int size2);
 
 int shdmemSetProtocol(XLinkProtocol_t *protocol, const char* devPathRead, const char* devPathWrite);
  

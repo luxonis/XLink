@@ -157,6 +157,9 @@ XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, XLinkTimespe
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_FD_REQ,
         sizeof(long),(void*)buffer, link->deviceHandle);
 
+    event.data2 = (void*)NULL;
+    event.data2Size = -1;
+
     XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
 
     if( glHandler->profEnable) {
@@ -179,7 +182,7 @@ XLinkError_t XLinkWriteFdData(streamId_t streamId, const long* fdBuffer, int fdS
     XLINK_RET_IF(getLinkByStreamId(streamId, &link));
     streamId = EXTRACT_STREAM_ID(streamId);
 
-    int totalSize = dataSize + sizeof(long);
+    int totalSize = dataSize;
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_FD_REQ, totalSize, (void*)fdBuffer, link->deviceHandle);
     event.data2 = (void*)dataBuffer;
