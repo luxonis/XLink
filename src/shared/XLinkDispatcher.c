@@ -512,6 +512,7 @@ char* TypeToStr(int type)
         case XLINK_RESET_REQ:        return "XLINK_RESET_REQ";
         case XLINK_REQUEST_LAST:     return "XLINK_REQUEST_LAST";
         case XLINK_WRITE_RESP:   return "XLINK_WRITE_RESP";
+        case XLINK_WRITE_FD_RESP:     return "XLINK_WRITE_FD_REQ";
         case XLINK_READ_RESP:     return "XLINK_READ_RESP";
         case XLINK_READ_REL_RESP: return "XLINK_READ_REL_RESP";
         case XLINK_READ_REL_SPEC_RESP:  return "XLINK_READ_REL_SPEC_RESP";
