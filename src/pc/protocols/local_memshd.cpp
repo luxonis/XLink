@@ -120,7 +120,7 @@ int shdmemPlatformRead(void *desc, void *data, int size, long *fd) {
     msg.msg_controllen = sizeof(ancillaryElementBuffer);
 
     int bytes;
-    if(bytes = recvmsg(socketFd, &msg, 0) < 0) {
+    if(bytes = recvmsg(socketFd, &msg, MSG_WAITALL) < 0) {
 	mvLog(MVLOG_ERROR, "Failed to recieve message");
         return X_LINK_ERROR;
     }
