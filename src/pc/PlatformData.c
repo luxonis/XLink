@@ -105,7 +105,7 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
     }
 }
 
-int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data, void *data2, int size2)
+int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void *data2, int size2)
 {
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
@@ -114,14 +114,13 @@ int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data, void *da
     switch (deviceHandle->protocol) {
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
-	    return shdmemPlatformWriteFd(deviceHandle->xLinkFD, data, data2, size2);
+	    return shdmemPlatformWriteFd(deviceHandle->xLinkFD, fd, data2, size2);
 
 	case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
         case X_LINK_PCIE:
         case X_LINK_TCP_IP:
 	    {
-		long fd = *(long*)data;
 		if (fd <= 0) {
 		    return X_LINK_ERROR;
 		}
@@ -143,13 +142,13 @@ int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, void *data, void *da
 		switch(deviceHandle->protocol) {
 		    case X_LINK_USB_VSC:
 		    case X_LINK_USB_CDC:
-			result = usbPlatformWrite(deviceHandle->xLinkFD, data, size);
+			result = usbPlatformWrite(deviceHandle->xLinkFD, addr, size);
 			break;
 		    case X_LINK_PCIE:
-			result = pciePlatformWrite(deviceHandle->xLinkFD, data, size);
+			result = pciePlatformWrite(deviceHandle->xLinkFD, addr, size);
 			break;
 		    case X_LINK_TCP_IP:
-			result = tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
+			result = tcpipPlatformWrite(deviceHandle->xLinkFD, addr, size);
 			break;
 		    default:
 			result = X_LINK_PLATFORM_INVALID_PARAMETERS;
