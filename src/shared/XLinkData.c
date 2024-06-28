@@ -139,15 +139,13 @@ XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer,
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkWriteFd(streamId_t const streamId, const long* buffer)
+XLinkError_t XLinkWriteFd(streamId_t const streamId, const long fd)
 {
-    return XLinkWriteFd_(streamId, buffer, NULL);
+    return XLinkWriteFd_(streamId, fd, NULL);
 }
 
-XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, XLinkTimespec* outTSend)
+XLinkError_t XLinkWriteFd_(streamId_t streamId, const long fd, XLinkTimespec* outTSend)
 {
-    XLINK_RET_IF(buffer == NULL);
-
     float opTime = 0.0f;
     xLinkDesc_t* link = NULL;
     XLINK_RET_IF(getLinkByStreamId(streamId, &link));
@@ -155,7 +153,7 @@ XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, XLinkTimespe
 
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_FD_REQ,
-        sizeof(long),(void*)buffer, link->deviceHandle);
+        sizeof(long),(void*)fd, link->deviceHandle);
 
     event.data2 = (void*)NULL;
     event.data2Size = -1;
@@ -172,9 +170,8 @@ XLinkError_t XLinkWriteFd_(streamId_t streamId, const long* buffer, XLinkTimespe
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkWriteFdData(streamId_t streamId, const long* fdBuffer, int fdSize, const uint8_t* dataBuffer, int dataSize)
+XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, int fdSize, const uint8_t* dataBuffer, int dataSize)
 {
-    ASSERT_XLINK(fdBuffer);
     ASSERT_XLINK(dataBuffer);
 
     float opTime = 0;
@@ -184,7 +181,7 @@ XLinkError_t XLinkWriteFdData(streamId_t streamId, const long* fdBuffer, int fdS
 
     int totalSize = dataSize;
     xLinkEvent_t event = {0};
-    XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_FD_REQ, totalSize, (void*)fdBuffer, link->deviceHandle);
+    XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_FD_REQ, totalSize, (void*)fd, link->deviceHandle);
     event.data2 = (void*)dataBuffer;
     event.data2Size = dataSize;
 

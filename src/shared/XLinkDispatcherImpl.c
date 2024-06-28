@@ -146,13 +146,11 @@ function_epilogue:
     return writtenByteCount;
 }
 
-int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, void* data, int totalSize, void* data2, int data2Size)
+int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, long fd, int totalSize, void* data2, int data2Size)
 {
-    long fd = *(long*)data;
-
     // Regular, single-part case
     if(data2 == NULL || data2Size <= 0) {
-        return XLinkPlatformWriteFd(deviceHandle, &fd, NULL, -1);
+        return XLinkPlatformWriteFd(deviceHandle, fd, NULL, -1);
     }
 
     // Multipart case
@@ -204,7 +202,7 @@ int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, void* data, int tot
                           ? pktlen
                           : (totalSizeToWrite - writtenByteCount);
 
-            rc = XLinkPlatformWriteFd(deviceHandle, &fd, &((char *)currentPacket)[writtenByteCount - byteCountRelativeOffset + previousSplitWriteSize], toWrite);
+            rc = XLinkPlatformWriteFd(deviceHandle, fd, &((char *)currentPacket)[writtenByteCount - byteCountRelativeOffset + previousSplitWriteSize], toWrite);
 	    fd = -1;
 
             if (rc < 0)
@@ -229,7 +227,7 @@ int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, void* data, int tot
                 }
                 toWrite = remainingToWriteCurrent + remainingToWriteNext;
                 if(toWrite > xlinkPacketSizeMultiply) ASSERT_XLINK(0);
-                rc = XLinkPlatformWriteFd(deviceHandle, &fd, swapSpace, toWrite);
+                rc = XLinkPlatformWriteFd(deviceHandle, fd, swapSpace, toWrite);
 	        fd = -1;
                 if (rc < 0)
                 {
@@ -280,7 +278,7 @@ int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
             return rc;
         }
     } else if (event->header.type == XLINK_WRITE_FD_REQ) {
-        rc = writeFdEventMultipart(&event->deviceHandle, event->data, event->header.size, event->data2, event->data2Size);
+        rc = writeFdEventMultipart(&event->deviceHandle, (long)event->data, event->header.size, event->data2, event->data2Size);
         if(rc < 0) {
             mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
             return rc;

@@ -161,7 +161,7 @@ int shdmemPlatformWrite(void *desc, void *data, int size) {
     return bytes;
 }
 
-int shdmemPlatformWriteFd(void *desc, void *data, void *data2, int size2) {
+int shdmemPlatformWriteFd(void *desc, const long fd, void *data2, int size2) {
     long socketFd = 0;
     if(getPlatformDeviceFdFromKey(desc, (void**)&socketFd)) {
     	mvLog(MVLOG_ERROR, "Failed to get the socket FD\n");
@@ -181,7 +181,6 @@ int shdmemPlatformWriteFd(void *desc, void *data, void *data2, int size2) {
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
 
-    long fd = *(long*)data;
     if (fd >= 0) {
 	char ancillaryElementBuffer[CMSG_SPACE(sizeof(long))];
 	msg.msg_control = ancillaryElementBuffer;

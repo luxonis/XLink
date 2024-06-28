@@ -90,7 +90,7 @@ int main(int argc, const char** argv){
     memcpy(addr, message, strlen(message) + 1);
 
     // Send the FD through the XLinkWriteFd function
-    w = XLinkWriteFd(s, &shmFd); 
+    w = XLinkWriteFd(s, shmFd); 
     assert(w == X_LINK_SUCCESS);
 
     r = XLinkReadData(s, &packet);
