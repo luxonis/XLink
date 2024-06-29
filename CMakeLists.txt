@@ -36,7 +36,7 @@ set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instea
 # Debug option
 option(XLINK_LIBUSB_SYSTEM "Use system libusb library instead of Hunter" OFF)
 
-# Specify exporting all symbols on Windows (WIP: shared library on windows doesn't yet work fully (eg logging))
+# Specify exporting all symbols on Windows
 if(WIN32 AND BUILD_SHARED_LIBS)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON CACHE BOOL "")
 endif()
@@ -65,7 +65,10 @@ get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
 if(is_multi_config)
     set_target_properties(${TARGET_NAME} PROPERTIES DEBUG_POSTFIX "d")
 endif()
-
+# Define export header to support shared library on Windows
+include(GenerateExportHeader)
+generate_export_header(${TARGET_NAME}
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}Export.h)
 # Add dependencies
 include(cmake/XLinkDependencies.cmake)
 
@@ -133,6 +136,7 @@ add_library(${TARGET_PUBLIC_NAME} INTERFACE)
 target_include_directories(${TARGET_PUBLIC_NAME} INTERFACE
     "$<INSTALL_INTERFACE:include>"
     "$<BUILD_INTERFACE:${XLINK_INCLUDE}>"
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
 )
 
 # Link to headers (public, as itself also needs the headers)
@@ -243,6 +247,12 @@ install(
 )
 #Install include folder
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+# Install generated export header
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}Export.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/XLink
+)
+
 # Install Hunter dependencies
 if(XLINK_ENABLE_LIBUSB)
     if(NOT XLINK_LIBUSB_LOCAL AND NOT XLINK_LIBUSB_SYSTEM)
