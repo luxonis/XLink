@@ -188,19 +188,8 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
             return pciePlatformConnect(devPathRead, devPathWrite, fd);
 
         case X_LINK_TCP_IP:
-#if defined(__unix__)
-	    if(tcpipIsLocalhost(devPathWrite)) {
-	    	if (shdmemPlatformConnect(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
-		    return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
-		} else {
-		    return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
-		}
-	    } else {
-		return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
-	    }
-#else
-            return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
-#endif
+            return tcpipPlatformConnect(protocol, devPathRead, devPathWrite, fd);
+
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformConnect(devPathRead, devPathWrite, fd);
@@ -215,19 +204,7 @@ xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char
 {
     switch (*protocol) {
         case X_LINK_TCP_IP:
-#if defined(__unix__)
-	    if(tcpipIsLocalhost(devPathWrite)) {
-	    	if (shdmemPlatformServer(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
-		    return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
-		} else {
-		    return tcpipPlatformServer(devPathRead, devPathWrite, fd);
-		}
-	    } else {
-		return tcpipPlatformServer(devPathRead, devPathWrite, fd);
-	    }
-#else
-            return tcpipPlatformServer(devPathRead, devPathWrite, fd);
-#endif
+            return tcpipPlatformServer(protocol, devPathRead, devPathWrite, fd);
 
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:

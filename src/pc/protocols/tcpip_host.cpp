@@ -17,6 +17,7 @@
 #include <atomic>
 #include <cstddef>
 
+#include "local_memshd.h"
 
 #define MVLOG_UNIT_NAME tcpip_host
 #include "XLinkLog.h"
@@ -934,7 +935,7 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
 }
 
 // TODO add IPv6 to tcpipPlatformConnect()
-int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
+int tcpipPlatformServer(XLinkProtocol_t *protocol, const char *devPathRead, const char *devPathWrite, void **fd)
 {
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0)
@@ -1008,6 +1009,17 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
         return X_LINK_PLATFORM_ERROR;
     }
 
+    char *client_ip = inet_ntoa(client.sin_addr);
+    printf("Client IP: %s\n", client_ip);
+    if (strlen(client_ip) == strlen("127.0.0.1") &&
+	strcmp(client_ip, "127.0.0.1") == 0) {
+	// It's local, we can try use the local shared memory protocol
+	if(shdmemPlatformServer(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
+	    tcpip_close_socket(connfd);
+	    return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
+	}
+    }
+
     // Store the socket and create a "unique" key instead
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) connfd);
@@ -1016,7 +1028,7 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
 }
 
 // TODO add IPv6 to tcpipPlatformConnect()
-int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
+int tcpipPlatformConnect(XLinkProtocol_t *protocol, const char *devPathRead, const char *devPathWrite, void **fd)
 {
     if (!devPathWrite || !fd) {
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -1088,6 +1100,20 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     {
         tcpip_close_socket(sock);
         return -1;
+    }
+
+    char *server_ip = inet_ntoa(serv_addr.sin_addr);
+    printf("Server IP: %s\n", server_ip);
+    if (strlen(server_ip) == strlen("127.0.0.1") &&
+	strcmp(server_ip, "127.0.0.1") == 0) {
+	// TMP wait for the server to create the socket first
+	sleep(1);
+
+	// It's local, we can try use the local shared memory protocol
+	if(shdmemPlatformConnect(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
+	    tcpip_close_socket(sock);
+	    return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
+	}
     }
 
     // Store the socket and create a "unique" key instead
