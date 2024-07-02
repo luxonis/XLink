@@ -1057,7 +1057,7 @@ int tcpipPlatformServer(XLinkProtocol_t *protocol, const char *devPathRead, cons
 	shutdown(sock, 2);
         #if defined(SO_LINGER)
             const int set = 0;
-            setsockopt(sock, SOL_SOCKET, SO_LINGER, &set, sizeof(set));
+            setsockopt(sock, SOL_SOCKET, SO_LINGER, (const char*)&set, sizeof(set));
         #endif
         tcpip_close_socket(sock);
 
@@ -1067,14 +1067,15 @@ int tcpipPlatformServer(XLinkProtocol_t *protocol, const char *devPathRead, cons
         }
     } else if (isTcpIpThreadFinished) {
         tcpipThread.join();
+#if defined(__unix__)
         // Close the socket forcefully
 	shutdown(shdmemSockFd, 2);
         #if defined(SO_LINGER)
             const int set = 0;
-            setsockopt(shdmemSockFd, SOL_SOCKET, SO_LINGER, &set, sizeof(set));
+            setsockopt(shdmemSockFd, SOL_SOCKET, SO_LINGER, (const char*)&set, sizeof(set));
         #endif
         close(shdmemSockFd);
-
+#endif
 	// Cancel the tcpipThread if it hasn't finished yet
 	if (shdmemThread.joinable()) {
             shdmemThread.detach();
