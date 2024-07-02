@@ -139,6 +139,62 @@ XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer,
     return X_LINK_SUCCESS;
 }
 
+XLinkError_t XLinkWriteFd(streamId_t const streamId, const long fd)
+{
+    return XLinkWriteFd_(streamId, fd, NULL);
+}
+
+XLinkError_t XLinkWriteFd_(streamId_t streamId, const long fd, XLinkTimespec* outTSend)
+{
+    float opTime = 0.0f;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
+
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_FD_REQ,
+        sizeof(long),(void*)fd, link->deviceHandle);
+
+    event.data2 = (void*)NULL;
+    event.data2Size = -1;
+
+    XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
+
+    if( glHandler->profEnable) {
+        glHandler->profilingData.totalWriteBytes += sizeof(long);
+        glHandler->profilingData.totalWriteTime += opTime;
+    }
+    link->profilingData.totalWriteBytes += sizeof(long);
+    link->profilingData.totalWriteTime += sizeof(long);
+
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, int fdSize, const uint8_t* dataBuffer, int dataSize)
+{
+    ASSERT_XLINK(dataBuffer);
+
+    float opTime = 0;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId = EXTRACT_STREAM_ID(streamId);
+
+    int totalSize = dataSize;
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_FD_REQ, totalSize, (void*)fd, link->deviceHandle);
+    event.data2 = (void*)dataBuffer;
+    event.data2Size = dataSize;
+
+    XLINK_RET_IF(addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT));
+
+    if( glHandler->profEnable) {
+        glHandler->profilingData.totalWriteBytes += totalSize;
+        glHandler->profilingData.totalWriteTime += opTime;
+    }
+
+    return X_LINK_SUCCESS;
+}
+
 XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
                             int size)
 {

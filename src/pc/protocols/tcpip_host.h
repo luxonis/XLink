@@ -95,12 +95,14 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name);
 
 int tcpipPlatformRead(void *fd, void *data, int size);
 int tcpipPlatformWrite(void *fd, void *data, int size);
-int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
-int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd);
+int tcpipPlatformConnect(XLinkProtocol_t *protocol, const char *devPathRead, const char *devPathWrite, void **fd);
+int tcpipPlatformServer(XLinkProtocol_t *protocol, const char *devPathRead, const char *devPathWrite, void **fd);
 xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name);
 int tcpipPlatformDeviceFdDown(void *fd);
 int tcpipPlatformClose(void *fd);
 int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
+
+bool tcpipIsLocalhost(const char *ip);
 
 xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDeviceState_t state, XLinkPlatform_t platform);
 void tcpip_stop_discovery_service();
