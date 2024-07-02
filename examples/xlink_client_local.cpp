@@ -1,3 +1,5 @@
+#if defined(__unix__)
+
 #include <cstring>
 #include <cstddef>
 #include <fcntl.h>
@@ -107,3 +109,11 @@ int main(int argc, const char** argv){
 
     return 0;
 }
+
+#else 
+
+int main() {
+    return -1;
+}
+
+#endif
