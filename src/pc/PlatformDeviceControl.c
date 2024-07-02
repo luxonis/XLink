@@ -264,8 +264,10 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
         case X_LINK_TCP_IP:
             return tcpipPlatformClose(deviceHandle->xLinkFD);
 	
+#if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformClose(deviceHandle->xLinkFD);
+#endif
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
