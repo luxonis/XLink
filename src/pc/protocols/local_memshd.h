@@ -26,7 +26,7 @@ extern "C" {
 int shdmem_initialize();
 
 int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, void **desc);
-int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void **desc);
+int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void **desc, long *sockFd);
 int shdmemPlatformClose(void **desc);
 
 int shdmemPlatformRead(void *desc, void *data, int size, long *fd);

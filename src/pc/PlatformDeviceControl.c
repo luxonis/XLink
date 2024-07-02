@@ -188,6 +188,11 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
             return pciePlatformConnect(devPathRead, devPathWrite, fd);
 
         case X_LINK_TCP_IP:
+#if defined (__unix__)
+	    if(shdmemPlatformConnect(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
+		return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
+	    }
+#endif
             return tcpipPlatformConnect(protocol, devPathRead, devPathWrite, fd);
 
 #if defined(__unix__)
@@ -208,7 +213,7 @@ xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char
 
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
-	    return shdmemPlatformServer(devPathRead, devPathWrite, fd);
+	    return shdmemPlatformServer(devPathRead, devPathWrite, fd, NULL);
 #endif
 
         default:

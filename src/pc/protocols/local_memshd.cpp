@@ -52,7 +52,7 @@ int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, voi
     return X_LINK_SUCCESS;
 }
 
-int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void **desc) {
+int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void **desc, long *sockFd) {
     const char *socketPath = devPathWrite;
     mvLog(MVLOG_DEBUG, "Shared memory server invoked with socket path %s\n", socketPath);
 
@@ -60,6 +60,11 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
     if (socketFd < 0) {
 	    mvLog(MVLOG_FATAL, "Socket creation failed");
 	    return X_LINK_ERROR;
+    }
+
+    // Used in the server thread in tcp/ip to shut down the socket
+    if (sockFd != NULL) {
+        *sockFd = socketFd;
     }
 
     struct sockaddr_un addrUn;
@@ -76,6 +81,7 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
     listen(socketFd, 1);
     mvLog(MVLOG_DEBUG, "Waiting for a connection...\n");
     int clientFd = accept(socketFd, NULL, NULL);
+    close(socketFd);
     if (clientFd < 0) {
 	    mvLog(MVLOG_FATAL, "Socket accept failed");
 	    return X_LINK_ERROR;

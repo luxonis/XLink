@@ -16,6 +16,7 @@
 #include <chrono>
 #include <atomic>
 #include <cstddef>
+#include <condition_variable>
 
 #include "local_memshd.h"
 
@@ -934,6 +935,56 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
     return 0;
 }
 
+std::mutex connectionMutex;
+std::condition_variable cv;
+bool isShdmemThreadFinished = false;
+bool isTcpIpThreadFinished = false;
+
+void tcpipServerHelper(TCPIP_SOCKET sock, struct sockaddr_in *client, void **fd) {
+#if (defined(_WIN32) || defined(_WIN64) )
+    using socklen_portable = int;
+#else
+    using socklen_portable = socklen_t;
+#endif
+
+    socklen_portable len = (socklen_portable) sizeof(*client);
+    int connfd = accept(sock, (struct sockaddr*)client, &len);
+    // Regardless of return, close the listening socket
+    tcpip_close_socket(sock);
+    // Then check if connection was accepted succesfully
+    if(connfd < 0)
+    {
+        mvLog(MVLOG_FATAL, "Couldn't accept a connection to server socket");
+	return;
+        //return X_LINK_PLATFORM_ERROR;
+    }
+
+    // Store the socket and create a "unique" key instead
+    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
+    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) connfd);
+
+    {
+        std::lock_guard<std::mutex> lock(connectionMutex);
+        isTcpIpThreadFinished = true;
+    }
+    cv.notify_one(); // Notify one waiting thread
+}
+
+void shdmemServerHelper(XLinkProtocol_t *protocol, const char *devPathRead, const char *devPathWrite, long *sockFd, void **fd) {
+#if defined(__unix__)
+    if (shdmemPlatformServer(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd, sockFd) == X_LINK_SUCCESS) {
+        shdmemSetProtocol(protocol, devPathRead, devPathWrite);
+
+	{
+            std::lock_guard<std::mutex> lock(connectionMutex);
+            isShdmemThreadFinished = true;
+        }
+
+	cv.notify_one(); // Notify one waiting thread
+    }
+#endif
+}
+
 // TODO add IPv6 to tcpipPlatformConnect()
 int tcpipPlatformServer(XLinkProtocol_t *protocol, const char *devPathRead, const char *devPathWrite, void **fd)
 {
@@ -985,6 +1036,10 @@ int tcpipPlatformServer(XLinkProtocol_t *protocol, const char *devPathRead, cons
         return X_LINK_PLATFORM_ERROR;
     }
 
+    long shdmemSockFd = -1;
+    std::thread shdmemThread(shdmemServerHelper, protocol, devPathRead, devPathWrite, &shdmemSockFd, fd);
+    std::thread tcpipThread(tcpipServerHelper, sock, &client, fd);
+
     if(listen(sock, 1) < 0)
     {
         mvLog(MVLOG_FATAL, "Couldn't listen to server socket");
@@ -992,37 +1047,39 @@ int tcpipPlatformServer(XLinkProtocol_t *protocol, const char *devPathRead, cons
         return X_LINK_PLATFORM_ERROR;
     }
 
-#if (defined(_WIN32) || defined(_WIN64) )
-    using socklen_portable = int;
-#else
-    using socklen_portable = socklen_t;
-#endif
+    std::unique_lock<std::mutex> lock(connectionMutex);
+    cv.wait(lock, []{ return isShdmemThreadFinished || isTcpIpThreadFinished; });
+    
+    // Join the finished thread
+    if (isShdmemThreadFinished) {
+        shdmemThread.join();
+        // Close the socket forcefully
+	shutdown(sock, 2);
+        #if defined(SO_LINGER)
+            const int set = 0;
+            setsockopt(sock, SOL_SOCKET, SO_LINGER, &set, sizeof(set));
+        #endif
+        tcpip_close_socket(sock);
 
-    socklen_portable len = (socklen_portable) sizeof(client);
-    int connfd = accept(sock, (struct sockaddr*) &client, &len);
-    // Regardless of return, close the listening socket
-    tcpip_close_socket(sock);
-    // Then check if connection was accepted succesfully
-    if(connfd < 0)
-    {
-        mvLog(MVLOG_FATAL, "Couldn't accept a connection to server socket");
-        return X_LINK_PLATFORM_ERROR;
+	// Cancel the tcpipThread if it hasn't finished yet
+	if (tcpipThread.joinable()) {
+            tcpipThread.detach();
+        }
+    } else if (isTcpIpThreadFinished) {
+        tcpipThread.join();
+        // Close the socket forcefully
+	shutdown(shdmemSockFd, 2);
+        #if defined(SO_LINGER)
+            const int set = 0;
+            setsockopt(shdmemSockFd, SOL_SOCKET, SO_LINGER, &set, sizeof(set));
+        #endif
+        close(shdmemSockFd);
+
+	// Cancel the tcpipThread if it hasn't finished yet
+	if (shdmemThread.joinable()) {
+            shdmemThread.detach();
+        }
     }
-
-    char *client_ip = inet_ntoa(client.sin_addr);
-    printf("Client IP: %s\n", client_ip);
-    if (strlen(client_ip) == strlen("127.0.0.1") &&
-	strcmp(client_ip, "127.0.0.1") == 0) {
-	// It's local, we can try use the local shared memory protocol
-	if(shdmemPlatformServer(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
-	    tcpip_close_socket(connfd);
-	    return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
-	}
-    }
-
-    // Store the socket and create a "unique" key instead
-    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
-    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) connfd);
 
     return 0;
 }
@@ -1100,20 +1157,6 @@ int tcpipPlatformConnect(XLinkProtocol_t *protocol, const char *devPathRead, con
     {
         tcpip_close_socket(sock);
         return -1;
-    }
-
-    char *server_ip = inet_ntoa(serv_addr.sin_addr);
-    printf("Server IP: %s\n", server_ip);
-    if (strlen(server_ip) == strlen("127.0.0.1") &&
-	strcmp(server_ip, "127.0.0.1") == 0) {
-	// TMP wait for the server to create the socket first
-	sleep(1);
-
-	// It's local, we can try use the local shared memory protocol
-	if(shdmemPlatformConnect(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
-	    tcpip_close_socket(sock);
-	    return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
-	}
     }
 
     // Store the socket and create a "unique" key instead
