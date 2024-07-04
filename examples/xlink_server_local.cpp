@@ -19,7 +19,7 @@ const char *SHARED_MEMORY_NAME = "/xlink_shared_memory_a";
 XLinkGlobalHandler_t xlinkGlobalHandler = {};
 
 int main(int argc, const char** argv){
-    xlinkGlobalHandler.protocol = X_LINK_TCP_IP;
+    xlinkGlobalHandler.protocol = X_LINK_TCP_IP_OR_LOCAL_SHDMEM;
 
     mvLogDefaultLevelSet(MVLOG_ERROR);
 
@@ -32,7 +32,7 @@ int main(int argc, const char** argv){
 
     XLinkHandler_t handler;
     handler.devicePath = "0.0.0.0";
-    handler.protocol = X_LINK_TCP_IP;
+    handler.protocol = X_LINK_TCP_IP_OR_LOCAL_SHDMEM;
     status = XLinkServerOnly(&handler);
     if(X_LINK_SUCCESS != status) {
     	printf("Connecting wasn't successful\n");

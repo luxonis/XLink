@@ -62,10 +62,7 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
 	    return X_LINK_ERROR;
     }
 
-    // Used in the server thread in tcp/ip to shut down the socket
-    if (sockFd != NULL) {
-        *sockFd = socketFd;
-    }
+    if (sockFd != nullptr) *sockFd = socketFd;
 
     struct sockaddr_un addrUn;
     memset(&addrUn, 0, sizeof(addrUn));
@@ -82,15 +79,18 @@ int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void
     mvLog(MVLOG_DEBUG, "Waiting for a connection...\n");
     int clientFd = accept(socketFd, NULL, NULL);
     close(socketFd);
+    if (sockFd != nullptr) *sockFd = -1;
     if (clientFd < 0) {
 	    mvLog(MVLOG_FATAL, "Socket accept failed");
 	    return X_LINK_ERROR;
     }
 
+
     // Store the socket and create a "unique" key instead
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
     *desc = createPlatformDeviceFdKey((void*) (uintptr_t) clientFd);
 
+    printf("XLink SHDMEM connected\n");
     return X_LINK_SUCCESS;
 
 }

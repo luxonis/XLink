@@ -11,6 +11,7 @@
 #include "pcie_host.h"
 #include "tcpip_host.h"
 #include "local_memshd.h"
+#include "tcpip_memshd.h"
 #include "XLinkStringUtils.h"
 #include "PlatformDeviceFd.h"
 
@@ -102,6 +103,8 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler)
 	xlinkSetProtocolInitialized(X_LINK_LOCAL_SHDMEM, 0);
     }
 #endif
+	
+    xlinkSetProtocolInitialized(X_LINK_TCP_IP_OR_LOCAL_SHDMEM, 1);
 
     return X_LINK_PLATFORM_SUCCESS;
 }
@@ -188,12 +191,10 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
             return pciePlatformConnect(devPathRead, devPathWrite, fd);
 
         case X_LINK_TCP_IP:
-#if defined (__unix__)
-	    if(shdmemPlatformConnect(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
-		return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
-	    }
-#endif
-            return tcpipPlatformConnect(protocol, devPathRead, devPathWrite, fd);
+            return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
+	
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    return tcpipOrLocalShdmemPlatformConnect(protocol, devPathRead, devPathWrite, fd);
 
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
@@ -209,7 +210,10 @@ xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char
 {
     switch (*protocol) {
         case X_LINK_TCP_IP:
-            return tcpipPlatformServer(protocol, devPathRead, devPathWrite, fd);
+            return tcpipPlatformServer(devPathRead, devPathWrite, fd, NULL);
+
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    return tcpipOrLocalShdmemPlatformServer(protocol, devPathRead, devPathWrite, fd);
 
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
