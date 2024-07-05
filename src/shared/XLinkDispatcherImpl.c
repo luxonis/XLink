@@ -964,9 +964,12 @@ int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive) {
     //specific actions to this peer
     mvLog(MVLOG_DEBUG, "%s, size %u, streamId %u.\n", TypeToStr(event->header.type), event->header.size, event->header.streamId);
 
-    ASSERT_XLINK(event->header.type >= XLINK_WRITE_REQ
+    ASSERT_XLINK((event->header.type >= XLINK_WRITE_REQ
+               && event->header.type != XLINK_STATIC_REQUEST_LAST
+               && event->header.type < XLINK_STATIC_RESP_LAST) ||
+		 (event->header.type >= XLINK_READ_REL_SPEC_REQ
                && event->header.type != XLINK_REQUEST_LAST
-               && event->header.type < XLINK_RESP_LAST);
+	       && event->header.type < XLINK_RESP_LAST));
 
     // Then read the data buffer, which is contained only in the XLINK_WRITE_REQ event
     if(event->header.type != XLINK_WRITE_REQ && event->header.type != XLINK_WRITE_FD_REQ) {

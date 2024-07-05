@@ -83,42 +83,44 @@ typedef enum
 {
     /*USB-X_LINK_PCIE related events*/
     XLINK_WRITE_REQ,
-    XLINK_WRITE_FD_REQ, // only for the shared mem protocol
     XLINK_READ_REQ,
     XLINK_READ_REL_REQ,
-    XLINK_READ_REL_SPEC_REQ,
     XLINK_CREATE_STREAM_REQ,
     XLINK_CLOSE_STREAM_REQ,
     XLINK_PING_REQ,
     XLINK_RESET_REQ,
 
-    XLINK_REQUEST_LAST,
+    XLINK_STATIC_REQUEST_LAST,
     //note that is important to separate request and response
     XLINK_WRITE_RESP,
-    XLINK_WRITE_FD_RESP, // only for the shared mem protocol
     XLINK_READ_RESP,
     XLINK_READ_REL_RESP,
-    XLINK_READ_REL_SPEC_RESP,
     XLINK_CREATE_STREAM_RESP,
     XLINK_CLOSE_STREAM_RESP,
     XLINK_PING_RESP,
     XLINK_RESET_RESP,
 
-    XLINK_RESP_LAST,
+    XLINK_STATIC_RESP_LAST,
 
     /*X_LINK_IPC related events*/
     IPC_WRITE_REQ,
-    IPC_WRITE_FD_REQ,
     IPC_READ_REQ,
     IPC_CREATE_STREAM_REQ,
     IPC_CLOSE_STREAM_REQ,
 
     //
     IPC_WRITE_RESP,
-    IPC_WRITE_FD_RESP,
     IPC_READ_RESP,
     IPC_CREATE_STREAM_RESP,
     IPC_CLOSE_STREAM_RESP,
+    
+    XLINK_READ_REL_SPEC_REQ,
+    XLINK_WRITE_FD_REQ, // only for the shared mem protocol
+    XLINK_REQUEST_LAST,
+    
+    XLINK_READ_REL_SPEC_RESP,
+    XLINK_WRITE_FD_RESP, // only for the shared mem protocol
+    XLINK_RESP_LAST,
 } xLinkEventType_t;
 
 typedef enum
