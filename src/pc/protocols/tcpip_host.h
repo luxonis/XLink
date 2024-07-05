@@ -96,7 +96,7 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name);
 int tcpipPlatformRead(void *fd, void *data, int size);
 int tcpipPlatformWrite(void *fd, void *data, int size);
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
-int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd);
+int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd, long *sockFd);
 xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name);
 int tcpipPlatformDeviceFdDown(void *fd);
 int tcpipPlatformClose(void *fd);

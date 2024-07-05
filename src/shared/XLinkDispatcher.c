@@ -504,21 +504,26 @@ char* TypeToStr(int type)
         case XLINK_WRITE_REQ:     return "XLINK_WRITE_REQ";
         case XLINK_READ_REQ:      return "XLINK_READ_REQ";
         case XLINK_READ_REL_REQ:  return "XLINK_READ_REL_REQ";
-        case XLINK_READ_REL_SPEC_REQ:  return "XLINK_READ_REL_SPEC_REQ";
         case XLINK_CREATE_STREAM_REQ:return "XLINK_CREATE_STREAM_REQ";
         case XLINK_CLOSE_STREAM_REQ: return "XLINK_CLOSE_STREAM_REQ";
         case XLINK_PING_REQ:         return "XLINK_PING_REQ";
         case XLINK_RESET_REQ:        return "XLINK_RESET_REQ";
-        case XLINK_REQUEST_LAST:     return "XLINK_REQUEST_LAST";
-        case XLINK_WRITE_RESP:   return "XLINK_WRITE_RESP";
+        case XLINK_STATIC_REQUEST_LAST:     return "XLINK_STATIC_REQUEST_LAST";
         case XLINK_READ_RESP:     return "XLINK_READ_RESP";
+        case XLINK_WRITE_RESP:   return "XLINK_WRITE_RESP";
         case XLINK_READ_REL_RESP: return "XLINK_READ_REL_RESP";
-        case XLINK_READ_REL_SPEC_RESP:  return "XLINK_READ_REL_SPEC_RESP";
         case XLINK_CREATE_STREAM_RESP: return "XLINK_CREATE_STREAM_RESP";
         case XLINK_CLOSE_STREAM_RESP:  return "XLINK_CLOSE_STREAM_RESP";
         case XLINK_PING_RESP:  return "XLINK_PING_RESP";
         case XLINK_RESET_RESP: return "XLINK_RESET_RESP";
+        case XLINK_STATIC_RESP_LAST:  return "XLINK_STATIC_RESP_LAST";
+        case XLINK_READ_REL_SPEC_REQ:  return "XLINK_READ_REL_SPEC_REQ";
+        case XLINK_WRITE_FD_REQ:     return "XLINK_WRITE_FD_REQ";
+        case XLINK_REQUEST_LAST:     return "XLINK_REQUEST_LAST";
+        case XLINK_READ_REL_SPEC_RESP:  return "XLINK_READ_REL_SPEC_RESP";
+        case XLINK_WRITE_FD_RESP:     return "XLINK_WRITE_FD_REQ";
         case XLINK_RESP_LAST:  return "XLINK_RESP_LAST";
+
         default:
             break;
     }
@@ -796,7 +801,9 @@ static void* eventSchedulerRun(void* ctx)
 
 static int isEventTypeRequest(xLinkEventPriv_t* event)
 {
-    return event->packet.header.type < XLINK_REQUEST_LAST;
+    return (event->packet.header.type < XLINK_STATIC_REQUEST_LAST ||
+	   (event->packet.header.type >= XLINK_READ_REL_SPEC_REQ &&
+	    event->packet.header.type < XLINK_REQUEST_LAST));
 }
 
 static void postAndMarkEventServed(xLinkEventPriv_t *event)
@@ -897,7 +904,8 @@ static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState
 
         if (curr->lQueue.q[i].isServed == EVENT_PENDING &&
             header->id == evHeader->id &&
-            header->type == evHeader->type - XLINK_REQUEST_LAST -1)
+            ((header->type == evHeader->type - XLINK_STATIC_REQUEST_LAST - 1) ||
+	     (header->type == evHeader->type - XLINK_REQUEST_LAST - 1 + XLINK_READ_REL_SPEC_REQ)))
         {
             mvLog(MVLOG_DEBUG,"----------------------ISserved %s\n",
                   TypeToStr(header->type));

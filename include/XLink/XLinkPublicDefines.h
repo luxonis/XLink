@@ -54,6 +54,7 @@ typedef enum{
     X_LINK_NOT_IMPLEMENTED,
     X_LINK_INIT_USB_ERROR,
     X_LINK_INIT_TCP_IP_ERROR,
+    X_LINK_INIT_LOCAL_SHDMEM_ERROR,
     X_LINK_INIT_PCIE_ERROR,
 } XLinkError_t;
 
@@ -63,6 +64,8 @@ typedef enum{
     X_LINK_PCIE,
     X_LINK_IPC,
     X_LINK_TCP_IP,
+    X_LINK_LOCAL_SHDMEM,
+    X_LINK_TCP_IP_OR_LOCAL_SHDMEM,
     X_LINK_NMB_OF_PROTOCOLS,
     X_LINK_ANY_PROTOCOL
 } XLinkProtocol_t;
@@ -138,6 +141,7 @@ typedef struct streamPacketDesc_t
 {
     uint8_t* data;
     uint32_t length;
+    int32_t fd; // file descriptor
     XLinkTimespec tRemoteSent; /// remote timestamp of when the packet was sent. Related to remote clock. Note: not directly related to local clock
     XLinkTimespec tReceived; /// local timestamp of when the packet was received. Related to local monotonic clock
 } streamPacketDesc_t;

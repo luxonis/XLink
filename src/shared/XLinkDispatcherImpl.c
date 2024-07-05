@@ -31,7 +31,7 @@ static streamPacketDesc_t* movePacketFromStream(streamDesc_t *stream);
 static streamPacketDesc_t* getPacketFromStream(streamDesc_t* stream);
 static int releasePacketFromStream(streamDesc_t* stream, uint32_t* releasedSize);
 static int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize, uint8_t* data);
-static int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, XLinkTimespec trsend, XLinkTimespec treceive);
+static int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, long fd, XLinkTimespec trsend, XLinkTimespec treceive);
 
 static int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive);
 
@@ -146,6 +146,110 @@ function_epilogue:
     return writtenByteCount;
 }
 
+int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, long fd, int totalSize, void* data2, int data2Size)
+{
+    // Regular, single-part case
+    if(data2 == NULL || data2Size <= 0) {
+        return XLinkPlatformWriteFd(deviceHandle, fd, NULL, -1);
+    }
+
+    // Multipart case
+    int errorCode = 0;
+    void *dataToWrite[] = {data2, NULL};
+    int sizeToWrite[] = {data2Size, 0};
+
+    int writtenByteCount = 0, toWrite = 0, rc = 0;
+
+    int totalSizeToWrite = 0;
+
+    int pktlen = 0;
+
+    // restriction on the output data size
+    // mitigates kernel crash on RPI when USB is used
+    const int xlinkPacketSizeMultiply = deviceHandle->protocol == X_LINK_USB_VSC ? 1024 : 1; //for usb3, usb2 is 512
+    uint8_t swapSpaceScratchBufferVsc[1024 + 64];
+    uint8_t swapSpaceScratchBuffer[1 + 64];
+    uint8_t* swapSpace = swapSpaceScratchBuffer + ALIGN_UP((((uintptr_t)swapSpaceScratchBuffer) % 64), 64);
+    if(deviceHandle->protocol == X_LINK_USB_VSC) {
+        swapSpace = swapSpaceScratchBufferVsc + ALIGN_UP((((uintptr_t)swapSpaceScratchBufferVsc) % 64), 64);
+    }
+
+    // the amount of bytes written from split transfer for "next" packet
+    int previousSplitWriteSize = 0;
+    for (int i = 0;; i++) {
+        void *currentPacket = dataToWrite[i];
+        int currentPacketSize = sizeToWrite[i];
+        if (currentPacket == NULL) break;
+        if (currentPacketSize == 0) break;
+        // printf("currentPacket %p size %d \n", currentPacket, currentPacketSize);
+        void *nextPacket = dataToWrite[i + 1];
+        int nextPacketSize = sizeToWrite[i + 1];
+        bool shouldSplitData = false;
+
+        if (nextPacket != NULL && nextPacketSize > 0) {
+            totalSizeToWrite += currentPacketSize - (currentPacketSize % xlinkPacketSizeMultiply);
+            if(currentPacketSize % xlinkPacketSizeMultiply) {
+                shouldSplitData = true;
+            }
+        } else {
+            totalSizeToWrite += currentPacketSize;
+        }
+
+        // printf("writtenByteCount %d %d\n",writtenByteCount , totalSizeToWrite);
+        int byteCountRelativeOffset = writtenByteCount;
+        while (writtenByteCount < totalSizeToWrite) {
+            toWrite = (pktlen && (totalSizeToWrite - writtenByteCount) > pktlen)
+                          ? pktlen
+                          : (totalSizeToWrite - writtenByteCount);
+
+            rc = XLinkPlatformWriteFd(deviceHandle, fd, &((char *)currentPacket)[writtenByteCount - byteCountRelativeOffset + previousSplitWriteSize], toWrite);
+	    fd = -1;
+
+            if (rc < 0)
+            {
+                errorCode = rc;
+                goto function_epilogue;
+            }
+            writtenByteCount += toWrite;
+        }
+        if (shouldSplitData) {
+            int remainingToWriteCurrent = currentPacketSize - (totalSizeToWrite - byteCountRelativeOffset);
+            // printf("remainingToWriteCurrent %d \n", remainingToWriteCurrent);
+            if(remainingToWriteCurrent < 0 || remainingToWriteCurrent > xlinkPacketSizeMultiply) ASSERT_XLINK(0);
+            int remainingToWriteNext = nextPacketSize > xlinkPacketSizeMultiply - remainingToWriteCurrent ? xlinkPacketSizeMultiply - remainingToWriteCurrent : nextPacketSize;
+            // printf("remainingToWriteNext %d \n", remainingToWriteNext);
+            if(remainingToWriteNext < 0 || remainingToWriteNext > xlinkPacketSizeMultiply) ASSERT_XLINK(0);
+
+            if (remainingToWriteCurrent) {
+                memcpy(swapSpace, &((char *)currentPacket)[writtenByteCount - byteCountRelativeOffset + previousSplitWriteSize], remainingToWriteCurrent);
+                if(remainingToWriteNext) {
+                    memcpy(swapSpace + remainingToWriteCurrent, nextPacket, remainingToWriteNext);
+                }
+                toWrite = remainingToWriteCurrent + remainingToWriteNext;
+                if(toWrite > xlinkPacketSizeMultiply) ASSERT_XLINK(0);
+                rc = XLinkPlatformWriteFd(deviceHandle, fd, swapSpace, toWrite);
+	        fd = -1;
+                if (rc < 0)
+                {
+                    errorCode = rc;
+                    goto function_epilogue;
+                }
+                writtenByteCount += toWrite;
+                totalSizeToWrite += remainingToWriteCurrent;
+                // printf("%s wrote %d \n", __FUNCTION__, rc);
+
+                previousSplitWriteSize = remainingToWriteNext;
+            }
+        } else {
+            previousSplitWriteSize = 0;
+        }
+    }
+
+function_epilogue:
+    if (errorCode) return errorCode;
+    return writtenByteCount;
+}
+
 //adds a new event with parameters and returns event id
 int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
 {
@@ -173,6 +277,12 @@ int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
             mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
             return rc;
         }
+    } else if (event->header.type == XLINK_WRITE_FD_REQ) {
+        rc = writeFdEventMultipart(&event->deviceHandle, (long)event->data, event->header.size, event->data2, event->data2Size);
+        if(rc < 0) {
+            mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
+            return rc;
+        }   
     }
 
     return 0;
@@ -180,8 +290,10 @@ int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
 
 int dispatcherEventReceive(xLinkEvent_t* event){
     // static xLinkEvent_t prevEvent = {0};
+    long fd = -1;
     int rc = XLinkPlatformRead(&event->deviceHandle,
-        &event->header, sizeof(event->header));
+        &event->header, sizeof(event->header), &fd);
+    (void)fd;
     XLinkTimespec treceive;
     getMonotonicTimestamp(&treceive);
 
@@ -221,6 +333,7 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response,
     mvLog(MVLOG_DEBUG, "%s\n",TypeToStr(event->header.type));
     switch (event->header.type){
         case XLINK_WRITE_REQ:
+	case XLINK_WRITE_FD_REQ:
         {
             //in case local tries to write after it issues close (writeSize is zero)
             stream = getStreamById(event->deviceHandle.xLinkFD, event->header.streamId);
@@ -357,7 +470,8 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response,
             mvLog(MVLOG_DEBUG,"XLINK_PING_REQ - do nothing\n");
             break;
         }
-        case XLINK_WRITE_RESP:
+	case XLINK_WRITE_RESP:
+	case XLINK_WRITE_FD_RESP:
         case XLINK_READ_RESP:
         case XLINK_READ_REL_RESP:
         case XLINK_READ_REL_SPEC_RESP:
@@ -392,6 +506,25 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
 
     switch (event->header.type)
     {
+	case XLINK_WRITE_FD_REQ:
+	    {
+                //let remote write immediately as we have a local buffer for the data
+                response->header.type = XLINK_WRITE_FD_RESP;
+                response->header.size = event->header.size;
+                response->header.streamId = event->header.streamId;
+                response->deviceHandle = event->deviceHandle;
+                XLINK_EVENT_ACKNOWLEDGE(response);
+
+                // we got some data. We should unblock a blocked read
+                int xxx = DispatcherUnblockEvent(-1,
+                                                XLINK_READ_REQ,
+                                                response->header.streamId,
+                                                event->deviceHandle.xLinkFD);
+                (void) xxx;
+                mvLog(MVLOG_DEBUG,"unblocked from stream %d %d\n",
+                    (int)response->header.streamId, (int)xxx);
+            }
+	    break;
         case XLINK_WRITE_REQ:
             {
                 //let remote write immediately as we have a local buffer for the data
@@ -555,6 +688,8 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             // need to send the response, serve the event and then reset
             break;
         case XLINK_WRITE_RESP:
+	    break;
+	case XLINK_WRITE_FD_RESP:
             break;
         case XLINK_READ_RESP:
             break;
@@ -717,6 +852,7 @@ streamPacketDesc_t* movePacketFromStream(streamDesc_t* stream)
         }
         ret->data = NULL;
         ret->length = 0;
+	ret->fd = -1;
 
         // copy fields of first unused packet
         *ret = stream->packets[stream->firstPacketUnused];
@@ -808,11 +944,12 @@ int releaseSpecificPacketFromStream(streamDesc_t* stream, uint32_t* releasedSize
     return 0;
 }
 
-int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, XLinkTimespec trsend, XLinkTimespec treceive) {
+int addNewPacketToStream(streamDesc_t* stream, void* buffer, uint32_t size, long fd, XLinkTimespec trsend, XLinkTimespec treceive) {
     if (stream->availablePackets + stream->blockedPackets < XLINK_MAX_PACKETS_PER_STREAM)
     {
         stream->packets[stream->firstPacketFree].data = buffer;
         stream->packets[stream->firstPacketFree].length = size;
+        stream->packets[stream->firstPacketFree].fd = fd;
         stream->packets[stream->firstPacketFree].tRemoteSent = trsend;
         stream->packets[stream->firstPacketFree].tReceived = treceive;
         CIRCULAR_INCREMENT(stream->firstPacketFree, XLINK_MAX_PACKETS_PER_STREAM);
@@ -827,12 +964,15 @@ int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive) {
     //specific actions to this peer
     mvLog(MVLOG_DEBUG, "%s, size %u, streamId %u.\n", TypeToStr(event->header.type), event->header.size, event->header.streamId);
 
-    ASSERT_XLINK(event->header.type >= XLINK_WRITE_REQ
+    ASSERT_XLINK((event->header.type >= XLINK_WRITE_REQ
+               && event->header.type != XLINK_STATIC_REQUEST_LAST
+               && event->header.type < XLINK_STATIC_RESP_LAST) ||
+		 (event->header.type >= XLINK_READ_REL_SPEC_REQ
                && event->header.type != XLINK_REQUEST_LAST
-               && event->header.type < XLINK_RESP_LAST);
+	       && event->header.type < XLINK_RESP_LAST));
 
     // Then read the data buffer, which is contained only in the XLINK_WRITE_REQ event
-    if(event->header.type != XLINK_WRITE_REQ) {
+    if(event->header.type != XLINK_WRITE_REQ && event->header.type != XLINK_WRITE_FD_REQ) {
         return 0;
     }
 
@@ -848,12 +988,13 @@ int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive) {
     XLINK_OUT_WITH_LOG_IF(buffer == NULL,
         mvLog(MVLOG_FATAL,"out of memory to receive data of size = %zu\n", event->header.size));
 
-    const int sc = XLinkPlatformRead(&event->deviceHandle, buffer, event->header.size);
+    long fd = -1;
+    const int sc = XLinkPlatformRead(&event->deviceHandle, buffer, event->header.size, &fd);
     XLINK_OUT_WITH_LOG_IF(sc < 0, mvLog(MVLOG_ERROR,"%s() Read failed %d\n", __func__, sc));
 
     event->data = buffer;
     uint64_t tsec = event->header.tsecLsb | ((uint64_t)event->header.tsecMsb << 32);
-    XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size, (XLinkTimespec){tsec, event->header.tnsec}, treceive),
+    XLINK_OUT_WITH_LOG_IF(addNewPacketToStream(stream, buffer, event->header.size, fd, (XLinkTimespec){tsec, event->header.tnsec}, treceive),
         mvLog(MVLOG_WARN,"No more place in stream. release packet\n"));
     rc = 0;
 

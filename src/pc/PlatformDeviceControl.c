@@ -10,6 +10,8 @@
 #include "usb_host.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
+#include "local_memshd.h"
+#include "tcpip_memshd.h"
 #include "XLinkStringUtils.h"
 #include "PlatformDeviceFd.h"
 
@@ -95,6 +97,15 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler)
         xlinkSetProtocolInitialized(X_LINK_TCP_IP, 0);
     }
 
+#if defined(__unix__)
+    // Initialize the shared memory protocol if necessary
+    if (shdmem_initialize() != 0) {
+	xlinkSetProtocolInitialized(X_LINK_LOCAL_SHDMEM, 0);
+    }
+#endif
+	
+    xlinkSetProtocolInitialized(X_LINK_TCP_IP_OR_LOCAL_SHDMEM, 1);
+
     return X_LINK_PLATFORM_SUCCESS;
 }
 
@@ -165,12 +176,13 @@ xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDes
 }
 
 
-xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
+xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t *protocol, void** fd)
 {
-    if(!XLinkIsProtocolInitialized(protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
+    if(!XLinkIsProtocolInitialized(*protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+*protocol;
     }
-    switch (protocol) {
+
+    switch (*protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
             return usbPlatformConnect(devPathRead, devPathWrite, fd);
@@ -180,17 +192,33 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
 
         case X_LINK_TCP_IP:
             return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
+	
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    return tcpipOrLocalShdmemPlatformConnect(protocol, devPathRead, devPathWrite, fd);
+
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformConnect(devPathRead, devPathWrite, fd);
+#endif
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
 }
 
-xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
+xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t *protocol, void** fd)
 {
-    switch (protocol) {
+    switch (*protocol) {
         case X_LINK_TCP_IP:
-            return tcpipPlatformServer(devPathRead, devPathWrite, fd);
+            return tcpipPlatformServer(devPathRead, devPathWrite, fd, NULL);
+
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    return tcpipOrLocalShdmemPlatformServer(protocol, devPathRead, devPathWrite, fd);
+
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformServer(devPathRead, devPathWrite, fd, NULL);
+#endif
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -239,6 +267,11 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
 
         case X_LINK_TCP_IP:
             return tcpipPlatformClose(deviceHandle->xLinkFD);
+	
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformClose(deviceHandle->xLinkFD);
+#endif
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;

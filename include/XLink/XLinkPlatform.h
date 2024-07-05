@@ -34,6 +34,7 @@ typedef enum {
     X_LINK_PLATFORM_DRIVER_NOT_LOADED = -128,
     X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED = X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_VSC,
     X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED = X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_TCP_IP,
+    X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED = X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_LOCAL_SHDMEM,
     X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED = X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_PCIE,
 } xLinkPlatformErrorCode_t;
 
@@ -64,10 +65,10 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
 xLinkPlatformErrorCode_t XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath);
 xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
-                         XLinkProtocol_t protocol, void** fd);
+                         XLinkProtocol_t *protocol, void** fd);
 xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol);
 xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite,
-                         XLinkProtocol_t protocol, void** fd);
+                         XLinkProtocol_t *protocol, void** fd);
 
 UsbSpeed_t get_usb_speed();
 const char* get_mx_serial();
@@ -86,7 +87,8 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
 // ------------------------------------
 
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size);
-int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size);
+int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void *data2, int size2);
+int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, long *fd);
 
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment);
 void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment);

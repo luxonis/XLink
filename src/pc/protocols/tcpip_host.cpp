@@ -934,7 +934,7 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
 }
 
 // TODO add IPv6 to tcpipPlatformConnect()
-int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
+int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd, long *sockFd)
 {
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
     if(sock < 0)
@@ -943,6 +943,8 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
         tcpip_close_socket(sock);
         return X_LINK_PLATFORM_ERROR;
     }
+   
+    if (sockFd != nullptr) *sockFd = sock;
 
     int reuse_addr = 1;
     int sc;
@@ -998,9 +1000,10 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
 #endif
 
     socklen_portable len = (socklen_portable) sizeof(client);
-    int connfd = accept(sock, (struct sockaddr*) &client, &len);
+    int connfd = accept(sock, (struct sockaddr*)&client, &len);
     // Regardless of return, close the listening socket
     tcpip_close_socket(sock);
+    if (sockFd != nullptr) *sockFd = -1;
     // Then check if connection was accepted succesfully
     if(connfd < 0)
     {
@@ -1162,7 +1165,6 @@ int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmwa
     // TCPIP doesn't support a boot mechanism
     return -1;
 }
-
 
 // Discovery Service
 static std::thread serviceThread;

@@ -188,7 +188,7 @@ XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
 
     link->deviceHandle.protocol = handler->protocol;
     int connectStatus = XLinkPlatformServer(handler->devicePath2, handler->devicePath,
-                                             link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
+                                             &link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
 
     if (connectStatus < 0) {
         /**
@@ -277,8 +277,8 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 
     link->deviceHandle.protocol = handler->protocol;
     int connectStatus = XLinkPlatformConnect(handler->devicePath2, handler->devicePath,
-                                             link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
-
+                                             &link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
+    
     if (connectStatus < 0) {
         /**
          * Connection may be unsuccessful at some amount of first tries.
@@ -291,7 +291,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
         // Return an informative error
         return parsePlatformError(connectStatus);
     }
-
+    
     XLINK_RET_ERR_IF(
         DispatcherStart(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
 
@@ -646,6 +646,8 @@ XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
             return X_LINK_INIT_USB_ERROR;
         case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED:
             return X_LINK_INIT_TCP_IP_ERROR;
+	case X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED:
+	    return X_LINK_INIT_LOCAL_SHDMEM_ERROR;
         case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED:
             return X_LINK_INIT_PCIE_ERROR;
         case X_LINK_PLATFORM_ERROR:
@@ -675,6 +677,7 @@ const char* XLinkErrorToStr(XLinkError_t val) {
         case X_LINK_NOT_IMPLEMENTED: return "X_LINK_NOT_IMPLEMENTED";
         case X_LINK_INIT_USB_ERROR: return "X_LINK_INIT_USB_ERROR";
         case X_LINK_INIT_TCP_IP_ERROR: return "X_LINK_INIT_TCP_IP_ERROR";
+        case X_LINK_INIT_LOCAL_SHDMEM_ERROR: return "X_LINK_INIT_LOCAL_SHDMEM_ERROR";
         case X_LINK_INIT_PCIE_ERROR: return "X_LINK_INIT_PCIE_ERROR";
         default:
             return "INVALID_ENUM_VALUE";
@@ -693,6 +696,8 @@ const char* XLinkProtocolToStr(XLinkProtocol_t val) {
         case X_LINK_PCIE: return "X_LINK_PCIE";
         case X_LINK_IPC: return "X_LINK_IPC";
         case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
+	case X_LINK_LOCAL_SHDMEM: return "X_LINK_LOCAL_SHDMEM";
+        case X_LINK_TCP_IP_OR_LOCAL_SHDMEM: return "X_LINK_TCP_IP_OR_LOCAL_SHDMEM";
         case X_LINK_NMB_OF_PROTOCOLS: return "X_LINK_NMB_OF_PROTOCOLS";
         case X_LINK_ANY_PROTOCOL: return "X_LINK_ANY_PROTOCOL";
         default:
