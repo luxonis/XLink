@@ -96,6 +96,7 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
             return tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
 
 #if defined(__unix__)
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformWrite(deviceHandle->xLinkFD, data, size);
 #endif
@@ -113,6 +114,7 @@ int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void 
 
     switch (deviceHandle->protocol) {
 #if defined(__unix__)
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformWriteFd(deviceHandle->xLinkFD, fd, data2, size2);
 
@@ -184,6 +186,7 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
             return tcpipPlatformRead(deviceHandle->xLinkFD, data, size);
 	
 #if defined(__unix__)
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformRead(deviceHandle->xLinkFD, data, size, fd);
 #endif

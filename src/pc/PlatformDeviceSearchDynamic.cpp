@@ -9,6 +9,7 @@
 #include "usb_host.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
+#include "local_memshd.h"
 #include "XLinkStringUtils.h"
 #include <thread>
 #include <chrono>
@@ -39,12 +40,17 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevicesDynamic(const deviceDesc_t in_d
     void* tcpip_ctx;
     bool usb_vsc_available = false;
     bool tcpip_available = false;
+    bool shdmem_available = false;
 
     if(XLinkIsProtocolInitialized(X_LINK_USB_VSC)) {
         usb_vsc_available = true;
     }
     if(XLinkIsProtocolInitialized(X_LINK_TCP_IP) && tcpip_create_search_context(&tcpip_ctx, in_deviceRequirements) == X_LINK_PLATFORM_SUCCESS) {
         tcpip_available = true;
+    }
+
+    if(XLinkIsProtocolInitialized(X_LINK_LOCAL_SHDMEM)) {
+	shdmem_available = true;
     }
 
     xLinkPlatformErrorCode_t status = X_LINK_PLATFORM_TIMEOUT;
@@ -89,8 +95,6 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevicesDynamic(const deviceDesc_t in_d
                     }
                 }
 
-
-
                 /* TODO(themarpe) - reenable PCIe
                 if(XLinkIsProtocolInitialized(X_LINK_PCIE)) {
                     numFoundDevices = 0;
@@ -106,6 +110,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevicesDynamic(const deviceDesc_t in_d
                 }
                 */
 
+	    case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
                 // Try find TCPIP device
                 if(tcpip_available) {
                     numFoundDevices = 0;
