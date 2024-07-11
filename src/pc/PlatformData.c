@@ -96,10 +96,11 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
             return tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
 
 #if defined(__unix__)
-	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformWrite(deviceHandle->xLinkFD, data, size);
 #endif
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    mvLog(MVLOG_ERROR, "Failed to write with TCP_IP_OR_LOCAL_SHDMEM\n");
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -114,7 +115,6 @@ int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void 
 
     switch (deviceHandle->protocol) {
 #if defined(__unix__)
-	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformWriteFd(deviceHandle->xLinkFD, fd, data2, size2);
 
@@ -163,6 +163,8 @@ int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void 
 		return result;
 	    }
 #endif
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    mvLog(MVLOG_ERROR, "Failed to write FD with TCP_IP_OR_LOCAL_SHDMEM\n");
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
@@ -186,11 +188,11 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
             return tcpipPlatformRead(deviceHandle->xLinkFD, data, size);
 	
 #if defined(__unix__)
-	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformRead(deviceHandle->xLinkFD, data, size, fd);
 #endif
-
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    mvLog(MVLOG_ERROR, "Failed to read with TCP_IP_OR_LOCAL_SHDMEM\n");
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }

@@ -80,10 +80,9 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
 	    if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
                 return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
 	    }
-            return getLocalShdmemDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
+            return getLocalShdmemDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 
         case X_LINK_ANY_PROTOCOL:
-
             // If USB protocol is initialized
             if(XLinkIsProtocolInitialized(X_LINK_USB_VSC)) {
                 // Find first correct USB Device
@@ -118,10 +117,9 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             */
 
 	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
-            // Try find TCPIP device
-            if(XLinkIsProtocolInitialized(X_LINK_TCP_IP)) {
+	    if(XLinkIsProtocolInitialized(X_LINK_LOCAL_SHDMEM)) {
                 numFoundDevices = 0;
-                TCPIP_rc = getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
+                SHDMEM_rc = getLocalShdmemDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
                 *out_amountOfFoundDevices += numFoundDevices;
                 out_foundDevices += numFoundDevices;
                 // Found enough devices, return
@@ -132,9 +130,10 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
                 }
             }
 
-	    if(XLinkIsProtocolInitialized(X_LINK_LOCAL_SHDMEM)) {
+            // Try find TCPIP device
+            if(XLinkIsProtocolInitialized(X_LINK_TCP_IP)) {
                 numFoundDevices = 0;
-                SHDMEM_rc = getLocalShdmemDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
+                TCPIP_rc = getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
                 *out_amountOfFoundDevices += numFoundDevices;
                 out_foundDevices += numFoundDevices;
                 // Found enough devices, return
