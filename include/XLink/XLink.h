@@ -313,7 +313,7 @@ XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int siz
  */
 XLinkError_t XLinkWriteFd(streamId_t const streamId, const long fd);
 XLinkError_t XLinkWriteFd_(streamId_t streamId, const long fd, XLinkTimespec* outTSend);
-XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, int fdSize, const uint8_t* dataBuffer, int dataSize);
+XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, const uint8_t* dataBuffer, int dataSize);
 
 
 /**
