@@ -2,6 +2,9 @@
 #include "local_memshd.h"
 #include "tcpip_memshd.h"
 
+#define MVLOG_UNIT_NAME tcpip_memshd
+#include "XLinkLog.h"
+
 #include <signal.h>
 
 #include <atomic>
@@ -24,23 +27,6 @@ int tcpipOrLocalShdmemPlatformServer(XLinkProtocol_t *protocol, const char *devP
     void *fdTcpIp = nullptr, *fdShdmem = nullptr;
     long tcpIpSockFd = -1, shdmemSockFd = -1;
 
-    auto threadTcpip = std::thread([&connectionMutex,
-		                    &cv,
-				    &isTcpIpThreadFinished,
-				    &retTcpIp,
-				    &devPathRead,
-				    &devPathWrite,
-				    &fdTcpIp,
-				    &tcpIpSockFd]() {
-        auto ret = tcpipPlatformServer(devPathRead, devPathWrite, &fdTcpIp, &tcpIpSockFd);
-        {
-            std::unique_lock<std::mutex> l(connectionMutex);
-            retTcpIp = ret;
-            isTcpIpThreadFinished = true;
-        }
-        cv.notify_one();
-    });  
-
     auto threadShdmem = std::thread([&connectionMutex,
 		                     &cv,
 				     &isShdmemThreadFinished,
@@ -56,6 +42,23 @@ int tcpipOrLocalShdmemPlatformServer(XLinkProtocol_t *protocol, const char *devP
         cv.notify_one();
     });
 
+    auto threadTcpip = std::thread([&connectionMutex,
+		                    &cv,
+				    &isTcpIpThreadFinished,
+				    &retTcpIp,
+				    &devPathRead,
+				    &devPathWrite,
+				    &fdTcpIp,
+				    &tcpIpSockFd]() {
+        auto ret = tcpipPlatformServer(devPathRead, devPathWrite, &fdTcpIp, &tcpIpSockFd);
+        {
+            std::unique_lock<std::mutex> l(connectionMutex);
+            retTcpIp = ret;
+            isTcpIpThreadFinished = true;
+        }
+        cv.notify_one();
+    });
+
     {
         std::unique_lock<std::mutex> lock(connectionMutex);
         cv.wait(lock, [&isShdmemThreadFinished, &isTcpIpThreadFinished]{ return isShdmemThreadFinished || isTcpIpThreadFinished; });
@@ -64,18 +67,6 @@ int tcpipOrLocalShdmemPlatformServer(XLinkProtocol_t *protocol, const char *devP
 
     // As soon as either one finishes, the other can be cleaned
     // Use signals, as "accept" cannot be unblocked by "close"ing the underlying socket
-    if(!isShdmemThreadFinished) {
-	if(shdmemSockFd >= 0) {
-	    shutdown(shdmemSockFd, SHUT_RDWR);
-            #if defined(SO_LINGER)
-        	const int set = 0;
-		setsockopt(shdmemSockFd, SOL_SOCKET, SO_LINGER, (const char*)&set, sizeof(set));
-            #endif
-	    close(shdmemSockFd);
-	}
-
-    }
-
     if(!isTcpIpThreadFinished) {
 	if(tcpIpSockFd >= 0) {
 	    shutdown(tcpIpSockFd, SHUT_RDWR);
@@ -85,6 +76,21 @@ int tcpipOrLocalShdmemPlatformServer(XLinkProtocol_t *protocol, const char *devP
             #endif
 	    close(tcpIpSockFd);
 	}
+	
+	mvLog(MVLOG_ERROR, "Failed to start server with TCP/IP");
+    }
+
+    if(!isShdmemThreadFinished) {
+	if(shdmemSockFd >= 0) {
+	    shutdown(shdmemSockFd, SHUT_RDWR);
+            #if defined(SO_LINGER)
+        	const int set = 0;
+		setsockopt(shdmemSockFd, SOL_SOCKET, SO_LINGER, (const char*)&set, sizeof(set));
+            #endif
+	    close(shdmemSockFd);
+	}
+	
+	mvLog(MVLOG_ERROR, "Failed to start server with SHDMEM");
     }
 
     // Wait for both threads to wrap up
@@ -112,11 +118,17 @@ int tcpipOrLocalShdmemPlatformServer(XLinkProtocol_t *protocol, const char *devP
 
 int tcpipOrLocalShdmemPlatformConnect(XLinkProtocol_t *protocol, const char *devPathRead, const char *devPathWrite, void **fd) {
     if(shdmemPlatformConnect(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
+	mvLog(MVLOG_ERROR, "Failed to connect with SHDMEM");
 	return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
     }
-	    
-    *protocol = X_LINK_TCP_IP;
-    return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
+
+    if (tcpipPlatformConnect(devPathRead, devPathWrite, fd) == X_LINK_SUCCESS) {
+	mvLog(MVLOG_ERROR, "Failed to connect with TCP/IP");
+	*protocol = X_LINK_TCP_IP;
+	return X_LINK_SUCCESS;
+    }
+
+    return X_LINK_ERROR;
 }
 
 #else 

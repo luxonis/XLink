@@ -215,4 +215,30 @@ int shdmemSetProtocol(XLinkProtocol_t *protocol, const char* devPathRead, const 
     return X_LINK_SUCCESS;
 }
 
+
+xLinkPlatformErrorCode_t shdmemGetDevices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* out_foundDevices, int sizeFoundDevices, unsigned int *out_amountOfFoundDevices) {
+    if (access(SHDMEM_DEFAULT_SOCKET, F_OK) != 0) {
+	return X_LINK_PLATFORM_ERROR;
+    }
+
+    // Status
+    out_foundDevices[0].status = X_LINK_SUCCESS;
+    // IP
+    memset(out_foundDevices[0].name, 0, sizeof(out_foundDevices[0].name));
+    strncpy(out_foundDevices[0].name, SHDMEM_DEFAULT_SOCKET, sizeof(out_foundDevices[0].name));
+    // MXID
+    memset(out_foundDevices[0].mxid, 0, sizeof(out_foundDevices[0].mxid));
+    strncpy(out_foundDevices[0].mxid, in_deviceRequirements.mxid, sizeof(out_foundDevices[0].mxid));
+    // Platform
+    out_foundDevices[0].platform = X_LINK_MYRIAD_X;
+    // Protocol
+    out_foundDevices[0].protocol = X_LINK_LOCAL_SHDMEM;
+    // State
+    out_foundDevices[0].state = X_LINK_BOOTED;
+
+    *out_amountOfFoundDevices = 1;
+
+    return X_LINK_PLATFORM_SUCCESS;
+}
+
 #endif /* !defined(__unix__) */

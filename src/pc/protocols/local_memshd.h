@@ -34,6 +34,8 @@ int shdmemPlatformWrite(void *desc, void *data, int size);
 int shdmemPlatformWriteFd(void *desc, const long fd, void *data2, int size2);
 
 int shdmemSetProtocol(XLinkProtocol_t *protocol, const char* devPathRead, const char* devPathWrite);
+
+xLinkPlatformErrorCode_t shdmemGetDevices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* out_foundDevices, int sizeFoundDevices, unsigned int *out_amountOfFoundDevices);
  
 #ifdef __cplusplus
 }

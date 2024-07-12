@@ -9,6 +9,7 @@
 #include "usb_host.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
+#include "local_memshd.h"
 #include "XLinkStringUtils.h"
 
 
@@ -33,6 +34,11 @@ static xLinkPlatformErrorCode_t getTcpIpDevices(const deviceDesc_t in_deviceRequ
                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                     unsigned int *out_amountOfFoundDevices);
 
+#if defined(__unix__)
+static xLinkPlatformErrorCode_t getLocalShdmemDevices(const deviceDesc_t in_deviceRequirements,
+                                                    deviceDesc_t* out_foundDevices, int sizeFoundDevices,
+                                                    unsigned int *out_amountOfFoundDevices);
+#endif
 
 // ------------------------------------
 // Helpers declaration. End.
@@ -50,6 +56,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
     xLinkPlatformErrorCode_t USB_rc;
     xLinkPlatformErrorCode_t PCIe_rc;
     xLinkPlatformErrorCode_t TCPIP_rc;
+    xLinkPlatformErrorCode_t SHDMEM_rc;
     unsigned numFoundDevices = 0;
     *out_amountOfFoundDevices = 0;
 
@@ -66,15 +73,21 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
         case X_LINK_PCIE:
             return getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
         */
-
         case X_LINK_TCP_IP:
             if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
                 return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
             }
             return getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 
-        case X_LINK_ANY_PROTOCOL:
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
+                return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
+	    }
+            return getLocalShdmemDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
+#endif
 
+        case X_LINK_ANY_PROTOCOL:
             // If USB protocol is initialized
             if(XLinkIsProtocolInitialized(X_LINK_USB_VSC)) {
                 // Find first correct USB Device
@@ -107,6 +120,22 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
                 *out_amountOfFoundDevices += numFoundDevices;
             }
             */
+
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+#if defined(__unix__)
+	    if(XLinkIsProtocolInitialized(X_LINK_LOCAL_SHDMEM)) {
+                numFoundDevices = 0;
+                SHDMEM_rc = getLocalShdmemDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
+                *out_amountOfFoundDevices += numFoundDevices;
+                out_foundDevices += numFoundDevices;
+                // Found enough devices, return
+                if (numFoundDevices >= sizeFoundDevices) {
+                    return X_LINK_PLATFORM_SUCCESS;
+                } else {
+                    sizeFoundDevices -= numFoundDevices;
+                }
+            }
+#endif
 
             // Try find TCPIP device
             if(XLinkIsProtocolInitialized(X_LINK_TCP_IP)) {
@@ -150,6 +179,7 @@ char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode) {
         case X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED";
         case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED";
 	case X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED";
+	case X_LINK_PLATFORM_TCP_IP_OR_LOCAL_SHDMEM_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED";
         case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED";
         case X_LINK_PLATFORM_INVALID_PARAMETERS: return "X_LINK_PLATFORM_INVALID_PARAMETERS";
         default: return "";
@@ -293,6 +323,33 @@ xLinkPlatformErrorCode_t getTcpIpDevices(const deviceDesc_t in_deviceRequirement
 
     return tcpip_get_devices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 }
+
+
+#if defined(__unix__)
+xLinkPlatformErrorCode_t getLocalShdmemDevices(const deviceDesc_t in_deviceRequirements,
+                                                    deviceDesc_t* out_foundDevices, int sizeFoundDevices,
+                                                    unsigned int *out_amountOfFoundDevices)
+{
+    ASSERT_XLINK_PLATFORM(out_foundDevices);
+    ASSERT_XLINK_PLATFORM(out_amountOfFoundDevices);
+    if (in_deviceRequirements.platform == X_LINK_MYRIAD_2) {
+        /**
+         * No case with TCP IP devices on TCP_IP protocol
+         */
+        return X_LINK_PLATFORM_ERROR;
+    }
+
+    if(in_deviceRequirements.state == X_LINK_UNBOOTED) {
+        /**
+         * There is no condition where unbooted
+         * state device to be found using tcp/ip.
+        */
+        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+    }
+
+    return shdmemGetDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
+}
+#endif
 
 // ------------------------------------
 // Helpers implementation. End.

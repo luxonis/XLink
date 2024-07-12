@@ -170,7 +170,7 @@ XLinkError_t XLinkWriteFd_(streamId_t streamId, const long fd, XLinkTimespec* ou
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, int fdSize, const uint8_t* dataBuffer, int dataSize)
+XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, const uint8_t* dataBuffer, int dataSize)
 {
     ASSERT_XLINK(dataBuffer);
 
