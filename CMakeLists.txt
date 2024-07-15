@@ -89,7 +89,7 @@ if(XLINK_ENABLE_LIBUSB)
     else()
         # Link to CMake libusb
         target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
-        if(WIN32 AND NOT MINGW)
+        if(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
             target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib)
             # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
 			if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
