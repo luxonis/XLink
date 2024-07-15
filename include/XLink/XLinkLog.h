@@ -30,6 +30,8 @@ extern "C" {
 #include <stdarg.h>
 #include <inttypes.h>
 
+#include "XLinkExport.h"
+
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -72,8 +74,8 @@ FUNCATTR_WEAK mvLog_t __attribute__ ((weak)) MVLOGLEVEL(MVLOG_UNIT_NAME) = MVLOG
 #define UNIT_NAME_STR MVLOG_STR(MVLOG_UNIT_NAME)
 
 
-extern mvLog_t MVLOGLEVEL(global);
-extern mvLog_t MVLOGLEVEL(default);
+extern XLINK_EXPORT mvLog_t MVLOGLEVEL(global);
+extern XLINK_EXPORT mvLog_t MVLOGLEVEL(default);
 
 int __attribute__ ((unused)) logprintf(mvLog_t curLogLvl, mvLog_t lvl, const char * func, const int line, const char * format, ...);
 
