@@ -89,7 +89,10 @@ if(XLINK_ENABLE_LIBUSB)
         if(WIN32 AND NOT MINGW)
             target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib)
             # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
-            target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
+			if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+				# fix to https://github.com/luxonis/depthai-core/issues/1044
+				target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
+			endif()
         endif()
     endif()
     
