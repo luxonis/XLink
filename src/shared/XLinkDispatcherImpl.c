@@ -295,7 +295,9 @@ int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, long fd, int totalS
     }
 
 function_epilogue:
+#ifdef __unix__
     if (mmapAddr != NULL) munmap(mmapAddr, mmapSize);
+#endif
     if (errorCode) return errorCode;
     return writtenByteCount;
 }
