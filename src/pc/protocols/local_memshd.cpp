@@ -18,6 +18,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <errno.h>
+#include <string.h>
 
 int shdmem_initialize() {
     mvLog(MVLOG_DEBUG, "Shared memory initialized\n");
@@ -116,10 +117,12 @@ int shdmemPlatformRead(void *desc, void *data, int size, long *fd) {
 
     struct msghdr msg = {};
     struct iovec iov;
-    iov.iov_base = data;
-    iov.iov_len = size;
-    msg.msg_iov = &iov;
-    msg.msg_iovlen = 1;
+    if (data != NULL && size > 0) {
+        iov.iov_base = data;
+        iov.iov_len = size;
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+    }
 
     char ancillaryElementBuffer[CMSG_SPACE(sizeof(long))];
     msg.msg_control = ancillaryElementBuffer;
@@ -127,7 +130,7 @@ int shdmemPlatformRead(void *desc, void *data, int size, long *fd) {
 
     int bytes;
     if(bytes = recvmsg(socketFd, &msg, MSG_WAITALL) < 0) {
-	mvLog(MVLOG_ERROR, "Failed to recieve message");
+	mvLog(MVLOG_ERROR, "Failed to recieve message: %s", strerror(errno));
         return X_LINK_ERROR;
     }
 
@@ -141,7 +144,7 @@ int shdmemPlatformRead(void *desc, void *data, int size, long *fd) {
 	*fd = recvFd;
     }
 
-    return bytes;
+    return 0;
 }
 
 int shdmemPlatformWrite(void *desc, void *data, int size) {
@@ -160,11 +163,11 @@ int shdmemPlatformWrite(void *desc, void *data, int size) {
 
     int bytes;
     if(bytes = sendmsg(socketFd, &msg, 0) < 0) {
-	mvLog(MVLOG_ERROR, "Failed to send message\n");
+	mvLog(MVLOG_ERROR, "Failed to send message: %s\n", strerror(errno));
         return X_LINK_ERROR;
     }
 
-    return bytes;
+    return 0;
 }
 
 int shdmemPlatformWriteFd(void *desc, const long fd, void *data2, int size2) {
@@ -176,19 +179,22 @@ int shdmemPlatformWriteFd(void *desc, const long fd, void *data2, int size2) {
 
     struct msghdr msg = {};
     struct iovec iov;
-    char buf[1] = {0}; // Buffer for single byte of data to send
+    long buf[1] = {0}; // Buffer for single byte of data to send
     if (data2 != NULL && size2 > 0) {
 	iov.iov_base = data2;
         iov.iov_len = size2;
-    } else {
+    } else if (fd >= 0) {
         iov.iov_base = buf;
         iov.iov_len = sizeof(buf);
+    } else {
+	return 0;
     }
+
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
 
+    char ancillaryElementBuffer[CMSG_SPACE(sizeof(long))];
     if (fd >= 0) {
-	char ancillaryElementBuffer[CMSG_SPACE(sizeof(long))];
 	msg.msg_control = ancillaryElementBuffer;
 	msg.msg_controllen = sizeof(ancillaryElementBuffer);
 
@@ -202,11 +208,11 @@ int shdmemPlatformWriteFd(void *desc, const long fd, void *data2, int size2) {
 
     int bytes;
     if(bytes = sendmsg(socketFd, &msg, 0) < 0) {
-	mvLog(MVLOG_ERROR, "Failed to send message");
+	mvLog(MVLOG_ERROR, "Failed to send message: %s", strerror(errno));
         return X_LINK_ERROR;
     }
 
-    return bytes;
+    return 0;
 }
 
 int shdmemSetProtocol(XLinkProtocol_t *protocol, const char* devPathRead, const char* devPathWrite) {

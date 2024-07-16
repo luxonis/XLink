@@ -118,12 +118,10 @@ int tcpipOrLocalShdmemPlatformServer(XLinkProtocol_t *protocol, const char *devP
 
 int tcpipOrLocalShdmemPlatformConnect(XLinkProtocol_t *protocol, const char *devPathRead, const char *devPathWrite, void **fd) {
     if(shdmemPlatformConnect(SHDMEM_DEFAULT_SOCKET, SHDMEM_DEFAULT_SOCKET, fd) == X_LINK_SUCCESS) {
-	mvLog(MVLOG_ERROR, "Failed to connect with SHDMEM");
 	return shdmemSetProtocol(protocol, devPathRead, devPathWrite);
     }
 
     if (tcpipPlatformConnect(devPathRead, devPathWrite, fd) == X_LINK_SUCCESS) {
-	mvLog(MVLOG_ERROR, "Failed to connect with TCP/IP");
 	*protocol = X_LINK_TCP_IP;
 	return X_LINK_SUCCESS;
     }

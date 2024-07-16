@@ -25,6 +25,10 @@
 #include "XLinkLog.h"
 #include "XLinkStringUtils.h"
 
+#ifdef __unix__
+#include <sys/stat.h>
+#endif
+
 // ------------------------------------
 // Helpers declaration. Begin.
 // ------------------------------------
@@ -158,14 +162,32 @@ XLinkError_t XLinkWriteFd_(streamId_t streamId, const long fd, XLinkTimespec* ou
     event.data2 = (void*)NULL;
     event.data2Size = -1;
 
+    int size = sizeof(long);
+#if defined(__unix__)
+    if (event.deviceHandle.protocol != X_LINK_LOCAL_SHDMEM &&
+	event.header.type == XLINK_WRITE_FD_REQ) {
+
+	if (fd >= 0) {
+	    // Determine file size through fstat
+    	    struct stat fileStats;
+	    fstat(fd, &fileStats);
+	    size = fileStats.st_size;
+
+	    if (size > 0) {
+		event.header.size = size;
+	    }
+	}
+    }
+#endif
+
     XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
 
     if( glHandler->profEnable) {
-        glHandler->profilingData.totalWriteBytes += sizeof(long);
+        glHandler->profilingData.totalWriteBytes += size;
         glHandler->profilingData.totalWriteTime += opTime;
     }
-    link->profilingData.totalWriteBytes += sizeof(long);
-    link->profilingData.totalWriteTime += sizeof(long);
+    link->profilingData.totalWriteBytes += size;
+    link->profilingData.totalWriteTime += size;
 
     return X_LINK_SUCCESS;
 }
@@ -182,8 +204,27 @@ XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, const uint8_t*
     int totalSize = dataSize;
     xLinkEvent_t event = {0};
     XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_FD_REQ, totalSize, (void*)fd, link->deviceHandle);
+
     event.data2 = (void*)dataBuffer;
     event.data2Size = dataSize;
+
+#if defined(__unix__)
+    if (event.deviceHandle.protocol != X_LINK_LOCAL_SHDMEM &&
+	event.header.type == XLINK_WRITE_FD_REQ) {
+
+	if (fd >= 0) {
+	    // Determine file size through fstat
+    	    struct stat fileStats;
+	    fstat(fd, &fileStats);
+	    int size = fileStats.st_size;
+
+	    if (size > 0) {
+		event.header.size += size;
+		totalSize += size;
+	    }
+	}
+    }
+#endif
 
     XLINK_RET_IF(addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT));
 
