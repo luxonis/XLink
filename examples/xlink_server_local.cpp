@@ -37,24 +37,24 @@ int main(int argc, const char** argv){
         return 1;
     }
 
-    auto s = XLinkOpenStream(0, "test", 1024);
+    auto s = XLinkOpenStream(0, "test", 1024 * 1024);
     assert(s != INVALID_STREAM_ID);
 
     const char *shmName = SHARED_MEMORY_NAME;
-    long shmFd = shm_open(shmName, O_CREAT | O_RDWR, 0666);
+    long shmFd = memfd_create(shmName, 0);
     if (shmFd < 0) {
-	    perror("shm_open");
-	    return 1;
+	perror("shm_open");
+	return 1;
     }
 
     ftruncate(shmFd, MAXIMUM_SHM_SIZE);
 
     void *addr = mmap(NULL, MAXIMUM_SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shmFd, 0);
     if (addr == MAP_FAILED) {
-	    perror("mmap");
-	    close(shmFd);
-	    shm_unlink(shmName);
-	    return 1;
+	perror("mmap");
+	close(shmFd);
+	shm_unlink(shmName);
+	return 1;
     }
 
     // Write a message to the shared memory
@@ -67,7 +67,7 @@ int main(int argc, const char** argv){
     
     streamPacketDesc_t *packet;
     auto r = XLinkReadData(s, &packet);
-    assert(w == X_LINK_SUCCESS);
+    assert(r == X_LINK_SUCCESS);
 
     printf("Message from Process B: %s\n", (char *)(packet->data));
 
@@ -75,18 +75,18 @@ int main(int argc, const char** argv){
     r = XLinkReadData(s, &packet);
     assert(r == X_LINK_SUCCESS);
 
+    void *sharedMemAddr;
     long receivedFd = packet->fd;
     if (receivedFd < 0) {
 	printf("Not a valid FD, data streamed through message\n");
-	return 1;
-    }
-    
-    // Map the shared memory
-    void *sharedMemAddr =
-	    mmap(NULL, MAXIMUM_SHM_SIZE, PROT_READ, MAP_SHARED, receivedFd, 0);
-    if (sharedMemAddr == MAP_FAILED) {
+	sharedMemAddr = packet->data;
+    } else { 
+        // Map the shared memory
+        sharedMemAddr = mmap(NULL, MAXIMUM_SHM_SIZE, PROT_READ, MAP_SHARED, receivedFd, 0);
+	if (sharedMemAddr == MAP_FAILED) {
 	    perror("mmap");
 	    return 1;
+	}
     }
 
     // Read and print the message from shared memory
@@ -96,7 +96,9 @@ int main(int argc, const char** argv){
     w = XLinkWriteData(s, (uint8_t*)normalMessage, strlen(normalMessage) + 1);
     assert(w == X_LINK_SUCCESS);
 
-    munmap(sharedMemAddr, MAXIMUM_SHM_SIZE);
+    if (receivedFd >= 0) {
+        munmap(sharedMemAddr, MAXIMUM_SHM_SIZE);
+    }
 
     munmap(addr, MAXIMUM_SHM_SIZE);
     close(shmFd);

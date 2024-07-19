@@ -117,51 +117,6 @@ int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void 
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformWriteFd(deviceHandle->xLinkFD, fd, data2, size2);
-
-	case X_LINK_USB_VSC:
-        case X_LINK_USB_CDC:
-        case X_LINK_PCIE:
-        case X_LINK_TCP_IP:
-	    {
-		if (fd <= 0) {
-		    return X_LINK_ERROR;
-		}
-
-	        // Determine file size through fstat
-		struct stat fileStats;
-		fstat(fd, &fileStats);
-		int size = fileStats.st_size;
-
-		// mmap the fine in memory
-		void *addr = mmap(NULL, 4096, PROT_READ, MAP_SHARED, fd, 0);
-		if (addr == MAP_FAILED) {
-		    mvLog(MVLOG_ERROR, "Failed to mmap file to stream it over\n");
-		    return X_LINK_ERROR;
-		}
-
-		// Use the respective write function to copy and send the message
-		int result = X_LINK_ERROR;
-		switch(deviceHandle->protocol) {
-		    case X_LINK_USB_VSC:
-		    case X_LINK_USB_CDC:
-			result = usbPlatformWrite(deviceHandle->xLinkFD, addr, size);
-			break;
-		    case X_LINK_PCIE:
-			result = pciePlatformWrite(deviceHandle->xLinkFD, addr, size);
-			break;
-		    case X_LINK_TCP_IP:
-			result = tcpipPlatformWrite(deviceHandle->xLinkFD, addr, size);
-			break;
-		    default:
-			result = X_LINK_PLATFORM_INVALID_PARAMETERS;
-			break;
-		}
-
-		// Unmap file
-		munmap(addr, size);
-	    
-		return result;
-	    }
 #endif
 	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
 	    mvLog(MVLOG_ERROR, "Failed to write FD with TCP_IP_OR_LOCAL_SHDMEM\n");

@@ -20,6 +20,10 @@
 #include "XLinkLog.h"
 #include "XLinkStringUtils.h"
 
+#ifdef __unix__
+#include <sys/mman.h>
+#endif
+
 // ------------------------------------
 // Helpers declaration. Begin.
 // ------------------------------------
@@ -148,15 +152,50 @@ function_epilogue:
 
 int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, long fd, int totalSize, void* data2, int data2Size)
 {
-    // Regular, single-part case
-    if(data2 == NULL || data2Size <= 0) {
-        return XLinkPlatformWriteFd(deviceHandle, fd, NULL, -1);
+    void *mmapAddr = NULL;
+    int mmapSize = totalSize - data2Size;
+
+#ifdef __unix__
+    // mmap the fine in memory
+    if(deviceHandle->protocol != X_LINK_LOCAL_SHDMEM) {
+        mmapAddr = mmap(NULL, mmapSize, PROT_READ, MAP_SHARED, fd, 0);
+        if (mmapAddr == MAP_FAILED) {
+            mvLog(MVLOG_ERROR, "Failed to mmap file to stream it over\n");
+            return X_LINK_ERROR;
+        }
+	
+	if(data2 == NULL || data2Size <= 0) {
+            return XLinkPlatformWrite(deviceHandle, mmapAddr, mmapSize);
+	}
+
+	fd = -1;
+    } else {
+	if(data2 == NULL || data2Size <= 0) {
+            return XLinkPlatformWriteFd(deviceHandle, fd, NULL, -1);
+	}
     }
+#endif
 
     // Multipart case
     int errorCode = 0;
-    void *dataToWrite[] = {data2, NULL};
-    int sizeToWrite[] = {data2Size, 0};
+    void *dataToWrite[3];
+    int sizeToWrite[3];
+
+    if(deviceHandle->protocol != X_LINK_LOCAL_SHDMEM) {
+	dataToWrite[0] = mmapAddr;
+	sizeToWrite[0] = mmapSize;
+	dataToWrite[1] = data2;
+	sizeToWrite[1] = data2Size;
+	dataToWrite[2] = NULL;
+	sizeToWrite[2] = 0;
+    } else {
+	dataToWrite[0] = data2;
+	sizeToWrite[0] = data2Size;
+	dataToWrite[1] = NULL;
+	sizeToWrite[1] = 0;
+	dataToWrite[2] = NULL;
+	sizeToWrite[2] = 0;
+    }
 
     int writtenByteCount = 0, toWrite = 0, rc = 0;
 
@@ -202,8 +241,12 @@ int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, long fd, int totalS
                           ? pktlen
                           : (totalSizeToWrite - writtenByteCount);
 
-            rc = XLinkPlatformWriteFd(deviceHandle, fd, &((char *)currentPacket)[writtenByteCount - byteCountRelativeOffset + previousSplitWriteSize], toWrite);
-	    fd = -1;
+            if(deviceHandle->protocol != X_LINK_LOCAL_SHDMEM || fd == -1) {
+                rc = XLinkPlatformWrite(deviceHandle, &((char *)currentPacket)[writtenByteCount - byteCountRelativeOffset + previousSplitWriteSize], toWrite);
+	    } else {
+                rc = XLinkPlatformWriteFd(deviceHandle, fd, &((char *)currentPacket)[writtenByteCount - byteCountRelativeOffset + previousSplitWriteSize], toWrite);
+		fd = -1;
+	    }
 
             if (rc < 0)
             {
@@ -227,8 +270,14 @@ int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, long fd, int totalS
                 }
                 toWrite = remainingToWriteCurrent + remainingToWriteNext;
                 if(toWrite > xlinkPacketSizeMultiply) ASSERT_XLINK(0);
-                rc = XLinkPlatformWriteFd(deviceHandle, fd, swapSpace, toWrite);
-	        fd = -1;
+            
+		if(deviceHandle->protocol != X_LINK_LOCAL_SHDMEM || fd == -1) {
+                    rc = XLinkPlatformWrite(deviceHandle, swapSpace, toWrite);
+		} else {
+                    rc = XLinkPlatformWriteFd(deviceHandle, fd, swapSpace, toWrite);
+		    fd = -1;
+		}
+
                 if (rc < 0)
                 {
                     errorCode = rc;
@@ -246,6 +295,9 @@ int writeFdEventMultipart(xLinkDeviceHandle_t* deviceHandle, long fd, int totalS
     }
 
 function_epilogue:
+#ifdef __unix__
+    if (mmapAddr != NULL) munmap(mmapAddr, mmapSize);
+#endif
     if (errorCode) return errorCode;
     return writtenByteCount;
 }

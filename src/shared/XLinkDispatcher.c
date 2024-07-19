@@ -366,6 +366,7 @@ xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event
     if(curr->resetXLink) {
         return NULL;
     }
+
     mvLog(MVLOG_DEBUG, "Receiving event %s %d\n", TypeToStr(event->header.type), origin);
     int rc;
     while(((rc = XLink_sem_wait(&curr->addEventSem)) == -1) && errno == EINTR)
