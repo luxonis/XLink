@@ -8,16 +8,13 @@ on:
     branches-ignore:
       - xlink_upstream
 
-
-
 jobs:
-
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
-        compiler: [default]
+        compiler: [default, clang]
         libusb: [ON, OFF]
         include:
           - os: windows-latest
@@ -55,6 +52,10 @@ jobs:
     - name: configure
       if: matrix.compiler == 'mingw'
       run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.libusb }} -G"MinGW Makefiles"
+
+    - name: configure
+      if: matrix.compiler == 'clang'
+      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.libusb }} -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 
     - name: build
       run: cmake --build build --parallel
