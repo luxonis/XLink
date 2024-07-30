@@ -62,6 +62,21 @@ jobs:
         choco install llvm
         echo "C:\Program Files\LLVM\bin" >> $env:GITHUB_PATH
 
+    - name: Install Ninja on macOS
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install ninja
+
+    - name: Install Ninja on Ubuntu
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get install ninja-build
+
+    - name: Install Ninja on Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        choco install ninja
+
     - name: configure
       if: matrix.compiler == 'default'
       run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.libusb }}
@@ -72,7 +87,7 @@ jobs:
 
     - name: configure
       if: matrix.compiler == 'clang'
-      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.libusb }} -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.libusb }} -G"Ninja" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 
     - name: build
       run: cmake --build build --parallel
