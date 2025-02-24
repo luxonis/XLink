@@ -77,10 +77,11 @@ tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET socket);
  * @param[in]   devices_size Size of devices array
  * @param[out]  device_count Total device IP address obtained
  * @param[in]   target_ip Target IP address to be checked
+ * @param[in]   timeout_ms Timeout in milliseconds
  * @retval      TCPIP_HOST_ERROR Failed to get network interface informations
  * @retval      TCPIP_HOST_SUCCESS Received all device IP address available
 */
-xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count);
+xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count, int timeout_ms);
 
 xLinkPlatformErrorCode_t tcpip_create_search_context(void** pctx, const deviceDesc_t in_deviceRequirements);
 xLinkPlatformErrorCode_t tcpip_perform_search(void* ctx, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count);

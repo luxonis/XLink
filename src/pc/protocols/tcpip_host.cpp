@@ -638,7 +638,7 @@ xLinkPlatformErrorCode_t tcpip_close_search_context(void* ctx)
 
 
 // TODO(themarpe) - duplicate until further tested
-xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count)
+xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count, int timeout_ms)
 {
     // Name signifies ip in TCP_IP protocol case
     const char* target_ip = in_deviceRequirements.name;
@@ -790,7 +790,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 
             num_devices_match++;
         }
-    } while(std::chrono::steady_clock::now() - t1 < DEVICE_DISCOVERY_RES_TIMEOUT);
+    } while(std::chrono::steady_clock::now() - t1 < std::chrono::milliseconds(timeout_ms));
 
     tcpip_close_socket(sock);
 
