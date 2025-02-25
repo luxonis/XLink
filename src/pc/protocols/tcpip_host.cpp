@@ -141,7 +141,6 @@ static constexpr const auto DEFAULT_DEVICE_DISCOVERY_POOL_TIMEOUT = std::chrono:
 
 constexpr int MSEC_TO_USEC(int x) { return x * 1000; }
 static constexpr auto DEVICE_DISCOVERY_SOCKET_TIMEOUT = std::chrono::milliseconds{20};
-static constexpr auto DEVICE_DISCOVERY_RES_TIMEOUT = std::chrono::milliseconds{500};
 
 #ifdef HAS_DEBUG
 #define DEBUG(...) do { printf(__VA_ARGS__); } while(0)
@@ -612,7 +611,7 @@ xLinkPlatformErrorCode_t tcpip_perform_search(void* ctx, deviceDesc_t* devices, 
                 num_devices_match++;
             }
         }
-    } while(std::chrono::steady_clock::now() - t1 < DEVICE_DISCOVERY_RES_TIMEOUT);
+    } while(std::chrono::steady_clock::now() - t1 < std::chrono::milliseconds(XLINK_DEVICE_DEFAULT_SEARCH_TIMEOUT_MS));
 
     // if at least one device matched, return OK otherwise return not found
     if(num_devices_match <= 0)

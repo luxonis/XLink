@@ -27,7 +27,7 @@ int main(){
     suitableDevice.platform = X_LINK_ANY_PLATFORM;
     suitableDevice.state = X_LINK_FLASH_BOOTED;
 
-    status = XLinkFindAllSuitableDevices(suitableDevice, deviceDescAll.data(), deviceDescAll.size(), &numdev);
+    status = XLinkFindAllSuitableDevices(suitableDevice, deviceDescAll.data(), deviceDescAll.size(), &numdev, XLINK_DEVICE_DEFAULT_SEARCH_TIMEOUT_MS);
     if(status != X_LINK_SUCCESS) throw std::runtime_error("Couldn't retrieve all connected devices");
 
     if(numdev == 0){
