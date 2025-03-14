@@ -112,7 +112,11 @@ typedef enum{
     /**
      * The device is running Gate and already booted
      */
-    X_LINK_GATE_BOOTED
+    X_LINK_GATE_BOOTED,
+    /**
+     * The device is in setup mode
+     */
+    X_LINK_GATE_SETUP
 } XLinkDeviceState_t;
 
 typedef enum{

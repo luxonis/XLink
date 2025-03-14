@@ -74,6 +74,7 @@ typedef enum
     TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE = TCPIP_HOST_STATE_FLASH_BOOTED,
     TCPIP_HOST_STATE_GATE = 5,
     TCPIP_HOST_STATE_GATE_BOOTED = 6,
+    TCPIP_HOST_STATE_GATE_SETUP = 7,
 } tcpipHostDeviceState_t;
 
 /* Device protocol */
@@ -187,6 +188,10 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     else if(state == TCPIP_HOST_STATE_GATE_BOOTED)
     {
         return X_LINK_GATE_BOOTED;
+    }
+    else if(state == TCPIP_HOST_STATE_GATE_SETUP)
+    {
+        return X_LINK_GATE_SETUP;
     }
     else
     {
