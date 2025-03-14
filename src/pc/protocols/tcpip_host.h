@@ -57,7 +57,8 @@ typedef enum
     TCPIP_HOST_CMD_NO_COMMAND = 0,
     TCPIP_HOST_CMD_DEVICE_DISCOVER = 1,
     TCPIP_HOST_CMD_DEVICE_INFO = 2,
-    TCPIP_HOST_CMD_RESET = 3
+    TCPIP_HOST_CMD_RESET = 3,
+    TCPIP_HOST_CMD_DEVICE_DISCOVERY_EX = 4,
 } tcpipHostCommand_t;
 
 /* Device state */
@@ -75,6 +76,18 @@ typedef struct
     char mxid[32];
     uint32_t state;
 } tcpipHostDeviceDiscoveryResp_t;
+
+/* Device response payload extended*/
+typedef struct
+{
+    tcpipHostCommand_t command;
+    char id[32];
+    uint32_t state;
+    uint32_t protocol;
+    uint32_t platform;
+    uint16_t portHttp;
+    uint16_t portHttps;
+} tcpipHostDeviceDiscoveryExResp_t;
 
 /* **************************************************************************/
 /*      Public Function Declarations                                        */
