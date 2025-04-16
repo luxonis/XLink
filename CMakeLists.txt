@@ -4,12 +4,6 @@
 
 cmake_minimum_required(VERSION 3.2)
 
-include("cmake/HunterGate.cmake")
-HunterGate(
-    URL "https://github.com/cpp-pm/hunter/archive/v0.23.320.tar.gz"
-    SHA1 "9b4e732afd22f40482c11ad6342f7d336634226f"
-    LOCAL # Local config for dependencies
-)
 
 ### Constants
 set(TARGET_NAME "XLink")
@@ -31,10 +25,6 @@ option(XLINK_ENABLE_LIBUSB "Enable USB protocol which requires libusb library" O
 option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 # Build tests
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
-# Debug option
-set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instead of Hunter")
-# Debug option
-option(XLINK_LIBUSB_SYSTEM "Use system libusb library instead of Hunter" OFF)
 
 # Specify exporting all symbols on Windows (WIP: shared library on windows doesn't yet work fully (eg logging))
 if(WIN32 AND BUILD_SHARED_LIBS)
@@ -66,13 +56,17 @@ if(is_multi_config)
     set_target_properties(${TARGET_NAME} PROPERTIES DEBUG_POSTFIX "d")
 endif()
 
+# Define export header to support shared library on Windows
+include(GenerateExportHeader)
+generate_export_header(${TARGET_NAME}
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}Export.h)
 # Add dependencies
 include(cmake/XLinkDependencies.cmake)
 
 if(XLINK_ENABLE_LIBUSB)
     if(XLINK_LIBUSB_SYSTEM)
         # Find system libusb
-        find_path(LIBUSB_INCLUDE_DIR NAMES libusb.h PATH_SUFFIXES "include" "libusb" "libusb-1.0")
+        find_path(LIBUSB_INCLUDE_DIR NAMES "libusb-1.0/libusb.h")
         find_library(LIBUSB_LIBRARY NAMES usb-1.0 PATH_SUFFIXES "lib")
         if(NOT LIBUSB_INCLUDE_DIR OR NOT LIBUSB_LIBRARY)
             message(FATAL_ERROR "libusb is required")
@@ -87,10 +81,13 @@ if(XLINK_ENABLE_LIBUSB)
         # Link to CMake libusb
         target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
         if(WIN32 AND NOT MINGW)
-            target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib Pathcch.lib)
+            target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib)
             # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
             target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
         endif()
+    endif()
+    if(WIN32 AND NOT MINGW)
+        target_link_libraries(${TARGET_NAME} PRIVATE Pathcch.lib)
     endif()
 
     # Add compile define stating a local libusb usage
@@ -129,6 +126,7 @@ add_library(${TARGET_PUBLIC_NAME} INTERFACE)
 target_include_directories(${TARGET_PUBLIC_NAME} INTERFACE
     "$<INSTALL_INTERFACE:include>"
     "$<BUILD_INTERFACE:${XLINK_INCLUDE}>"
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
 )
 
 # Link to headers (public, as itself also needs the headers)
@@ -212,11 +210,6 @@ export(TARGETS ${TARGET_NAME} ${TARGET_PUBLIC_NAME} FILE "${PROJECT_NAME}Targets
 # Dependencies file
 configure_file("cmake/${PROJECT_NAME}Dependencies.cmake" ${PROJECT_NAME}Dependencies.cmake COPYONLY)
 
-# Configure config file (one for exporting build directory, one for installation)
-if(${HUNTER_INSTALL_PREFIX})
-    file(RELATIVE_PATH XLINK_DEPENDENCIES_INSTALLATION_PATH_REL "${CMAKE_CURRENT_BINARY_DIR}" "${HUNTER_INSTALL_PREFIX}")
-endif()
-
 configure_file(cmake/${PROJECT_NAME}Config.cmake.in ${PROJECT_NAME}Config.cmake @ONLY)
 
 # Config for installation
@@ -233,12 +226,11 @@ install(
 )
 #Install include folder
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-# Install Hunter dependencies
-if(XLINK_ENABLE_LIBUSB)
-    if(NOT XLINK_LIBUSB_LOCAL AND NOT XLINK_LIBUSB_SYSTEM)
-        install(DIRECTORY "${HUNTER_INSTALL_PREFIX}/" DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/dependencies")
-    endif()
-endif()
+# Install generated export header
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}Export.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/XLink
+)
 # Install export group (information about targets)
 install(EXPORT ${PROJECT_EXPORT_GROUP}
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"

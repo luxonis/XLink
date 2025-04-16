@@ -5,13 +5,6 @@ if(CONFIG_MODE)
     set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE "BOTH")
     set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_LIST_DIR}/${_IMPORT_PREFIX}" ${CMAKE_PREFIX_PATH})
     set(_QUIET "QUIET")
-else()
-    # set(XLINK_SHARED_LIBS ${BUILD_SHARED_LIBS})
-    if(XLINK_ENABLE_LIBUSB)
-        if(NOT XLINK_LIBUSB_LOCAL AND NOT XLINK_LIBUSB_SYSTEM)
-            hunter_add_package(libusb-luxonis)
-        endif()
-    endif()
 endif()
 
 # libusb
