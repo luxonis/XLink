@@ -25,6 +25,8 @@ option(XLINK_ENABLE_LIBUSB "Enable USB protocol which requires libusb library" O
 option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 # Build tests
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
+# Install headers only (skip binary lib in install tree)
+option(XLINK_INSTALL_PUBLIC_ONLY "Install only header interface target (XLinkPublic)" OFF)
 
 # Specify exporting all symbols on Windows (WIP: shared library on windows doesn't yet work fully (eg logging))
 if(WIN32 AND BUILD_SHARED_LIBS)
@@ -204,6 +206,12 @@ endif()
 
 include(GNUInstallDirs)
 
+# Handle public-only install option
+set(_XLINK_INSTALL_TARGETS ${TARGET_PUBLIC_NAME})
+if(NOT XLINK_INSTALL_PUBLIC_ONLY)
+    list(APPEND _XLINK_INSTALL_TARGETS ${TARGET_NAME})
+endif()
+
 # Export targets (capability to import current build directory)
 export(TARGETS ${TARGET_NAME} ${TARGET_PUBLIC_NAME} FILE "${PROJECT_NAME}Targets.cmake")
 
@@ -218,7 +226,7 @@ configure_file(cmake/${PROJECT_NAME}Config.cmake.in _install/${PROJECT_NAME}Conf
 
 # Install targets
 install(
-    TARGETS ${TARGET_NAME} ${TARGET_PUBLIC_NAME}
+    TARGETS ${_XLINK_INSTALL_TARGETS}
     EXPORT ${PROJECT_EXPORT_GROUP}
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
