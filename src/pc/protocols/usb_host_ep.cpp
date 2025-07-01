@@ -35,8 +35,8 @@
  * - ADB: third endpoint
  * - etc
  */
-#define ENDPOINT_OUT_OFFSET 0
-#define ENDPOINT_IN_OFFSET 0
+#define ENDPOINT_OUT_OFFSET 1
+#define ENDPOINT_IN_OFFSET 1
 
 /* Transfer timeout */
 #define TIMEOUT 2000
