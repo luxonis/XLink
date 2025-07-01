@@ -54,3 +54,6 @@ if (UNIX AND !APPLE)
     add_example(xlink_client_local xlink_client_local.cpp)
 endif (UNIX AND !APPLE)
 
+# EP example
+add_example(xlink_usb_server xlink_usb_server.cpp)
+add_example(xlink_usb_client xlink_usb_client.cpp)
