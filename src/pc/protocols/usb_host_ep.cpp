@@ -29,6 +29,15 @@
 /* Base endpoint address used for input */
 #define ENDPOINT_IN_BASE 0x81
 
+/* The endpoint structure is the following
+ * - Gate: first endpoint
+ * - XLink: second endpoint
+ * - ADB: third endpoint
+ * - etc
+ */
+#define ENDPOINT_OUT_OFFSET 0
+#define ENDPOINT_IN_OFFSET 0
+
 /* Transfer timeout */
 #define TIMEOUT 2000
 
@@ -81,10 +90,9 @@ int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     /* We get the first EP_OUT and EP_IN for our interfaces 
      * In the way we initialized our usb-gadget on our device
-     * We know ncm is claiming the first 2 interfaces
      */
-    usbFdWrite = ENDPOINT_OUT_BASE + 1; /* +1 because NCM claims 1 OUT endpoint */
-    usbFdRead = ENDPOINT_IN_BASE + 2; /* +2 because NCM claims 2 IN endpoints */
+    usbFdWrite = ENDPOINT_OUT_BASE + ENDPOINT_OUT_OFFSET;
+    usbFdRead = ENDPOINT_IN_BASE + ENDPOINT_IN_OFFSET;
 
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) usbFdRead);
 
