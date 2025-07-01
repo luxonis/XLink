@@ -2,6 +2,9 @@
 build/
 build*/
 
+#clangd
+.cache/*
+
 #git
 *.orig
 *_REMOTE_*

@@ -32,7 +32,8 @@ static xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
                                                   deviceDesc_t* out_foundDevice);
 static xLinkPlatformErrorCode_t getTcpIpDevices(const deviceDesc_t in_deviceRequirements,
                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                    unsigned int *out_amountOfFoundDevices);
+                                                    unsigned int *out_amountOfFoundDevices,
+                                                    int timeoutMs);
 
 #if defined(__unix__)
 static xLinkPlatformErrorCode_t getLocalShdmemDevices(const deviceDesc_t in_deviceRequirements,
@@ -51,7 +52,7 @@ static xLinkPlatformErrorCode_t getLocalShdmemDevices(const deviceDesc_t in_devi
 
 xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, unsigned sizeFoundDevices,
-                                                     unsigned int *out_amountOfFoundDevices) {
+                                                     unsigned int *out_amountOfFoundDevices, int timeoutMs) {
     memset(out_foundDevices, 0, sizeFoundDevices * sizeof(deviceDesc_t));
     xLinkPlatformErrorCode_t USB_rc;
     xLinkPlatformErrorCode_t PCIe_rc;
@@ -77,7 +78,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
                 return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
             }
-            return getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
+            return getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices, timeoutMs);
 
 #if defined(__unix__)
 	case X_LINK_LOCAL_SHDMEM:
@@ -140,7 +141,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             // Try find TCPIP device
             if(XLinkIsProtocolInitialized(X_LINK_TCP_IP)) {
                 numFoundDevices = 0;
-                TCPIP_rc = getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
+                TCPIP_rc = getTcpIpDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices, timeoutMs);
                 *out_amountOfFoundDevices += numFoundDevices;
                 out_foundDevices += numFoundDevices;
                 // Found enough devices, return
@@ -302,7 +303,7 @@ xLinkPlatformErrorCode_t getPCIeDeviceName(int index,
 
 xLinkPlatformErrorCode_t getTcpIpDevices(const deviceDesc_t in_deviceRequirements,
                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                    unsigned int *out_amountOfFoundDevices)
+                                                    unsigned int *out_amountOfFoundDevices, int timeoutMs)
 {
     ASSERT_XLINK_PLATFORM(out_foundDevices);
     ASSERT_XLINK_PLATFORM(out_amountOfFoundDevices);
@@ -321,7 +322,7 @@ xLinkPlatformErrorCode_t getTcpIpDevices(const deviceDesc_t in_deviceRequirement
         return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
     }
 
-    return tcpip_get_devices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
+    return tcpip_get_devices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices, timeoutMs);
 }
 
 

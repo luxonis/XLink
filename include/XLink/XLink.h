@@ -125,12 +125,14 @@ XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequiremen
  * @param[in,out]  out_foundDevicesPtr - pointer to array with all found devices descriptions
  * @param[out]     devicesArraySize - size of out_foundDevicesPtr
  * @param[out]     out_foundDevicesCount - amount of found devices
+ * @param[in]      timeoutMs - for how long to search for
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirements,
                                          deviceDesc_t *out_foundDevicesPtr,
                                          const unsigned int devicesArraySize,
-                                         unsigned int *out_foundDevicesCount);
+                                         unsigned int *out_foundDevicesCount,
+                                         int timeoutMs);
 
 /**
  * @brief Returns all Myriad devices description which meets the requirements

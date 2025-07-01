@@ -28,6 +28,7 @@ extern "C"
 #endif
 #define XLINK_MAX_PACKETS_PER_STREAM 64
 #define XLINK_NO_RW_TIMEOUT 0xFFFFFFFF
+#define XLINK_DEVICE_DEFAULT_SEARCH_TIMEOUT_MS 500
 
 
 typedef enum {
@@ -112,7 +113,11 @@ typedef enum{
     /**
      * The device is running Gate and already booted
      */
-    X_LINK_GATE_BOOTED
+    X_LINK_GATE_BOOTED,
+    /**
+     * The device is in setup mode
+     */
+    X_LINK_GATE_SETUP
 } XLinkDeviceState_t;
 
 typedef enum{

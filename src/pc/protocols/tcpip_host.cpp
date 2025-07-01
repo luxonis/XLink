@@ -74,6 +74,7 @@ typedef enum
     TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE = TCPIP_HOST_STATE_FLASH_BOOTED,
     TCPIP_HOST_STATE_GATE = 5,
     TCPIP_HOST_STATE_GATE_BOOTED = 6,
+    TCPIP_HOST_STATE_GATE_SETUP = 7,
 } tcpipHostDeviceState_t;
 
 /* Device protocol */
@@ -141,7 +142,6 @@ static constexpr const auto DEFAULT_DEVICE_DISCOVERY_POOL_TIMEOUT = std::chrono:
 
 constexpr int MSEC_TO_USEC(int x) { return x * 1000; }
 static constexpr auto DEVICE_DISCOVERY_SOCKET_TIMEOUT = std::chrono::milliseconds{20};
-static constexpr auto DEVICE_DISCOVERY_RES_TIMEOUT = std::chrono::milliseconds{500};
 
 #ifdef HAS_DEBUG
 #define DEBUG(...) do { printf(__VA_ARGS__); } while(0)
@@ -188,6 +188,10 @@ static XLinkDeviceState_t tcpip_convert_device_state(uint32_t state)
     else if(state == TCPIP_HOST_STATE_GATE_BOOTED)
     {
         return X_LINK_GATE_BOOTED;
+    }
+    else if(state == TCPIP_HOST_STATE_GATE_SETUP)
+    {
+        return X_LINK_GATE_SETUP;
     }
     else
     {
@@ -612,7 +616,7 @@ xLinkPlatformErrorCode_t tcpip_perform_search(void* ctx, deviceDesc_t* devices, 
                 num_devices_match++;
             }
         }
-    } while(std::chrono::steady_clock::now() - t1 < DEVICE_DISCOVERY_RES_TIMEOUT);
+    } while(std::chrono::steady_clock::now() - t1 < std::chrono::milliseconds(XLINK_DEVICE_DEFAULT_SEARCH_TIMEOUT_MS));
 
     // if at least one device matched, return OK otherwise return not found
     if(num_devices_match <= 0)
@@ -638,7 +642,7 @@ xLinkPlatformErrorCode_t tcpip_close_search_context(void* ctx)
 
 
 // TODO(themarpe) - duplicate until further tested
-xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count)
+xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count, int timeout_ms)
 {
     // Name signifies ip in TCP_IP protocol case
     const char* target_ip = in_deviceRequirements.name;
@@ -790,7 +794,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
 
             num_devices_match++;
         }
-    } while(std::chrono::steady_clock::now() - t1 < DEVICE_DISCOVERY_RES_TIMEOUT);
+    } while(std::chrono::steady_clock::now() - t1 < std::chrono::milliseconds(timeout_ms));
 
     tcpip_close_socket(sock);
 
