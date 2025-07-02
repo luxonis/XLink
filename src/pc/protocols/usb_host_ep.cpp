@@ -7,6 +7,13 @@
 #include "XLink/XLinkPublicDefines.h"
 #include "usb_host_ep.h"
 #include "../PlatformDeviceFd.h"
+#include "usb_mx_id.h"
+#include "usb_host.h"
+
+// std
+#include <mutex>
+#include <string>
+#include <cstring>
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -21,7 +28,7 @@
 #define PRODUCT_ID 0x1234
 
 /* Interface number for ffs.xlink */
-#define INTERFACE_XLINK 2
+#define INTERFACE_XLINK 1
 
 /* Base ndpoint address used for output */
 #define ENDPOINT_OUT_BASE 0x01
@@ -189,3 +196,68 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
     return rc;
 }
 
+int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
+                                                    deviceDesc_t* out_foundDevices, int sizeFoundDevices,
+                                                    unsigned int *out_amountOfFoundDevices) {
+    int error = 0;
+    libusb_device_handle* dev_handle = libusb_open_device_with_vid_pid(NULL, VENDOR_ID, PRODUCT_ID);
+    if (dev_handle == NULL) {
+        libusb_exit(ctx);
+        return LIBUSB_ERROR_NO_DEVICE;
+    }
+
+    error = libusb_set_auto_detach_kernel_driver(dev_handle, 1);
+    if (error != LIBUSB_SUCCESS) {
+        libusb_close(dev_handle);
+        libusb_exit(ctx);
+        return error;
+    }
+
+    // Check if the interface exists
+    libusb_device* dev = libusb_get_device(dev_handle);
+    struct libusb_config_descriptor* config;
+    error = libusb_get_active_config_descriptor(dev, &config);
+    if (error != LIBUSB_SUCCESS) {
+        libusb_close(dev_handle);
+        libusb_exit(ctx);
+        return error;
+    }
+
+    // Look for INTERFACE_XLINK
+    bool found = false;
+    for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
+        if (config->interface[i].altsetting[0].bInterfaceNumber == INTERFACE_XLINK) {
+            found = true;
+            break;
+        }
+    }
+
+    libusb_free_config_descriptor(config);
+
+    if (!found) {
+        libusb_close(dev_handle);
+        libusb_exit(ctx);
+
+	*out_amountOfFoundDevices = 0;
+
+	return X_LINK_PLATFORM_SUCCESS;
+    }           
+
+    int numDevicesFound = 0;
+    // Everything passed, fillout details of found device
+    out_foundDevices[numDevicesFound].status = X_LINK_SUCCESS;
+    out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
+    out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
+    out_foundDevices[numDevicesFound].state = X_LINK_BOOTED;
+    memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
+    memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
+    numDevicesFound++;
+
+    // Write the number of found devices
+    *out_amountOfFoundDevices = numDevicesFound;
+
+    libusb_close(dev_handle);
+    libusb_exit(ctx);
+
+    return X_LINK_PLATFORM_SUCCESS;
+}
