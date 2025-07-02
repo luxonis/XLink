@@ -29,6 +29,7 @@
 
 /* Interface number for ffs.xlink */
 #define INTERFACE_XLINK 1
+#define INTERFACE_XLINK_NAME "Luxonis Communication Interface"
 
 /* Base ndpoint address used for output */
 #define ENDPOINT_OUT_BASE 0x01
@@ -82,9 +83,48 @@ int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void
      */
     error  = libusb_set_auto_detach_kernel_driver(dev_handle, 1);
     if (error != LIBUSB_SUCCESS) {
+        libusb_close(dev_handle);
 	libusb_exit(ctx);
 
 	return error;
+    }
+
+    libusb_device* dev = libusb_get_device(dev_handle);
+    struct libusb_config_descriptor* config;
+    error = libusb_get_active_config_descriptor(dev, &config);
+    if (error != LIBUSB_SUCCESS) {
+        libusb_close(dev_handle);
+        libusb_exit(ctx);
+        return error;
+    }
+
+    // Look for INTERFACE_XLINK
+    bool found = false;
+    unsigned char name_buf[256];
+    for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
+        if (config->interface[i].altsetting[0].bInterfaceNumber == INTERFACE_XLINK) {
+	    if(config->interface[i].altsetting[0].iInterface > 0) {
+                int r = libusb_get_string_descriptor_ascii(dev_handle,
+				config->interface[i].altsetting[0].iInterface,
+				name_buf,
+				sizeof(name_buf));
+
+		if (r > 0) {
+			name_buf[r] = '\0';
+
+			if (strcmp((char*)name_buf, INTERFACE_XLINK_NAME) == 0) {
+		            found = true;
+		            break;
+			}
+		}
+	    }
+	}
+    }
+
+    if (!found) {
+        libusb_close(dev_handle);
+        libusb_exit(ctx);
+        return LIBUSB_ERROR_NO_DEVICE;
     }
 
     /* Now we claim our ffs interfaces */
@@ -225,10 +265,24 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 
     // Look for INTERFACE_XLINK
     bool found = false;
+    unsigned char name_buf[256];
     for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
         if (config->interface[i].altsetting[0].bInterfaceNumber == INTERFACE_XLINK) {
-            found = true;
-            break;
+	    if(config->interface[i].altsetting[0].iInterface > 0) {
+                int r = libusb_get_string_descriptor_ascii(dev_handle,
+				config->interface[i].altsetting[0].iInterface,
+				name_buf,
+				sizeof(name_buf));
+
+		if (r > 0) {
+			name_buf[r] = '\0';
+
+			if (strcmp((char*)name_buf, INTERFACE_XLINK_NAME) == 0) {
+		            found = true;
+		            break;
+			}
+		}
+	    }
         }
     }
 
