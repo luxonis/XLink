@@ -25,7 +25,7 @@
 #define VENDOR_ID 0x03e7
 
 /* Product ID */
-#define PRODUCT_ID 0x1234
+#define PRODUCT_ID 0xf63b
 
 /* Interface number for ffs.xlink */
 #define INTERFACE_XLINK 1
