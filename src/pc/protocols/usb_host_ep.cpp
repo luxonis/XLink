@@ -22,10 +22,10 @@
 #include <libusb-1.0/libusb.h>
 
 /* Vendor ID */
-#define VENDOR_ID 0x03e7
+#define VENDOR_ID 0x05c6
 
 /* Product ID */
-#define PRODUCT_ID 0xf63b
+#define PRODU
 
 /* Interface number for ffs.xlink */
 #define INTERFACE_XLINK 1
@@ -64,13 +64,57 @@ int usbEpInitialize() {
     return 0;
 }
 
+libusb_device_handle *findUnusedDevice() {
+    libusb_device **devs;
+    ssize_t cnt = libusb_get_device_list(ctx, &devs);
+    if (cnt < 0) return NULL;
+
+    libusb_device_handle *handle = NULL;
+
+    for (ssize_t i = 0; i < cnt; i++) {
+        libusb_device *dev = devs[i];
+        struct libusb_device_descriptor desc;
+
+        if (libusb_get_device_descriptor(dev, &desc) != 0)
+            continue;
+
+        if (desc.idVendor != VENDOR_ID)
+            continue;
+
+        if (libusb_open(dev, &handle) != 0)
+            continue;
+
+        for (int iface = 0; iface < desc.bNumConfigurations; iface++) {
+            int detach_result = libusb_kernel_driver_active(handle, iface);
+            if (detach_result == 1) {
+                libusb_close(handle);
+                handle = NULL;
+                break; /* This interface is in use by kernel driver */
+            }
+        }
+
+        if (handle) {
+            if (libusb_claim_interface(handle, INTERFACE_XLINK) == 0) {
+                libusb_release_interface(handle, INTERFACE_XLINK);
+                break; /* Found available device */
+            } else {
+                libusb_close(handle);
+                handle = NULL;
+            }
+        }
+    }
+
+    libusb_free_device_list(devs, 1);
+    return handle;
+}
+
 int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
     int error;
     isServer = false;
 
     /* Get our device */
-    dev_handle = libusb_open_device_with_vid_pid(NULL, VENDOR_ID, PRODUCT_ID);
+    dev_handle = findUnusedDevice();
     if (dev_handle == NULL) {
 	libusb_exit(ctx);
 
@@ -98,34 +142,36 @@ int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void
         return error;
     }
 
-    // Look for INTERFACE_XLINK
+    // Try claiming interface 0 to test if it's in use
     bool found = false;
     unsigned char name_buf[256];
     for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
         if (config->interface[i].altsetting[0].bInterfaceNumber == INTERFACE_XLINK) {
 	    if(config->interface[i].altsetting[0].iInterface > 0) {
-                int r = libusb_get_string_descriptor_ascii(dev_handle,
+               	int r = libusb_get_string_descriptor_ascii(dev_handle,
 				config->interface[i].altsetting[0].iInterface,
 				name_buf,
 				sizeof(name_buf));
 
-		if (r > 0) {
-			name_buf[r] = '\0';
-
-			if (strcmp((char*)name_buf, INTERFACE_XLINK_NAME) == 0) {
-		            found = true;
-		            break;
-			}
+	        if (r > 0) {
+		    name_buf[r] = '\0';
+    		    if (strcmp((char*)name_buf, INTERFACE_XLINK_NAME) == 0) {
+	                found = true;
+	                break;
+		    }
 		}
 	    }
-	}
+        }
     }
+
+    libusb_free_config_descriptor(config);
 
     if (!found) {
         libusb_close(dev_handle);
         libusb_exit(ctx);
-        return LIBUSB_ERROR_NO_DEVICE;
-    }
+
+	return LIBUSB_ERROR_NO_DEVICE;
+    }    
 
     /* Now we claim our ffs interfaces */
     error = libusb_claim_interface(dev_handle, INTERFACE_XLINK);
@@ -240,7 +286,7 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                     unsigned int *out_amountOfFoundDevices) {
     int error = 0;
-    libusb_device_handle* dev_handle = libusb_open_device_with_vid_pid(NULL, VENDOR_ID, PRODUCT_ID);
+    libusb_device_handle* dev_handle = findUnusedDevice();
     if (dev_handle == NULL) {
         libusb_exit(ctx);
         return LIBUSB_ERROR_NO_DEVICE;
@@ -275,12 +321,12 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 				sizeof(name_buf));
 
 		if (r > 0) {
-			name_buf[r] = '\0';
+		    name_buf[r] = '\0';
 
-			if (strcmp((char*)name_buf, INTERFACE_XLINK_NAME) == 0) {
-		            found = true;
-		            break;
-			}
+		    if (strcmp((char*)name_buf, INTERFACE_XLINK_NAME) == 0) {
+		        found = true;
+	                break;
+		    }
 		}
 	    }
         }
