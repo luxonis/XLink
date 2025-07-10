@@ -644,6 +644,7 @@ XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
         case X_LINK_PLATFORM_DEVICE_BUSY:
             return X_LINK_DEVICE_ALREADY_IN_USE;
         case X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED:
+	case X_LINK_PLATFORM_USB_EP_DRIVER_NOT_LOADED:
             return X_LINK_INIT_USB_ERROR;
         case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED:
             return X_LINK_INIT_TCP_IP_ERROR;
