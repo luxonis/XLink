@@ -272,6 +272,8 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
 int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                     unsigned int *out_amountOfFoundDevices) {
+    libusb_init(&ctx);
+
     int error = 0;
     libusb_device_handle* dev_handle = findUnusedDevice();
     if (dev_handle == NULL) {
