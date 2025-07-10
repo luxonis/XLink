@@ -24,9 +24,6 @@
 /* Vendor ID */
 #define VENDOR_ID 0x05c6
 
-/* Product ID */
-#define PRODU
-
 /* Interface number for ffs.xlink */
 #define INTERFACE_XLINK 1
 #define INTERFACE_XLINK_NAME "Luxonis Communication Interface"
@@ -77,30 +74,15 @@ libusb_device_handle *findUnusedDevice() {
 
         if (libusb_get_device_descriptor(dev, &desc) != 0)
             continue;
-
+    
         if (desc.idVendor != VENDOR_ID)
             continue;
-
+	
         if (libusb_open(dev, &handle) != 0)
             continue;
-
-        for (int iface = 0; iface < desc.bNumConfigurations; iface++) {
-            int detach_result = libusb_kernel_driver_active(handle, iface);
-            if (detach_result == 1) {
-                libusb_close(handle);
-                handle = NULL;
-                break; /* This interface is in use by kernel driver */
-            }
-        }
-
+	
         if (handle) {
-            if (libusb_claim_interface(handle, INTERFACE_XLINK) == 0) {
-                libusb_release_interface(handle, INTERFACE_XLINK);
-                break; /* Found available device */
-            } else {
-                libusb_close(handle);
-                handle = NULL;
-            }
+            break; /* Found available device */
         }
     }
 
@@ -121,7 +103,7 @@ int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 	error = LIBUSB_ERROR_NO_DEVICE;
 	return error;
     }
-
+    
     /* Not strictly necessary, but it is better to use it,
      * as we're using kernel modules together with our interfaces
      */
@@ -132,7 +114,7 @@ int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
 	return error;
     }
-
+    
     libusb_device* dev = libusb_get_device(dev_handle);
     struct libusb_config_descriptor* config;
     error = libusb_get_active_config_descriptor(dev, &config);
@@ -144,24 +126,29 @@ int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     // Try claiming interface 0 to test if it's in use
     bool found = false;
+    bool foundGate = false;
     unsigned char name_buf[256];
     for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
-        if (config->interface[i].altsetting[0].bInterfaceNumber == INTERFACE_XLINK) {
-	    if(config->interface[i].altsetting[0].iInterface > 0) {
-               	int r = libusb_get_string_descriptor_ascii(dev_handle,
-				config->interface[i].altsetting[0].iInterface,
+	for (int j = 0; j < config->interface[i].num_altsetting; j++) {
+        if(config->interface[i].altsetting[j].iInterface > 0) { 
+	    int r = libusb_get_string_descriptor_ascii(dev_handle,
+				config->interface[i].altsetting[j].iInterface,
 				name_buf,
 				sizeof(name_buf));
 
-	        if (r > 0) {
-		    name_buf[r] = '\0';
-    		    if (strcmp((char*)name_buf, INTERFACE_XLINK_NAME) == 0) {
-	                found = true;
-	                break;
+	    if (r > 0) {
+	        name_buf[r] = '\0';
+    	        if (strcmp((char*)name_buf, INTERFACE_XLINK_NAME) == 0) {
+		    if(!foundGate) {
+			foundGate = true;
+		    } else {
+	            	found = true;
+	            	break;
 		    }
-		}
+	        }
 	    }
-        }
+	}
+	}
     }
 
     libusb_free_config_descriptor(config);
@@ -205,7 +192,7 @@ int usbEpPlatformServer(const char *devPathRead, const char *devPathWrite, void 
 
     usbFdRead = infd;
     usbFdWrite = outfd;
-    
+ 
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) usbFdRead);
 
     return 0;
