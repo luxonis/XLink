@@ -99,6 +99,19 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
 	    return getUSBEPDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 
         case X_LINK_ANY_PROTOCOL:
+	    if(XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
+		numFoundDevices = 0;
+	        USBEP_rc = getUSBEPDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
+                *out_amountOfFoundDevices += numFoundDevices;
+                out_foundDevices += numFoundDevices;
+                // Found enough devices, return
+                if (numFoundDevices >= sizeFoundDevices) {
+                    return X_LINK_PLATFORM_SUCCESS;
+                } else {
+                    sizeFoundDevices -= numFoundDevices;
+                }
+	    }
+
             // If USB protocol is initialized
             if(XLinkIsProtocolInitialized(X_LINK_USB_VSC)) {
                 // Find first correct USB Device
@@ -160,20 +173,6 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
                     sizeFoundDevices -= numFoundDevices;
                 }
             }
-
-            if(XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
-		numFoundDevices = 0;
-	        USBEP_rc = getUSBEPDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
-                *out_amountOfFoundDevices += numFoundDevices;
-                out_foundDevices += numFoundDevices;
-                // Found enough devices, return
-                if (numFoundDevices >= sizeFoundDevices) {
-                    return X_LINK_PLATFORM_SUCCESS;
-                } else {
-                    sizeFoundDevices -= numFoundDevices;
-                }
-	    }
-
 
             return X_LINK_PLATFORM_SUCCESS;
 
