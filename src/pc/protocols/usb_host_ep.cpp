@@ -272,19 +272,15 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
 int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                     unsigned int *out_amountOfFoundDevices) {
-    libusb_init(&ctx);
-
     int error = 0;
     libusb_device_handle* dev_handle = findUnusedDevice();
     if (dev_handle == NULL) {
-        libusb_exit(ctx);
         return LIBUSB_ERROR_NO_DEVICE;
     }
 
     error = libusb_set_auto_detach_kernel_driver(dev_handle, 1);
     if (error != LIBUSB_SUCCESS) {
         libusb_close(dev_handle);
-        libusb_exit(ctx);
         return error;
     }
 
@@ -294,7 +290,6 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
     error = libusb_get_active_config_descriptor(dev, &config);
     if (error != LIBUSB_SUCCESS) {
         libusb_close(dev_handle);
-        libusb_exit(ctx);
         return error;
     }
 
@@ -325,7 +320,6 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 
     if (!found) {
         libusb_close(dev_handle);
-        libusb_exit(ctx);
 
 	*out_amountOfFoundDevices = 0;
 
@@ -347,7 +341,6 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
     *out_amountOfFoundDevices = numDevicesFound;
 
     libusb_close(dev_handle);
-    libusb_exit(ctx);
 
     return X_LINK_PLATFORM_SUCCESS;
 }
