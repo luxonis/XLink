@@ -427,6 +427,9 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
  */
 XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int timeoutMs);
 
+XLinkError_t XLinkGateWriteData(streamId_t const streamId, const uint8_t* buffer, int size);
+XLinkError_t XLinkGateReadData(streamId_t const streamId, streamPacketDesc_t* const packet);
+
 // ------------------------------------
 // Device streams management. End.
 // ------------------------------------

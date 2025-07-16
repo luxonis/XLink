@@ -533,36 +533,53 @@ XLinkError_t XLinkGateWriteData(streamId_t const streamId, const uint8_t* buffer
     return XLinkWriteData_(streamId, buffer, size, NULL);
 }
 
-XLinkError_t XLinkGateReadData_(streamId_t streamId, const uint8_t* buffer,
-                            int size, XLinkTimespec* outTSend)
+XLinkError_t XLinkGateReadData_(streamId_t streamId, streamPacketDesc_t* const packet, XLinkTimespec* outTSend)
 {
-    XLINK_RET_IF(buffer == NULL);
+    XLINK_RET_IF(packet == NULL);
 
-    float opTime = 0.0f;
-    xLinkDesc_t* link = NULL;
+    float opTime = 0;
+    xLinkDesc_t *link = NULL;
     XLINK_RET_IF(getLinkByStreamId(streamId, &link));
     streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
 
     xLinkEvent_t event = {0};
-    XLINK_INIT_EVENT(event, streamIdOnly, XLINK_GATE_READ_REQ,
-        size,(void*)buffer, link->deviceHandle);
+    XLINK_INIT_EVENT(event, streamIdOnly, XLINK_READ_REQ,
+                     0, NULL, link->deviceHandle);
+    event.header.flags.bitField.moveSemantic = 1;
+    XLINK_RET_IF(addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT));
 
-    XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
+    if (!event.data)
+    {
+        return X_LINK_ERROR;
+    }
+    *packet = *(streamPacketDesc_t *)event.data;
 
-    if( glHandler->profEnable) {
-        glHandler->profilingData.totalReadBytes += size;
+    // free the allocation from movePacketFromStream()
+    // done within this same XLink module so the same C runtime is used
+    free(event.data);
+
+    if (glHandler->profEnable)
+    {
+        glHandler->profilingData.totalReadBytes += packet->length;
         glHandler->profilingData.totalReadTime += opTime;
     }
-    link->profilingData.totalReadBytes += size;
-    link->profilingData.totalReadTime += size;
+    link->profilingData.totalReadBytes += packet->length;
+    link->profilingData.totalReadTime += opTime;
 
-    return X_LINK_SUCCESS;
+
+    const XLinkError_t retVal = XLinkReleaseData(streamId);
+    if (retVal != X_LINK_SUCCESS) {
+        // severe error; deallocate here as the caller might forget to dealloc on errors; or be less able to manage
+        XLinkPlatformDeallocateData(packet->data, ALIGN_UP_INT32((int32_t)packet->length, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
+        packet->data = NULL;
+        packet->length = 0;
+    }
+    return retVal;
 }
 
-XLinkError_t XLinkGateReadData(streamId_t const streamId, const uint8_t* buffer,
-                            int size)
+XLinkError_t XLinkGateReadData(streamId_t const streamId, streamPacketDesc_t* const packet)
 {
-    return XLinkGateReadData_(streamId, buffer, size, NULL);
+    return XLinkGateReadData_(streamId, packet, NULL);
 }
 
 // ------------------------------------
