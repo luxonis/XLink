@@ -520,13 +520,9 @@ char* TypeToStr(int type)
         case XLINK_STATIC_RESP_LAST:  return "XLINK_STATIC_RESP_LAST";
         case XLINK_READ_REL_SPEC_REQ:  return "XLINK_READ_REL_SPEC_REQ";
         case XLINK_WRITE_FD_REQ:     return "XLINK_WRITE_FD_REQ";
-	case XLINK_GATE_WRITE_REQ:   return "XLINK_GATE_WRITE_REQ";
-	case XLINK_GATE_READ_REQ:   return "XLINK_GATE_READ_REQ";
         case XLINK_REQUEST_LAST:     return "XLINK_REQUEST_LAST";
         case XLINK_READ_REL_SPEC_RESP:  return "XLINK_READ_REL_SPEC_RESP";
         case XLINK_WRITE_FD_RESP:     return "XLINK_WRITE_FD_REQ";
-	case XLINK_GATE_WRITE_RESP:   return "XLINK_GATE_WRITE_RESP";
-	case XLINK_GATE_READ_RESP:   return "XLINK_GATE_READ_RESP";
         case XLINK_RESP_LAST:  return "XLINK_RESP_LAST";
 
         default:

@@ -335,12 +335,6 @@ int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
             mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
             return rc;
         }   
-    } else if (event->header.type == XLINK_GATE_WRITE_REQ) {
-        rc = XLinkPlatformGateWrite(&event->deviceHandle, event->data, event->header.size);
-	if(rc < 0) {
-            mvLog(MVLOG_ERROR,"Write failed %d\n", rc);
-            return rc;
-        }   
     }
 
     return 0;
@@ -392,7 +386,6 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response,
     switch (event->header.type){
         case XLINK_WRITE_REQ:
 	case XLINK_WRITE_FD_REQ:
-	case XLINK_GATE_WRITE_REQ:
         {
             //in case local tries to write after it issues close (writeSize is zero)
             stream = getStreamById(event->deviceHandle.xLinkFD, event->header.streamId);
@@ -430,7 +423,6 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response,
             break;
         }
         case XLINK_READ_REQ:
-	case XLINK_GATE_READ_REQ:
         {
             stream = getStreamById(event->deviceHandle.xLinkFD, event->header.streamId);
             if(!stream) {
@@ -604,28 +596,8 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                     (int)response->header.streamId, (int)xxx);
             }
             break;
-	case XLINK_GATE_WRITE_REQ:
-            {
-                //let remote write immediately as we have a local buffer for the data
-                response->header.type = XLINK_GATE_WRITE_RESP;
-                response->header.size = event->header.size;
-                response->header.streamId = event->header.streamId;
-                response->deviceHandle = event->deviceHandle;
-                XLINK_EVENT_ACKNOWLEDGE(response);
-
-                // we got some data. We should unblock a blocked read
-                int xxx = DispatcherUnblockEvent(-1,
-                                                XLINK_GATE_READ_REQ,
-                                                response->header.streamId,
-                                                event->deviceHandle.xLinkFD);
-                (void) xxx;
-                mvLog(MVLOG_DEBUG,"unblocked from stream %d %d\n",
-                    (int)response->header.streamId, (int)xxx);
-            }
         case XLINK_READ_REQ:
             break;
-	case XLINK_GATE_READ_REQ:
-	    break;
         case XLINK_READ_REL_SPEC_REQ:
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->header.type = XLINK_READ_REL_SPEC_RESP;
@@ -769,14 +741,10 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             break;
         case XLINK_WRITE_RESP:
 	    break;
-	case XLINK_GATE_WRITE_RESP:
-	    break;
 	case XLINK_WRITE_FD_RESP:
             break;
         case XLINK_READ_RESP:
             break;
-	case XLINK_GATE_READ_RESP:
-	    break;
         case XLINK_READ_REL_RESP:
             break;
         case XLINK_READ_REL_SPEC_RESP:
