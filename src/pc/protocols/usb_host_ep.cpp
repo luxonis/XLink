@@ -318,7 +318,7 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
     out_foundDevices[numDevicesFound].status = X_LINK_SUCCESS;
     out_foundDevices[numDevicesFound].platform = X_LINK_RVC4;
     out_foundDevices[numDevicesFound].protocol = X_LINK_USB_EP;
-    out_foundDevices[numDevicesFound].state = X_LINK_BOOTED;
+    out_foundDevices[numDevicesFound].state = X_LINK_GATE;
     memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
     strcpy(out_foundDevices[numDevicesFound].name, "USB EP");
     memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
