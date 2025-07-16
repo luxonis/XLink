@@ -160,34 +160,22 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
     }
 }
 
-int XLinkPlatformGateWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
+int XLinkPlatformGateWrite(void *data, int size)
 {
-    if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+    if(!XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
     }
 
-    switch (deviceHandle->protocol) {
-        case X_LINK_USB_EP:
-	    return usbEpPlatformGateWrite(data, size);
-
-        default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
-    }
+    return usbEpPlatformGateWrite(data, size);
 }
 
-int XLinkPlatformGateRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
+int XLinkPlatformGateRead(void *data, int size)
 {
-    if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+    if(!XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
     }
 
-    switch (deviceHandle->protocol) {
-        case X_LINK_USB_EP:
-	    return usbEpPlatformGateRead(data, size);
-
-        default:
-            return X_LINK_PLATFORM_INVALID_PARAMETERS;
-    }
+    return usbEpPlatformGateRead(data, size);
 }
 
 
