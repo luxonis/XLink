@@ -12,8 +12,8 @@
 
 // std
 #include <mutex>
-#include <string>
 #include <cstring>
+#include <string>
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -23,6 +23,10 @@
 
 /* Vendor ID */
 #define VENDOR_ID 0x05c6
+#define PRODUCT_ID 0x4321
+
+/* Interface number for ffs.gate */
+#define INTERFACE_GATE 0
 
 /* Interface number for ffs.xlink */
 #define INTERFACE_XLINK 1
@@ -61,42 +65,13 @@ int usbEpInitialize() {
     return 0;
 }
 
-libusb_device_handle *findUnusedDevice() {
-    libusb_device **devs;
-    ssize_t cnt = libusb_get_device_list(ctx, &devs);
-    if (cnt < 0) return NULL;
-
-    libusb_device_handle *handle = NULL;
-
-    for (ssize_t i = 0; i < cnt; i++) {
-        libusb_device *dev = devs[i];
-        struct libusb_device_descriptor desc;
-
-        if (libusb_get_device_descriptor(dev, &desc) != 0)
-            continue;
-    
-        if (desc.idVendor != VENDOR_ID)
-            continue;
-	
-        if (libusb_open(dev, &handle) != 0)
-            continue;
-	
-        if (handle) {
-            break; /* Found available device */
-        }
-    }
-
-    libusb_free_device_list(devs, 1);
-    return handle;
-}
-
 int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
     int error;
     isServer = false;
 
     /* Get our device */
-    dev_handle = findUnusedDevice();
+    dev_handle = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
     if (dev_handle == NULL) {
 	libusb_exit(ctx);
 
@@ -273,7 +248,7 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                     unsigned int *out_amountOfFoundDevices) {
     int error = 0;
-    libusb_device_handle* dev_handle = findUnusedDevice();
+    libusb_device_handle *dev_handle = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
     if (dev_handle == NULL) {
         return LIBUSB_ERROR_NO_DEVICE;
     }
@@ -326,6 +301,18 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 	return X_LINK_PLATFORM_SUCCESS;
     }           
 
+    // Get device descriptor
+    struct libusb_device_descriptor desc;
+    int r = libusb_get_device_descriptor(dev, &desc);
+    if (r < 0) {
+	return X_LINK_PLATFORM_ERROR;
+    }
+
+    // Get device mxid
+    char mxId[32] = {'\0'};
+        
+    r = libusb_get_string_descriptor_ascii(dev_handle, desc.iSerialNumber, ((uint8_t*) mxId), 32);
+
     int numDevicesFound = 0;
     // Everything passed, fillout details of found device
     out_foundDevices[numDevicesFound].status = X_LINK_SUCCESS;
@@ -335,6 +322,7 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
     memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
     strcpy(out_foundDevices[numDevicesFound].name, "USB EP");
     memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
+    strcpy(out_foundDevices[numDevicesFound].mxid, mxId);
     numDevicesFound++;
 
     // Write the number of found devices
@@ -346,129 +334,158 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 }
 
 
-/// TODO - use this for device search.
-xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
-                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                     unsigned int *out_amountOfFoundDevices) {
+int usbEpPlatformGateRead(void *data, int size)
+{
+    int rc = 0;
 
-    // Also protects usb_mx_id_cache
-    std::lock_guard<std::mutex> l(mutex);
+    /* Get our device */
+    libusb_device_handle *dev_handle = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
+    if (dev_handle == NULL) {
+	libusb_exit(ctx);
 
-    // No RVC3/4 devices on USB now, return 0
-    if(in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4){
-        *out_amountOfFoundDevices = 0;
-        return X_LINK_PLATFORM_SUCCESS;
+	rc = LIBUSB_ERROR_NO_DEVICE;
+	return rc;
+    }
+    
+    /* Not strictly necessary, but it is better to use it,
+     * as we're using kernel modules together with our interfaces
+     */
+    rc  = libusb_set_auto_detach_kernel_driver(dev_handle, 1);
+    if (rc != LIBUSB_SUCCESS) {
+        libusb_close(dev_handle);
+	libusb_exit(ctx);
+
+	return rc;
+    }
+    
+    libusb_device* dev = libusb_get_device(dev_handle);
+    struct libusb_config_descriptor* config;
+    rc = libusb_get_active_config_descriptor(dev, &config);
+    if (rc != LIBUSB_SUCCESS) {
+        libusb_close(dev_handle);
+        libusb_exit(ctx);
+        return rc;
     }
 
+    // Try claiming interface 0 to test if it's in use
+    bool found = false;
+    unsigned char name_buf[256];
+    for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
+	for (int j = 0; j < config->interface[i].num_altsetting; j++) {
+        if(config->interface[i].altsetting[j].iInterface > 0) { 
+	    int r = libusb_get_string_descriptor_ascii(dev_handle,
+				config->interface[i].altsetting[j].iInterface,
+				name_buf,
+				sizeof(name_buf));
 
-    // Get list of usb devices
-    static libusb_device **devs = NULL;
-    auto numDevices = libusb_get_device_list(context, &devs);
-    if(numDevices < 0) {
-        mvLog(MVLOG_DEBUG, "Unable to get USB device list: %s", xlink_libusb_strerror(static_cast<int>(numDevices)));
-        return X_LINK_PLATFORM_ERROR;
+	    if (r > 0) {
+	        name_buf[r] = '\0';
+    	        if (strcmp((char*)name_buf, INTERFACE_XLINK_NAME) == 0) {
+	            found = true;
+	        }
+	    }
+	}
+	}
     }
 
-    /// NOT NEEDED
-    // // Initialize mx id cache
-    // usb_mx_id_cache_init();
+    libusb_free_config_descriptor(config);
 
-    // Loop over all usb devices, increase count only if myriad device
-    int numDevicesFound = 0;
-    for(ssize_t i = 0; i < numDevices; i++) {
-        if(devs[i] == nullptr) continue;
+    if (!found) {
+        libusb_close(dev_handle);
+        libusb_exit(ctx);
 
-        if(numDevicesFound >= sizeFoundDevices){
-            break;
-        }
+	return LIBUSB_ERROR_NO_DEVICE;
+    }    
 
-        // Get device descriptor
-        struct libusb_device_descriptor desc;
-        auto res = libusb_get_device_descriptor(devs[i], &desc);
-        if (res < 0) {
-            mvLog(MVLOG_DEBUG, "Unable to get USB device descriptor: %s", xlink_libusb_strerror(res));
-            continue;
-        }
+    /* Now we claim our ffs interfaces */
+    rc = libusb_claim_interface(dev_handle, INTERFACE_GATE);
+    if (rc != LIBUSB_SUCCESS) {
+	libusb_exit(ctx);
 
-        /// TODO - modify to use updated VID/PID
-        VidPid vidpid{desc.idVendor, desc.idProduct};
-
-        if(vidPidToDeviceState.count(vidpid) > 0){
-            // Device found
-
-            // Device status
-            XLinkError_t status = X_LINK_SUCCESS;
-
-            // Get device state
-            XLinkDeviceState_t state = vidPidToDeviceState.at(vidpid);
-            // Check if compare with state
-            if(in_deviceRequirements.state != X_LINK_ANY_STATE && state != in_deviceRequirements.state){
-                // Current device doesn't match the "filter"
-                continue;
-            }
-
-            // Get device name
-            std::string devicePath = getLibusbDevicePath(devs[i]);
-            // Check if compare with name, if name is only a hint, don't filter
-
-            if(!in_deviceRequirements.nameHintOnly){
-                std::string requiredName(in_deviceRequirements.name);
-                if(requiredName.length() > 0 && requiredName != devicePath){
-                    // Current device doesn't match the "filter"
-                    continue;
-                }
-            }
-
-            // Get device mxid
-            std::string mxId;
-        
-            libusb_error rc = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, ((uint8_t*) mxId), sizeof(mxId)));
-                            
-            switch (rc)
-            {
-            case LIBUSB_SUCCESS:
-                status = X_LINK_SUCCESS;
-                break;
-            case LIBUSB_ERROR_ACCESS:
-                status = X_LINK_INSUFFICIENT_PERMISSIONS;
-                break;
-            case LIBUSB_ERROR_BUSY:
-                status = X_LINK_DEVICE_ALREADY_IN_USE;
-                break;
-            default:
-                status = X_LINK_ERROR;
-                break;
-            }
-
-            // compare with MxId
-            std::string requiredMxId(in_deviceRequirements.mxid);
-            if(requiredMxId.length() > 0 && requiredMxId != mxId){
-                // Current device doesn't match the "filter"
-                continue;
-            }
-
-            // TODO(themarpe) - check platform
-
-            // Everything passed, fillout details of found device
-            out_foundDevices[numDevicesFound].status = status;
-            out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
-            out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
-            out_foundDevices[numDevicesFound].state = state;
-            memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
-            strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
-            memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
-            strncpy(out_foundDevices[numDevicesFound].mxid, mxId.c_str(), sizeof(out_foundDevices[numDevicesFound].mxid));
-            numDevicesFound++;
-
-        }
-
+	return rc;
     }
 
-    // Free list of usb devices
-    libusb_free_device_list(devs, 1);
+    rc = libusb_bulk_transfer(dev_handle, ENDPOINT_IN_BASE, (unsigned char*)data, size, &rc, TIMEOUT);
+    
+    libusb_close(dev_handle);
 
-    // Write the number of found devices
-    *out_amountOfFoundDevices = numDevicesFound;
+    return rc;
+}
 
-    return X_LINK_PLATFORM_SUCCESS;
+int usbEpPlatformGateWrite(void *data, int size)
+{
+    int rc = 0;
+
+    /* Get our device */
+    libusb_device_handle *dev_handle = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
+    if (dev_handle == NULL) {
+	libusb_exit(ctx);
+
+	rc = LIBUSB_ERROR_NO_DEVICE;
+	return rc;
+    }
+    
+    /* Not strictly necessary, but it is better to use it,
+     * as we're using kernel modules together with our interfaces
+     */
+    rc  = libusb_set_auto_detach_kernel_driver(dev_handle, 1);
+    if (rc != LIBUSB_SUCCESS) {
+        libusb_close(dev_handle);
+	libusb_exit(ctx);
+
+	return rc;
+    }
+    
+    libusb_device* dev = libusb_get_device(dev_handle);
+    struct libusb_config_descriptor* config;
+    rc = libusb_get_active_config_descriptor(dev, &config);
+    if (rc != LIBUSB_SUCCESS) {
+        libusb_close(dev_handle);
+        libusb_exit(ctx);
+        return rc;
+    }
+
+    // Try claiming interface 0 to test if it's in use
+    bool found = false;
+    unsigned char name_buf[256];
+    for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
+	for (int j = 0; j < config->interface[i].num_altsetting; j++) {
+        if(config->interface[i].altsetting[j].iInterface > 0) { 
+	    int r = libusb_get_string_descriptor_ascii(dev_handle,
+				config->interface[i].altsetting[j].iInterface,
+				name_buf,
+				sizeof(name_buf));
+
+	    if (r > 0) {
+	        name_buf[r] = '\0';
+    	        if (strcmp((char*)name_buf, INTERFACE_XLINK_NAME) == 0) {
+	            found = true;
+	        }
+	    }
+	}
+	}
+    }
+
+    libusb_free_config_descriptor(config);
+
+    if (!found) {
+        libusb_close(dev_handle);
+        libusb_exit(ctx);
+
+	return LIBUSB_ERROR_NO_DEVICE;
+    }    
+
+    /* Now we claim our ffs interfaces */
+    rc = libusb_claim_interface(dev_handle, INTERFACE_GATE);
+    if (rc != LIBUSB_SUCCESS) {
+	libusb_exit(ctx);
+
+	return rc;
+    }
+
+    rc = libusb_bulk_transfer(dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)data, size, &rc, TIMEOUT);
+    
+    libusb_close(dev_handle);
+
+    return rc;
 }

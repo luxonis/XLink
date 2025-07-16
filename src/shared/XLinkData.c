@@ -501,6 +501,70 @@ XLinkError_t XLinkGetFillLevel(streamId_t const streamId, int isRemote, int* fil
     return X_LINK_SUCCESS;
 }
 
+XLinkError_t XLinkGateWriteData_(streamId_t streamId, const uint8_t* buffer,
+                            int size, XLinkTimespec* outTSend)
+{
+    XLINK_RET_IF(buffer == NULL);
+
+    float opTime = 0.0f;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
+
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamIdOnly, XLINK_GATE_WRITE_REQ,
+        size,(void*)buffer, link->deviceHandle);
+
+    XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
+
+    if( glHandler->profEnable) {
+        glHandler->profilingData.totalWriteBytes += size;
+        glHandler->profilingData.totalWriteTime += opTime;
+    }
+    link->profilingData.totalWriteBytes += size;
+    link->profilingData.totalWriteTime += size;
+
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkGateWriteData(streamId_t const streamId, const uint8_t* buffer,
+                            int size)
+{
+    return XLinkWriteData_(streamId, buffer, size, NULL);
+}
+
+XLinkError_t XLinkGateReadData_(streamId_t streamId, const uint8_t* buffer,
+                            int size, XLinkTimespec* outTSend)
+{
+    XLINK_RET_IF(buffer == NULL);
+
+    float opTime = 0.0f;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
+
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamIdOnly, XLINK_GATE_READ_REQ,
+        size,(void*)buffer, link->deviceHandle);
+
+    XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
+
+    if( glHandler->profEnable) {
+        glHandler->profilingData.totalReadBytes += size;
+        glHandler->profilingData.totalReadTime += opTime;
+    }
+    link->profilingData.totalReadBytes += size;
+    link->profilingData.totalReadTime += size;
+
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkGateReadData(streamId_t const streamId, const uint8_t* buffer,
+                            int size)
+{
+    return XLinkGateReadData_(streamId, buffer, size, NULL);
+}
+
 // ------------------------------------
 // Helpers declaration. Begin.
 // ------------------------------------

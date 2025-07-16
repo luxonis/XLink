@@ -116,10 +116,15 @@ typedef enum
     
     XLINK_READ_REL_SPEC_REQ,
     XLINK_WRITE_FD_REQ, // only for the shared mem protocol
+    XLINK_GATE_WRITE_REQ,
+    XLINK_GATE_READ_REQ,
     XLINK_REQUEST_LAST,
     
     XLINK_READ_REL_SPEC_RESP,
     XLINK_WRITE_FD_RESP, // only for the shared mem protocol
+    XLINK_GATE_WRITE_RESP,
+    XLINK_GATE_READ_RESP,
+
     XLINK_RESP_LAST,
 } xLinkEventType_t;
 
