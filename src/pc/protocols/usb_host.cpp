@@ -475,6 +475,14 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
             libusb_close(handle);
         }
 
+        // On windows, if libusb_rc is LIBUSB_ERROR_ACCESS and state is X_LINK_BOOTED, some other process is using the device
+        // In this case, we want the libusb error to be LIBUSB_ERROR_BUSY
+        #ifdef _WIN32
+        if(libusb_rc == LIBUSB_ERROR_ACCESS && state == X_LINK_BOOTED) {
+            libusb_rc = LIBUSB_ERROR_BUSY;
+        }
+        #endif
+
         // if mx_id couldn't be retrieved, exit by returning error
         if(libusb_rc != 0){
             return (libusb_error) libusb_rc;
@@ -513,6 +521,28 @@ static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libus
 
     if((res = libusb_open(dev, &h)) < 0)
     {
+
+        // On windows, if libusb_rc is LIBUSB_ERROR_ACCESS and state is X_LINK_BOOTED, some other process is using the device
+        // In this case, we want the libusb error to be LIBUSB_ERROR_BUSY
+        #ifdef _WIN32
+        if(res == LIBUSB_ERROR_ACCESS) {
+
+            struct libusb_device_descriptor desc;
+            auto res2 = libusb_get_device_descriptor(dev, &desc);
+            if (res2 < 0) {
+                mvLog(MVLOG_DEBUG, "Unable to get USB device descriptor: %s", xlink_libusb_strerror(res2));
+                return (libusb_error) res2;
+            }
+
+            VidPid vidpid{desc.idVendor, desc.idProduct};
+            auto state = vidPidToDeviceState.at(vidpid);
+
+            if(state == X_LINK_BOOTED) {
+                res = LIBUSB_ERROR_BUSY;
+            }
+        }
+        #endif
+
         mvLog(MVLOG_DEBUG, "cannot open device: %s\n", xlink_libusb_strerror(res));
         return (libusb_error) res;
     }
