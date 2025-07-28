@@ -1,6 +1,15 @@
 // project
 #define MVLOG_UNIT_NAME xLinkUsb
 
+// std
+#include <mutex>
+#include <unordered_map>
+#include <algorithm>
+#include <string>
+#include <thread>
+#include <chrono>
+#include <cstring>
+
 // libraries
 #ifdef XLINK_LIBUSB_LOCAL
 #include <libusb.h>
@@ -14,15 +23,6 @@
 #include "usb_mx_id.h"
 #include "usb_host.h"
 #include "../PlatformDeviceFd.h"
-
-// std
-#include <mutex>
-#include <unordered_map>
-#include <algorithm>
-#include <string>
-#include <thread>
-#include <chrono>
-#include <cstring>
 
 constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
