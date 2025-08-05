@@ -307,6 +307,15 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer, in
 XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int size, XLinkTimespec* outTSend);
 
 /**
+ * @brief Sends/Receives a message to Gate via USB
+ * @param[in] data - Data to be transmitted/collected
+ * @param[in] size - The data size
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkGateWrite(void *data, int size);
+XLinkError_t XLinkGateRead(void *data, int size);
+
+/**
  * @brief Sends a package to initiate the writing of a file descriptor
  * @warning Actual size of the written data is ALIGN_UP(size, 64)
  * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
