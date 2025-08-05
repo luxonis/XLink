@@ -15,9 +15,11 @@
 #include <cstring>
 #include <string>
 
+#if defined(__unix__)
 #include <unistd.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#endif
 
 #include <libusb-1.0/libusb.h>
 
@@ -158,6 +160,7 @@ int usbEpPlatformServer(const char *devPathRead, const char *devPathWrite, void 
 {
     isServer = true;
 
+#if defined(__unix__)
     int outfd = open("/dev/usb-ffs/xlink/ep1", O_WRONLY);
     int infd = open("/dev/usb-ffs/xlink/ep2", O_RDONLY);
 
@@ -169,6 +172,7 @@ int usbEpPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     usbFdWrite = outfd;
  
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) usbFdRead);
+#endif
 
     return 0;
 }
@@ -179,6 +183,7 @@ int usbEpPlatformClose(void *fdKey)
     int error;
 
     if (isServer) {
+#if defined(__unix__)
 	if (usbFdRead != -1){
 	    close(usbFdRead);
 	    usbFdRead = -1;
@@ -188,6 +193,7 @@ int usbEpPlatformClose(void *fdKey)
 	    close(usbFdWrite);
 	    usbFdWrite = -1;
 	}
+#endif
     } else {
 	error = libusb_release_interface(dev_handle, INTERFACE_XLINK);
 	if (error != LIBUSB_SUCCESS) {
@@ -212,12 +218,14 @@ int usbEpPlatformRead(void *fdKey, void *data, int size)
     int rc = 0;
 
     if (isServer) {
+#if defined(__unix__)
 	if(usbFdRead < 0)
 	{
 	    return -1;
 	}
 
 	rc = read(usbFdRead, data, size);
+#endif
     } else {
 	rc = libusb_bulk_transfer(dev_handle, usbFdRead, (unsigned char*)data, size, &rc, TIMEOUT);
     }
@@ -230,13 +238,14 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
     int rc = 0;
 
     if (isServer) {
+#if defined(__unix__)
 	if(usbFdWrite < 0)
 	{
 	    return -1;
 	}
 
 	rc = write(usbFdWrite, data, size);
-
+#endif
     } else {
 	rc = libusb_bulk_transfer(dev_handle, usbFdWrite, (unsigned char*)data, size, &rc, TIMEOUT);
     }
