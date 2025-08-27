@@ -14,11 +14,6 @@ project(${TARGET_NAME} LANGUAGES C CXX)
 
 set(PROJECT_EXPORT_GROUP "${PROJECT_NAME}Targets")
 
-# Set default installation directory
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "Installation Directory" FORCE)
-endif()
-
 # Compile with USB protocol capabilities
 option(XLINK_ENABLE_LIBUSB "Enable USB protocol which requires libusb library" ON)
 # Build examples
