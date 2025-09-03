@@ -21,6 +21,9 @@
 #include <fcntl.h>
 #endif
 
+#include <stdint.h>
+#include <vector>
+
 #include <libusb-1.0/libusb.h>
 
 /* Vendor ID */
@@ -322,12 +325,51 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
         
     r = libusb_get_string_descriptor_ascii(dev_handle, desc.iSerialNumber, ((uint8_t*) mxId), 32);
 
+
+    /* Now we claim our ffs interfaces */
+    r = libusb_claim_interface(dev_handle, INTERFACE_GATE);
+    if (r != LIBUSB_SUCCESS) {
+	libusb_exit(ctx);
+
+	return r;
+    }
+
+    struct USBRequest_t {
+        uint32_t RequestNum;
+        uint32_t RequestSize;
+    } request = {
+	.RequestNum = 12,
+	.RequestSize = 0,
+    };
+
+    r = libusb_bulk_transfer(dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)&request, sizeof(request), &r, TIMEOUT);
+    r = libusb_bulk_transfer(dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&request, sizeof(request), &r, TIMEOUT);
+
+    std::vector<uint8_t> respBuffer;
+    respBuffer.reserve(request.RequestSize + 1);
+    r = libusb_bulk_transfer(dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&respBuffer[0], request.RequestSize, &r, TIMEOUT);
+    respBuffer[request.RequestSize]= '\0';
+
+    size_t strLen = strlen((const char*)&respBuffer[0]);
+    char string[strLen + 1];
+    strcpy(string, (const char*)&respBuffer[0]);
+    string[strLen] = '\0';
+
+    struct GateResponse_t {
+	uint32_t state;
+	uint32_t protocol;
+	uint32_t platform;
+    } response;
+
+    memcpy(&response, &respBuffer[strLen], request.RequestSize - strLen - 1);
+    
+    libusb_close(dev_handle);
     int numDevicesFound = 0;
     // Everything passed, fillout details of found device
     out_foundDevices[numDevicesFound].status = X_LINK_SUCCESS;
-    out_foundDevices[numDevicesFound].platform = X_LINK_RVC4;
+    out_foundDevices[numDevicesFound].platform = (XLinkPlatform_t)response.platform;
     out_foundDevices[numDevicesFound].protocol = X_LINK_USB_EP;
-    out_foundDevices[numDevicesFound].state = X_LINK_GATE;
+    out_foundDevices[numDevicesFound].state = (XLinkDeviceState_t)response.state;
     memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
     strcpy(out_foundDevices[numDevicesFound].name, "USB EP");
     memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
