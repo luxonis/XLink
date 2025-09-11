@@ -361,7 +361,7 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 	uint32_t platform;
     } response;
 
-    memcpy(&response, &respBuffer[strLen], request.RequestSize - strLen - 1);
+    memcpy(&response, &respBuffer[strLen], sizeof(response));
     
     libusb_close(dev_handle);
     int numDevicesFound = 0;
