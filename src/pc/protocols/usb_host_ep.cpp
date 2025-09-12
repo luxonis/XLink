@@ -37,7 +37,7 @@
 #define INTERFACE_XLINK 1
 #define INTERFACE_XLINK_NAME "Luxonis Communication Interface"
 
-/* Base ndpoint address used for output */
+/* Base endpoint address used for output */
 #define ENDPOINT_OUT_BASE 0x01
 
 /* Base endpoint address used for input */
@@ -342,12 +342,17 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 	.RequestSize = 0,
     };
 
-    r = libusb_bulk_transfer(dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)&request, sizeof(request), &r, TIMEOUT);
-    r = libusb_bulk_transfer(dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&request, sizeof(request), &r, TIMEOUT);
+    int transferred;
+    r = libusb_bulk_transfer(dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)&request, sizeof(request), &transferred, TIMEOUT);
+    r = libusb_bulk_transfer(dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&request, sizeof(request), &transferred, TIMEOUT);
+
+    if (request.RequestNum != 0) {
+    	return X_LINK_PLATFORM_ERROR;
+    }
 
     std::vector<uint8_t> respBuffer;
     respBuffer.reserve(request.RequestSize + 1);
-    r = libusb_bulk_transfer(dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&respBuffer[0], request.RequestSize, &r, TIMEOUT);
+    r = libusb_bulk_transfer(dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&respBuffer[0], request.RequestSize, &transferred, TIMEOUT);
     respBuffer[request.RequestSize]= '\0';
 
     size_t strLen = strlen((const char*)&respBuffer[0]);
