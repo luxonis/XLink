@@ -53,7 +53,8 @@
 #define ENDPOINT_IN_OFFSET 1
 
 /* Transfer timeout */
-#define TIMEOUT 2000
+//#define TIMEOUT 2000
+#define TIMEOUT 0
 
 static int usbFdRead, usbFdWrite;
 static bool isServer;
@@ -260,23 +261,23 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                     unsigned int *out_amountOfFoundDevices) {
     int error = 0;
-    libusb_device_handle *dev_handle = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
-    if (dev_handle == NULL) {
+    libusb_device_handle *gate_dev_handle = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
+    if (gate_dev_handle == NULL) {
         return LIBUSB_ERROR_NO_DEVICE;
     }
 
-    error = libusb_set_auto_detach_kernel_driver(dev_handle, 1);
+    error = libusb_set_auto_detach_kernel_driver(gate_dev_handle, 1);
     if (error != LIBUSB_SUCCESS) {
-        libusb_close(dev_handle);
+        libusb_close(gate_dev_handle);
         return error;
     }
 
     // Check if the interface exists
-    libusb_device* dev = libusb_get_device(dev_handle);
+    libusb_device* dev = libusb_get_device(gate_dev_handle);
     struct libusb_config_descriptor* config;
     error = libusb_get_active_config_descriptor(dev, &config);
     if (error != LIBUSB_SUCCESS) {
-        libusb_close(dev_handle);
+        libusb_close(gate_dev_handle);
         return error;
     }
 
@@ -286,7 +287,7 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
     for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
         if (config->interface[i].altsetting[0].bInterfaceNumber == INTERFACE_XLINK) {
 	    if(config->interface[i].altsetting[0].iInterface > 0) {
-                int r = libusb_get_string_descriptor_ascii(dev_handle,
+                int r = libusb_get_string_descriptor_ascii(gate_dev_handle,
 				config->interface[i].altsetting[0].iInterface,
 				name_buf,
 				sizeof(name_buf));
@@ -306,7 +307,7 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
     libusb_free_config_descriptor(config);
 
     if (!found) {
-        libusb_close(dev_handle);
+        libusb_close(gate_dev_handle);
 
 	*out_amountOfFoundDevices = 0;
 
@@ -323,11 +324,11 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
     // Get device mxid
     char mxId[32] = {'\0'};
         
-    r = libusb_get_string_descriptor_ascii(dev_handle, desc.iSerialNumber, ((uint8_t*) mxId), 32);
+    r = libusb_get_string_descriptor_ascii(gate_dev_handle, desc.iSerialNumber, ((uint8_t*) mxId), 32);
 
 
     /* Now we claim our ffs interfaces */
-    r = libusb_claim_interface(dev_handle, INTERFACE_GATE);
+    r = libusb_claim_interface(gate_dev_handle, INTERFACE_GATE);
     if (r != LIBUSB_SUCCESS) {
 	libusb_exit(ctx);
 
@@ -335,57 +336,82 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
     }
 
     struct USBRequest_t {
-        uint32_t RequestNum;
-        uint32_t RequestSize;
-    } request = {
-	.RequestNum = 12,
-	.RequestSize = 0,
+	uint32_t RequestNum;
+	uint32_t RequestSize;
     };
 
     int transferred;
-    r = libusb_bulk_transfer(dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)&request, sizeof(request), &transferred, TIMEOUT);
-    r = libusb_bulk_transfer(dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&request, sizeof(request), &transferred, TIMEOUT);
-
-    if (request.RequestNum != 0) {
+    USBRequest_t request = {
+	.RequestNum = 12,
+	.RequestSize = 0,
+    };
+    r = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)&request, sizeof(request), &transferred, TIMEOUT);
+    if (transferred < sizeof(request) || r != 0) {
     	return X_LINK_PLATFORM_ERROR;
     }
 
-    std::vector<uint8_t> respBuffer;
-    respBuffer.reserve(request.RequestSize + 1);
-    r = libusb_bulk_transfer(dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&respBuffer[0], request.RequestSize, &transferred, TIMEOUT);
-    respBuffer[request.RequestSize]= '\0';
+    USBRequest_t response;
+    r = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&response, sizeof(response), &transferred, TIMEOUT);
+    if (transferred < sizeof(request) || r != 0) {
+    	return X_LINK_PLATFORM_ERROR;
+    }
 
-    size_t strLen = strlen((const char*)&respBuffer[0]);
-    char string[strLen + 1];
-    strcpy(string, (const char*)&respBuffer[0]);
-    string[strLen] = '\0';
+    if (response.RequestNum != 0) {
+    	return X_LINK_PLATFORM_ERROR;
+    }
 
-    struct GateResponse_t {
-	uint32_t state;
-	uint32_t protocol;
-	uint32_t platform;
-    } response;
+    if (response.RequestSize != 0) {
+	std::vector<uint8_t> respBuffer;
+	respBuffer.resize(response.RequestSize + 1);
+	r = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&respBuffer[0], response.RequestSize, &transferred, TIMEOUT);
+	respBuffer[response.RequestSize]= '\0';
 
-    memcpy(&response, &respBuffer[strLen], sizeof(response));
-    
-    libusb_close(dev_handle);
-    int numDevicesFound = 0;
-    // Everything passed, fillout details of found device
-    out_foundDevices[numDevicesFound].status = X_LINK_SUCCESS;
-    out_foundDevices[numDevicesFound].platform = (XLinkPlatform_t)response.platform;
-    out_foundDevices[numDevicesFound].protocol = X_LINK_USB_EP;
-    out_foundDevices[numDevicesFound].state = (XLinkDeviceState_t)response.state;
-    memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
-    strcpy(out_foundDevices[numDevicesFound].name, "USB EP");
-    memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
-    strcpy(out_foundDevices[numDevicesFound].mxid, mxId);
-    numDevicesFound++;
+	size_t strLen = strlen((const char*)&respBuffer[0]);
+	char string[strLen + 1];
+	strcpy(string, (const char*)&respBuffer[0]);
+	string[strLen] = '\0';
 
-    // Write the number of found devices
-    *out_amountOfFoundDevices = numDevicesFound;
+	struct GateResponse_t {
+	    uint32_t state;
+	    uint32_t protocol;
+	    uint32_t platform;
+	} gateResponse;
 
-    libusb_close(dev_handle);
+	memcpy(&gateResponse, &respBuffer[strLen], sizeof(response));
 
+	int numDevicesFound = 0;
+	// Everything passed, fillout details of found device
+	out_foundDevices[numDevicesFound].status = X_LINK_SUCCESS;
+	out_foundDevices[numDevicesFound].platform = (XLinkPlatform_t)gateResponse.platform;
+	out_foundDevices[numDevicesFound].protocol = X_LINK_USB_EP;
+	out_foundDevices[numDevicesFound].state = (XLinkDeviceState_t)gateResponse.state;
+	memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
+	strcpy(out_foundDevices[numDevicesFound].name, "USB EP");
+	memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
+	strcpy(out_foundDevices[numDevicesFound].mxid, mxId);
+	numDevicesFound++;
+
+	// Write the number of found devices
+	*out_amountOfFoundDevices = numDevicesFound;
+    } else {
+	int numDevicesFound = 0;
+	// Everything passed, fillout details of found device
+	out_foundDevices[numDevicesFound].status = X_LINK_SUCCESS;
+	out_foundDevices[numDevicesFound].platform = X_LINK_RVC4;
+	out_foundDevices[numDevicesFound].protocol = X_LINK_USB_EP;
+	out_foundDevices[numDevicesFound].state = X_LINK_GATE; 
+	memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
+	strcpy(out_foundDevices[numDevicesFound].name, "USB EP");
+	memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
+	strcpy(out_foundDevices[numDevicesFound].mxid, mxId);
+	numDevicesFound++;
+
+	// Write the number of found devices
+	*out_amountOfFoundDevices = numDevicesFound;
+
+    }
+	
+    libusb_close(gate_dev_handle);
     return X_LINK_PLATFORM_SUCCESS;
 }
 
@@ -395,8 +421,8 @@ int usbEpPlatformGateRead(void *data, int size)
     int rc = 0;
 
     /* Get our device */
-    libusb_device_handle *dev_handle = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
-    if (dev_handle == NULL) {
+    libusb_device_handle *gate_dev_handle = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
+    if (gate_dev_handle == NULL) {
 	libusb_exit(ctx);
 
 	rc = LIBUSB_ERROR_NO_DEVICE;
@@ -406,19 +432,19 @@ int usbEpPlatformGateRead(void *data, int size)
     /* Not strictly necessary, but it is better to use it,
      * as we're using kernel modules together with our interfaces
      */
-    rc  = libusb_set_auto_detach_kernel_driver(dev_handle, 1);
+    rc  = libusb_set_auto_detach_kernel_driver(gate_dev_handle, 1);
     if (rc != LIBUSB_SUCCESS) {
-        libusb_close(dev_handle);
+        libusb_close(gate_dev_handle);
 	libusb_exit(ctx);
 
 	return rc;
     }
     
-    libusb_device* dev = libusb_get_device(dev_handle);
+    libusb_device* dev = libusb_get_device(gate_dev_handle);
     struct libusb_config_descriptor* config;
     rc = libusb_get_active_config_descriptor(dev, &config);
     if (rc != LIBUSB_SUCCESS) {
-        libusb_close(dev_handle);
+        libusb_close(gate_dev_handle);
         libusb_exit(ctx);
         return rc;
     }
@@ -429,7 +455,7 @@ int usbEpPlatformGateRead(void *data, int size)
     for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
 	for (int j = 0; j < config->interface[i].num_altsetting; j++) {
         if(config->interface[i].altsetting[j].iInterface > 0) { 
-	    int r = libusb_get_string_descriptor_ascii(dev_handle,
+	    int r = libusb_get_string_descriptor_ascii(gate_dev_handle,
 				config->interface[i].altsetting[j].iInterface,
 				name_buf,
 				sizeof(name_buf));
@@ -447,23 +473,23 @@ int usbEpPlatformGateRead(void *data, int size)
     libusb_free_config_descriptor(config);
 
     if (!found) {
-        libusb_close(dev_handle);
+        libusb_close(gate_dev_handle);
         libusb_exit(ctx);
 
 	return LIBUSB_ERROR_NO_DEVICE;
     }    
 
     /* Now we claim our ffs interfaces */
-    rc = libusb_claim_interface(dev_handle, INTERFACE_GATE);
+    rc = libusb_claim_interface(gate_dev_handle, INTERFACE_GATE);
     if (rc != LIBUSB_SUCCESS) {
 	libusb_exit(ctx);
 
 	return rc;
     }
 
-    rc = libusb_bulk_transfer(dev_handle, ENDPOINT_IN_BASE, (unsigned char*)data, size, &rc, TIMEOUT);
+    rc = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_IN_BASE, (unsigned char*)data, size, &rc, TIMEOUT);
     
-    libusb_close(dev_handle);
+    libusb_close(gate_dev_handle);
 
     return rc;
 }
@@ -473,8 +499,8 @@ int usbEpPlatformGateWrite(void *data, int size)
     int rc = 0;
 
     /* Get our device */
-    libusb_device_handle *dev_handle = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
-    if (dev_handle == NULL) {
+    libusb_device_handle *gate_dev_handle = libusb_open_device_with_vid_pid(ctx, VENDOR_ID, PRODUCT_ID);
+    if (gate_dev_handle == NULL) {
 	libusb_exit(ctx);
 
 	rc = LIBUSB_ERROR_NO_DEVICE;
@@ -484,19 +510,19 @@ int usbEpPlatformGateWrite(void *data, int size)
     /* Not strictly necessary, but it is better to use it,
      * as we're using kernel modules together with our interfaces
      */
-    rc  = libusb_set_auto_detach_kernel_driver(dev_handle, 1);
+    rc  = libusb_set_auto_detach_kernel_driver(gate_dev_handle, 1);
     if (rc != LIBUSB_SUCCESS) {
-        libusb_close(dev_handle);
+        libusb_close(gate_dev_handle);
 	libusb_exit(ctx);
 
 	return rc;
     }
     
-    libusb_device* dev = libusb_get_device(dev_handle);
+    libusb_device* dev = libusb_get_device(gate_dev_handle);
     struct libusb_config_descriptor* config;
     rc = libusb_get_active_config_descriptor(dev, &config);
     if (rc != LIBUSB_SUCCESS) {
-        libusb_close(dev_handle);
+        libusb_close(gate_dev_handle);
         libusb_exit(ctx);
         return rc;
     }
@@ -507,7 +533,7 @@ int usbEpPlatformGateWrite(void *data, int size)
     for (uint8_t i = 0; i < config->bNumInterfaces; ++i) {
 	for (int j = 0; j < config->interface[i].num_altsetting; j++) {
         if(config->interface[i].altsetting[j].iInterface > 0) { 
-	    int r = libusb_get_string_descriptor_ascii(dev_handle,
+	    int r = libusb_get_string_descriptor_ascii(gate_dev_handle,
 				config->interface[i].altsetting[j].iInterface,
 				name_buf,
 				sizeof(name_buf));
@@ -525,23 +551,23 @@ int usbEpPlatformGateWrite(void *data, int size)
     libusb_free_config_descriptor(config);
 
     if (!found) {
-        libusb_close(dev_handle);
+        libusb_close(gate_dev_handle);
         libusb_exit(ctx);
 
 	return LIBUSB_ERROR_NO_DEVICE;
     }    
 
     /* Now we claim our ffs interfaces */
-    rc = libusb_claim_interface(dev_handle, INTERFACE_GATE);
+    rc = libusb_claim_interface(gate_dev_handle, INTERFACE_GATE);
     if (rc != LIBUSB_SUCCESS) {
 	libusb_exit(ctx);
 
 	return rc;
     }
 
-    rc = libusb_bulk_transfer(dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)data, size, &rc, TIMEOUT);
+    rc = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)data, size, &rc, TIMEOUT);
     
-    libusb_close(dev_handle);
+    libusb_close(gate_dev_handle);
 
     return rc;
 }
