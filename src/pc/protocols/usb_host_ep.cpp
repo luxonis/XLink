@@ -381,7 +381,13 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 	int numDevicesFound = 0;
 	// Everything passed, fillout details of found device
 	out_foundDevices[numDevicesFound].status = X_LINK_SUCCESS;
-	out_foundDevices[numDevicesFound].platform = (XLinkPlatform_t)gateResponse.platform;
+	if (gateResponse.platform == 4) {
+		out_foundDevices[numDevicesFound].platform = X_LINK_RVC4;
+	} else if (gateResponse.platform == 3) {
+		out_foundDevices[numDevicesFound].platform = X_LINK_RVC3;
+	} else {
+		out_foundDevices[numDevicesFound].platform = (XLinkPlatform_t)0;
+	}
 	out_foundDevices[numDevicesFound].protocol = X_LINK_USB_EP;
 	out_foundDevices[numDevicesFound].state = (XLinkDeviceState_t)gateResponse.state;
 	memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
