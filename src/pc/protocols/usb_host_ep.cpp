@@ -362,20 +362,19 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 
     if (response.RequestSize != 0) {
 	std::vector<uint8_t> respBuffer;
-	respBuffer.resize(response.RequestSize + 1);
+	respBuffer.resize(response.RequestSize);
 	r = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&respBuffer[0], response.RequestSize, &transferred, TIMEOUT);
-	respBuffer[response.RequestSize]= '\0';
-
-	size_t strLen = strlen((const char*)&respBuffer[0]);
-	char string[strLen + 1];
-	strcpy(string, (const char*)&respBuffer[0]);
-	string[strLen] = '\0';
 
 	struct GateResponse_t {
 	    uint32_t state;
 	    uint32_t protocol;
 	    uint32_t platform;
 	} gateResponse;
+
+	size_t strLen = response.RequestSize - sizeof(gateResponse);
+	char string[strLen + 1];
+	memcpy(string, (const char*)&respBuffer[0], strLen);
+	string[strLen] = '\0';
 
 	memcpy(&gateResponse, &respBuffer[strLen], sizeof(response));
 
