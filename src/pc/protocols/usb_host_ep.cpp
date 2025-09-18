@@ -376,7 +376,7 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 	memcpy(string, (const char*)&respBuffer[0], strLen);
 	string[strLen] = '\0';
 
-	memcpy(&gateResponse, &respBuffer[strLen], sizeof(response));
+	memcpy(&gateResponse, &respBuffer[strLen], sizeof(gateResponse));
 
 	int numDevicesFound = 0;
 	// Everything passed, fillout details of found device
