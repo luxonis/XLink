@@ -53,8 +53,7 @@
 #define ENDPOINT_IN_OFFSET 1
 
 /* Transfer timeout */
-//#define TIMEOUT 2000
-#define TIMEOUT 0
+#define TIMEOUT 2000
 
 static int usbFdRead, usbFdWrite;
 static bool isServer;
