@@ -242,8 +242,6 @@ static void bulk_transfer_callback(struct libusb_transfer *transfer) {
 
     ctx->done = true;
 
-    // Free resources
-    free(transfer->buffer);
     libusb_free_transfer(transfer);
 }
 
@@ -298,6 +296,8 @@ int usbEpPlatformRead(void *fdKey, void *data, int size)
             memcpy(data, buffer, asyncCtx.transferred);
         }
 
+	free(buffer);
+
         return asyncCtx.result == 0 ? asyncCtx.transferred : asyncCtx.result;
     }
 
@@ -351,6 +351,8 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
         while (!asyncCtx.done) {
             libusb_handle_events_completed(ctx, NULL);
         }
+
+	free(buffer);
 
         return asyncCtx.result == 0 ? asyncCtx.transferred : asyncCtx.result;
     }
