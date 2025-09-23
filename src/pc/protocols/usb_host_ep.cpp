@@ -216,10 +216,10 @@ int usbEpPlatformClose(void *fdKey)
     return EXIT_SUCCESS;
 }
 
-struct AsyncContext {
+struct AsyncContext { 
     int result;
     int transferred;
-    bool done;
+    volatile bool done;
 };
 
 static void bulk_transfer_callback(struct libusb_transfer *transfer) {
@@ -259,44 +259,33 @@ int usbEpPlatformRead(void *fdKey, void *data, int size)
 	rc = read(usbFdRead, data, size);
 #endif
     } else {
-	unsigned char* buffer = (unsigned char*)malloc(size);
-        if (!buffer) return LIBUSB_ERROR_NO_MEM;
-
         struct libusb_transfer *transfer = libusb_alloc_transfer(0);
         if (!transfer) {
-            free(buffer);
             return LIBUSB_ERROR_NO_MEM;
         }
 
-        AsyncContext asyncCtx = { .result = 0, .transferred = 0, .done = false };
+        AsyncContext asyncCtx = { 0 };
 
         libusb_fill_bulk_transfer(
             transfer,
             dev_handle,
             usbFdRead,
-            buffer,
+            (unsigned char*)data,
             size,
             bulk_transfer_callback,
-            &ctx,
+            &asyncCtx,
             TIMEOUT
         );
 
 	if (libusb_submit_transfer(transfer) != LIBUSB_SUCCESS) {
-            free(buffer);
             libusb_free_transfer(transfer);
             return LIBUSB_ERROR_OTHER;
         }
 
         // Wait for transfer completion
         while (!asyncCtx.done) {
-            libusb_handle_events_completed(ctx, NULL);
+            libusb_handle_events(ctx);
         }
-
-        if (asyncCtx.result == 0 && asyncCtx.transferred > 0) {
-            memcpy(data, buffer, asyncCtx.transferred);
-        }
-
-	free(buffer);
 
         return asyncCtx.result == 0 ? asyncCtx.transferred : asyncCtx.result;
     }
@@ -318,13 +307,8 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
 	rc = write(usbFdWrite, data, size);
 #endif
     } else {
-	unsigned char* buffer = (unsigned char*)malloc(size);
-        if (!buffer) return LIBUSB_ERROR_NO_MEM;
-        memcpy(buffer, data, size);
-
         struct libusb_transfer *transfer = libusb_alloc_transfer(0);
         if (!transfer) {
-            free(buffer);
             return LIBUSB_ERROR_NO_MEM;
         }
 
@@ -334,25 +318,22 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
             transfer,
             dev_handle,
             usbFdWrite,
-            buffer,
+            (unsigned char*)data,
             size,
             bulk_transfer_callback,
-            &ctx,
+            &asyncCtx,
             TIMEOUT
         );
 
         if (libusb_submit_transfer(transfer) != LIBUSB_SUCCESS) {
-            free(buffer);
             libusb_free_transfer(transfer);
             return LIBUSB_ERROR_OTHER;
         }
 
         // Wait for transfer completion
         while (!asyncCtx.done) {
-            libusb_handle_events_completed(ctx, NULL);
+            libusb_handle_events(ctx);
         }
-
-	free(buffer);
 
         return asyncCtx.result == 0 ? asyncCtx.transferred : asyncCtx.result;
     }
