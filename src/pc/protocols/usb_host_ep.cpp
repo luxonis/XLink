@@ -55,6 +55,8 @@
 /* Transfer timeout */
 #define TIMEOUT 2000
 
+static bool deviceDisconnected = false;
+
 static int usbFdRead, usbFdWrite;
 static bool isServer;
 
@@ -68,6 +70,19 @@ int usbEpInitialize() {
     libusb_init(&ctx);
 
     return 0;
+}
+
+int LIBUSB_CALL hotplug_cb(libusb_context *ctx, libusb_device *dev, libusb_hotplug_event event, void *user_data) {
+    if (event & LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) {
+        printf("Device disconnected\n");
+	deviceDisconnected = true;
+    }
+
+    if (event & LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
+	deviceDisconnected = false;
+    }
+
+    return 0; // return 0 to keep callback active
 }
 
 int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
@@ -153,6 +168,20 @@ int usbEpPlatformConnect(const char *devPathRead, const char *devPathWrite, void
      */
     usbFdWrite = ENDPOINT_OUT_BASE + ENDPOINT_OUT_OFFSET;
     usbFdRead = ENDPOINT_IN_BASE + ENDPOINT_IN_OFFSET;
+	
+    deviceDisconnected = false;
+
+    libusb_hotplug_register_callback(
+		    ctx,
+		    LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
+		    LIBUSB_HOTPLUG_NO_FLAGS,
+		    VENDOR_ID,
+		    PRODUCT_ID,
+		    LIBUSB_HOTPLUG_MATCH_ANY,
+		    hotplug_cb,
+		    NULL,
+		    NULL
+		    );
 
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) usbFdRead);
 
@@ -259,6 +288,10 @@ int usbEpPlatformRead(void *fdKey, void *data, int size)
 	rc = read(usbFdRead, data, size);
 #endif
     } else {
+	if (deviceDisconnected) {
+	    return LIBUSB_ERROR_NO_DEVICE;
+	}
+
         struct libusb_transfer *transfer = libusb_alloc_transfer(0);
         if (!transfer) {
             return LIBUSB_ERROR_NO_MEM;
@@ -307,6 +340,10 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
 	rc = write(usbFdWrite, data, size);
 #endif
     } else {
+	if (deviceDisconnected) {
+	    return LIBUSB_ERROR_NO_DEVICE;
+	}
+
         struct libusb_transfer *transfer = libusb_alloc_transfer(0);
         if (!transfer) {
             return LIBUSB_ERROR_NO_MEM;
