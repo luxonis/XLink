@@ -216,6 +216,37 @@ int usbEpPlatformClose(void *fdKey)
     return EXIT_SUCCESS;
 }
 
+struct AsyncContext {
+    int result;
+    int transferred;
+    bool done;
+};
+
+static void bulk_transfer_callback(struct libusb_transfer *transfer) {
+    AsyncContext* ctx = (AsyncContext*)transfer->user_data;
+
+    switch (transfer->status) {
+        case LIBUSB_TRANSFER_COMPLETED:
+            ctx->transferred = transfer->actual_length;
+            ctx->result = 0;
+            break;
+        case LIBUSB_TRANSFER_NO_DEVICE:
+            ctx->transferred = 0;
+            ctx->result = LIBUSB_ERROR_NO_DEVICE;
+            break;
+        default:
+            ctx->transferred = 0;
+            ctx->result = LIBUSB_ERROR_OTHER;
+            break;
+    }
+
+    ctx->done = true;
+
+    // Free resources
+    free(transfer->buffer);
+    libusb_free_transfer(transfer);
+}
+
 int usbEpPlatformRead(void *fdKey, void *data, int size)
 {
     int rc = 0;
@@ -230,7 +261,44 @@ int usbEpPlatformRead(void *fdKey, void *data, int size)
 	rc = read(usbFdRead, data, size);
 #endif
     } else {
-	rc = libusb_bulk_transfer(dev_handle, usbFdRead, (unsigned char*)data, size, &rc, TIMEOUT);
+	unsigned char* buffer = (unsigned char*)malloc(size);
+        if (!buffer) return LIBUSB_ERROR_NO_MEM;
+
+        struct libusb_transfer *transfer = libusb_alloc_transfer(0);
+        if (!transfer) {
+            free(buffer);
+            return LIBUSB_ERROR_NO_MEM;
+        }
+
+        AsyncContext asyncCtx = { .result = 0, .transferred = 0, .done = false };
+
+        libusb_fill_bulk_transfer(
+            transfer,
+            dev_handle,
+            usbFdRead,
+            buffer,
+            size,
+            bulk_transfer_callback,
+            &ctx,
+            TIMEOUT
+        );
+
+	if (libusb_submit_transfer(transfer) != LIBUSB_SUCCESS) {
+            free(buffer);
+            libusb_free_transfer(transfer);
+            return LIBUSB_ERROR_OTHER;
+        }
+
+        // Wait for transfer completion
+        while (!asyncCtx.done) {
+            libusb_handle_events_completed(ctx, NULL);
+        }
+
+        if (asyncCtx.result == 0 && asyncCtx.transferred > 0) {
+            memcpy(data, buffer, asyncCtx.transferred);
+        }
+
+        return asyncCtx.result == 0 ? asyncCtx.transferred : asyncCtx.result;
     }
 
     return rc;
@@ -250,7 +318,41 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
 	rc = write(usbFdWrite, data, size);
 #endif
     } else {
-	rc = libusb_bulk_transfer(dev_handle, usbFdWrite, (unsigned char*)data, size, &rc, TIMEOUT);
+	unsigned char* buffer = (unsigned char*)malloc(size);
+        if (!buffer) return LIBUSB_ERROR_NO_MEM;
+        memcpy(buffer, data, size);
+
+        struct libusb_transfer *transfer = libusb_alloc_transfer(0);
+        if (!transfer) {
+            free(buffer);
+            return LIBUSB_ERROR_NO_MEM;
+        }
+
+        AsyncContext asyncCtx = { .result = 0, .transferred = 0, .done = false };
+
+        libusb_fill_bulk_transfer(
+            transfer,
+            dev_handle,
+            usbFdWrite,
+            buffer,
+            size,
+            bulk_transfer_callback,
+            &ctx,
+            TIMEOUT
+        );
+
+        if (libusb_submit_transfer(transfer) != LIBUSB_SUCCESS) {
+            free(buffer);
+            libusb_free_transfer(transfer);
+            return LIBUSB_ERROR_OTHER;
+        }
+
+        // Wait for transfer completion
+        while (!asyncCtx.done) {
+            libusb_handle_events_completed(ctx, NULL);
+        }
+
+        return asyncCtx.result == 0 ? asyncCtx.transferred : asyncCtx.result;
     }
 
     return rc;
@@ -371,7 +473,7 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 	} gateResponse;
 
 	size_t strLen = response.RequestSize - sizeof(gateResponse);
-	char string[strLen + 1];
+	char *string = (char*)malloc(strLen + 1);
 	memcpy(string, (const char*)&respBuffer[0], strLen);
 	string[strLen] = '\0';
 
@@ -397,6 +499,8 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 
 	// Write the number of found devices
 	*out_amountOfFoundDevices = numDevicesFound;
+
+	free(string);
     } else {
 	int numDevicesFound = 0;
 	// Everything passed, fillout details of found device
