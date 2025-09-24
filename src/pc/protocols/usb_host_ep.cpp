@@ -61,6 +61,7 @@ static int usbFdRead, usbFdWrite;
 static bool isServer;
 
 static libusb_context *ctx = NULL;
+static libusb_context *gate_ctx = NULL;
 static libusb_device_handle *dev_handle = NULL;
 
 int usbEpInitialize() {
@@ -68,6 +69,7 @@ int usbEpInitialize() {
 
     /* Initialize libusb */
     libusb_init(&ctx);
+    libusb_init(&gate_ctx);
 
     return 0;
 }
@@ -381,9 +383,6 @@ int usbEpPlatformWrite(void *fdKey, void *data, int size)
 int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
                                                     deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                     unsigned int *out_amountOfFoundDevices) {
-    libusb_context *gate_ctx;
-    libusb_init(&gate_ctx);
-
     int error = 0;
     libusb_device_handle *gate_dev_handle = libusb_open_device_with_vid_pid(gate_ctx, VENDOR_ID, PRODUCT_ID);
     if (gate_dev_handle == NULL) {
@@ -551,8 +550,6 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 
 int usbEpPlatformGateRead(void *data, int size)
 {
-    libusb_context *gate_ctx;
-    libusb_init(&gate_ctx);
     int rc = 0;
 
     /* Get our device */
@@ -632,9 +629,6 @@ int usbEpPlatformGateRead(void *data, int size)
 
 int usbEpPlatformGateWrite(void *data, int size)
 {
-    libusb_context *gate_ctx;
-    libusb_init(&gate_ctx);
-
     int rc = 0;
 
     /* Get our device */
