@@ -453,8 +453,6 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
     /* Now we claim our ffs interfaces */
     r = libusb_claim_interface(gate_dev_handle, INTERFACE_GATE);
     if (r != LIBUSB_SUCCESS) {
-	libusb_exit(gate_ctx);
-
 	return r;
     }
 
@@ -542,7 +540,6 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
     }
 	
     libusb_close(gate_dev_handle);
-    libusb_exit(gate_ctx);
 
     return X_LINK_PLATFORM_SUCCESS;
 }
@@ -555,8 +552,6 @@ int usbEpPlatformGateRead(void *data, int size)
     /* Get our device */
     libusb_device_handle *gate_dev_handle = libusb_open_device_with_vid_pid(gate_ctx, VENDOR_ID, PRODUCT_ID);
     if (gate_dev_handle == NULL) {
-	libusb_exit(gate_ctx);
-
 	rc = LIBUSB_ERROR_NO_DEVICE;
 	return rc;
     }
@@ -567,7 +562,6 @@ int usbEpPlatformGateRead(void *data, int size)
     rc  = libusb_set_auto_detach_kernel_driver(gate_dev_handle, 1);
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
-	libusb_exit(gate_ctx);
 
 	return rc;
     }
@@ -577,7 +571,6 @@ int usbEpPlatformGateRead(void *data, int size)
     rc = libusb_get_active_config_descriptor(dev, &config);
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
-        libusb_exit(gate_ctx);
         return rc;
     }
 
@@ -606,7 +599,6 @@ int usbEpPlatformGateRead(void *data, int size)
 
     if (!found) {
         libusb_close(gate_dev_handle);
-        libusb_exit(gate_ctx);
 
 	return LIBUSB_ERROR_NO_DEVICE;
     }    
@@ -614,15 +606,12 @@ int usbEpPlatformGateRead(void *data, int size)
     /* Now we claim our ffs interfaces */
     rc = libusb_claim_interface(gate_dev_handle, INTERFACE_GATE);
     if (rc != LIBUSB_SUCCESS) {
-	libusb_exit(gate_ctx);
-
 	return rc;
     }
 
     rc = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_IN_BASE, (unsigned char*)data, size, &rc, TIMEOUT);
     
     libusb_close(gate_dev_handle);
-    libusb_exit(gate_ctx);
 
     return rc;
 }
@@ -634,8 +623,6 @@ int usbEpPlatformGateWrite(void *data, int size)
     /* Get our device */
     libusb_device_handle *gate_dev_handle = libusb_open_device_with_vid_pid(gate_ctx, VENDOR_ID, PRODUCT_ID);
     if (gate_dev_handle == NULL) {
-	libusb_exit(gate_ctx);
-
 	rc = LIBUSB_ERROR_NO_DEVICE;
 	return rc;
     }
@@ -646,7 +633,6 @@ int usbEpPlatformGateWrite(void *data, int size)
     rc  = libusb_set_auto_detach_kernel_driver(gate_dev_handle, 1);
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
-	libusb_exit(gate_ctx);
 
 	return rc;
     }
@@ -656,7 +642,6 @@ int usbEpPlatformGateWrite(void *data, int size)
     rc = libusb_get_active_config_descriptor(dev, &config);
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
-        libusb_exit(gate_ctx);
         return rc;
     }
 
@@ -685,7 +670,6 @@ int usbEpPlatformGateWrite(void *data, int size)
 
     if (!found) {
         libusb_close(gate_dev_handle);
-        libusb_exit(gate_ctx);
 
 	return LIBUSB_ERROR_NO_DEVICE;
     }    
@@ -693,7 +677,6 @@ int usbEpPlatformGateWrite(void *data, int size)
     /* Now we claim our ffs interfaces */
     rc = libusb_claim_interface(gate_dev_handle, INTERFACE_GATE);
     if (rc != LIBUSB_SUCCESS) {
-	libusb_exit(gate_ctx);
 
 	return rc;
     }
@@ -701,7 +684,6 @@ int usbEpPlatformGateWrite(void *data, int size)
     rc = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)data, size, &rc, TIMEOUT);
     
     libusb_close(gate_dev_handle);
-    libusb_exit(gate_ctx);
 
     return rc;
 }
