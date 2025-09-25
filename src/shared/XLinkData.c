@@ -117,14 +117,14 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId)
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkGateWrite(void *data, int size)
+XLinkError_t XLinkGateWrite(void *data, int size, int timeout)
 {
-    return XLinkPlatformGateWrite(data, size);
+    return XLinkPlatformGateWrite(data, size, timeout);
 }
 
-XLinkError_t XLinkGateRead(void *data, int size)
+XLinkError_t XLinkGateRead(void *data, int size, int timeout)
 {
-    return XLinkPlatformGateRead(data, size);
+    return XLinkPlatformGateRead(data, size, timeout);
 }
 
 XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer,

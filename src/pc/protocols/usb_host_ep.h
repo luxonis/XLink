@@ -21,8 +21,8 @@ int usbEpPlatformWrite(void *fd, void *data, int size);
 
 int usbepGetDevices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* out_foundDevices, int sizeFoundDevices, unsigned int *out_amountOfFoundDevices);
 
-int usbEpPlatformGateRead(void *data, int size);
-int usbEpPlatformGateWrite(void *data, int size);
+int usbEpPlatformGateRead(void *data, int size, int timeout);
+int usbEpPlatformGateWrite(void *data, int size, int timeout);
 
 #ifdef __cplusplus
 }

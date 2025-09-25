@@ -310,10 +310,11 @@ XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int siz
  * @brief Sends/Receives a message to Gate via USB
  * @param[in] data - Data to be transmitted/collected
  * @param[in] size - The data size
+ * @param[in] size - USB timeout
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkGateWrite(void *data, int size);
-XLinkError_t XLinkGateRead(void *data, int size);
+XLinkError_t XLinkGateWrite(void *data, int size, int timeout);
+XLinkError_t XLinkGateRead(void *data, int size, int timeout);
 
 /**
  * @brief Sends a package to initiate the writing of a file descriptor
@@ -435,9 +436,6 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int timeoutMs);
-
-XLinkError_t XLinkGateWriteData(streamId_t const streamId, const uint8_t* buffer, int size);
-XLinkError_t XLinkGateReadData(streamId_t const streamId, streamPacketDesc_t* const packet);
 
 // ------------------------------------
 // Device streams management. End.

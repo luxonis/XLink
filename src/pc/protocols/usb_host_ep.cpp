@@ -545,7 +545,7 @@ int usbepGetDevices(const deviceDesc_t in_deviceRequirements,
 }
 
 
-int usbEpPlatformGateRead(void *data, int size)
+int usbEpPlatformGateRead(void *data, int size, int timeout)
 {
     int rc = 0;
 
@@ -609,14 +609,14 @@ int usbEpPlatformGateRead(void *data, int size)
 	return rc;
     }
 
-    rc = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_IN_BASE, (unsigned char*)data, size, &rc, TIMEOUT);
+    rc = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_IN_BASE, (unsigned char*)data, size, &rc, timeout);
     
     libusb_close(gate_dev_handle);
 
     return rc;
 }
 
-int usbEpPlatformGateWrite(void *data, int size)
+int usbEpPlatformGateWrite(void *data, int size, int timeout)
 {
     int rc = 0;
 
@@ -681,7 +681,7 @@ int usbEpPlatformGateWrite(void *data, int size)
 	return rc;
     }
 
-    rc = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)data, size, &rc, TIMEOUT);
+    rc = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_OUT_BASE, (unsigned char*)data, size, &rc, timeout);
     
     libusb_close(gate_dev_handle);
 
