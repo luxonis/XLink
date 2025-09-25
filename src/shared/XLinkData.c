@@ -119,12 +119,22 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId)
 
 XLinkError_t XLinkGateWrite(void *data, int size, int timeout)
 {
-    return XLinkPlatformGateWrite(data, size, timeout);
+    int rc = XLinkPlatformGateWrite(data, size, timeout)
+    if(rc) < 0 {
+	return X_LINK_ERROR;
+    } else {
+	return X_LINK_SUCCESS;
+    }
 }
 
 XLinkError_t XLinkGateRead(void *data, int size, int timeout)
 {
-    return XLinkPlatformGateRead(data, size, timeout);
+    int rc = XLinkPlatformGateRead(data, size, timeout)
+    if(rc) < 0 {
+	return X_LINK_ERROR;
+    } else {
+	return X_LINK_SUCCESS;
+    }
 }
 
 XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer,
