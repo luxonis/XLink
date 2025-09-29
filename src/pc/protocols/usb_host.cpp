@@ -93,10 +93,24 @@ static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceS
     {{0x03E7, 0xf63b}, X_LINK_BOOTED},
     {{0x03E7, 0xf63c}, X_LINK_BOOTLOADER},
     {{0x03E7, 0xf63d}, X_LINK_FLASH_BOOTED},
+    {{0x05C6, 0x4321}, X_LINK_GATE},
+};
+
+
+struct USBGateRequest {
+    uint32_t RequestNum;
+    uint32_t RequestSize;
+};
+
+struct GateResponse {
+    uint32_t state;
+    uint32_t protocol;
+    uint32_t platform;
 };
 
 static std::string getLibusbDevicePath(libusb_device *dev);
 static libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev, std::string& outMxId);
+static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* pDesc, libusb_device *dev, GateResponse& outGateResponse, std::string& outSerial);
 static const char* xlink_libusb_strerror(int x);
 #ifdef _WIN32
 std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev);
@@ -108,13 +122,6 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
 
     // Also protects usb_mx_id_cache
     std::lock_guard<std::mutex> l(mutex);
-
-    // No RVC3/4 devices on USB now, return 0
-    if(in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4){
-        *out_amountOfFoundDevices = 0;
-        return X_LINK_PLATFORM_SUCCESS;
-    }
-
 
     // Get list of usb devices
     static libusb_device **devs = NULL;
@@ -172,45 +179,63 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                 }
             }
 
-            // Get device mxid
-            std::string mxId;
-            libusb_error rc = getLibusbDeviceMxId(state, devicePath, &desc, devs[i], mxId);
-            mvLog(MVLOG_DEBUG, "getLibusbDeviceMxId returned: %s", xlink_libusb_strerror(rc));
-            switch (rc)
-            {
-            case LIBUSB_SUCCESS:
-                status = X_LINK_SUCCESS;
-                break;
-            case LIBUSB_ERROR_ACCESS:
-                status = X_LINK_INSUFFICIENT_PERMISSIONS;
-                break;
-            case LIBUSB_ERROR_BUSY:
-                status = X_LINK_DEVICE_ALREADY_IN_USE;
-                break;
-            default:
-                status = X_LINK_ERROR;
-                break;
-            }
+	    // Check for RVC3 and RVC4 first
+	    if(in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4){
+		GateResponse gateResponse;
+		std::string serial;
+		getLibusbDeviceGateResponse(&desc, devs[i], gateResponse, serial);
 
-            // compare with MxId
-            std::string requiredMxId(in_deviceRequirements.mxid);
-            if(requiredMxId.length() > 0 && requiredMxId != mxId){
-                // Current device doesn't match the "filter"
-                continue;
-            }
+                // Everything passed, fillout details of found device
+                out_foundDevices[numDevicesFound].status = status;
+                out_foundDevices[numDevicesFound].platform = gateResponse.platform;
+                out_foundDevices[numDevicesFound].protocol = gateResponse.protocol;
+                out_foundDevices[numDevicesFound].state = gateResponse.state;
+                memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
+                strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
+                memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
+                strncpy(out_foundDevices[numDevicesFound].mxid, serial.c_str(), sizeof(out_foundDevices[numDevicesFound].mxid));
+                numDevicesFound++;
+	    } else {
+                // Get device mxid
+                std::string mxId;
+                libusb_error rc = getLibusbDeviceMxId(state, devicePath, &desc, devs[i], mxId);
+                mvLog(MVLOG_DEBUG, "getLibusbDeviceMxId returned: %s", xlink_libusb_strerror(rc));
+                switch (rc)
+                {
+                case LIBUSB_SUCCESS:
+                    status = X_LINK_SUCCESS;
+                    break;
+                case LIBUSB_ERROR_ACCESS:
+                    status = X_LINK_INSUFFICIENT_PERMISSIONS;
+                    break;
+                case LIBUSB_ERROR_BUSY:
+                    status = X_LINK_DEVICE_ALREADY_IN_USE;
+                    break;
+                default:
+                    status = X_LINK_ERROR;
+                    break;
+                }
 
-            // TODO(themarpe) - check platform
+                // compare with MxId
+                std::string requiredMxId(in_deviceRequirements.mxid);
+                if(requiredMxId.length() > 0 && requiredMxId != mxId){
+                    // Current device doesn't match the "filter"
+                    continue;
+                }
 
-            // Everything passed, fillout details of found device
-            out_foundDevices[numDevicesFound].status = status;
-            out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
-            out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
-            out_foundDevices[numDevicesFound].state = state;
-            memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
-            strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
-            memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
-            strncpy(out_foundDevices[numDevicesFound].mxid, mxId.c_str(), sizeof(out_foundDevices[numDevicesFound].mxid));
-            numDevicesFound++;
+                // TODO(themarpe) - check platform
+
+                // Everything passed, fillout details of found device
+                out_foundDevices[numDevicesFound].status = status;
+                out_foundDevices[numDevicesFound].platform = X_LINK_MYRIAD_X;
+                out_foundDevices[numDevicesFound].protocol = X_LINK_USB_VSC;
+                out_foundDevices[numDevicesFound].state = state;
+                memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
+                strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
+                memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
+                strncpy(out_foundDevices[numDevicesFound].mxid, mxId.c_str(), sizeof(out_foundDevices[numDevicesFound].mxid));
+                numDevicesFound++;
+	    }
 
         }
 
@@ -499,6 +524,69 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
 }
 
+static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* pDesc, libusb_device *dev, GateResponse& outGateResponse, std::string& outSerial) {
+    GateResponse gateResponse = {0};
+    std::string serial = "";
+
+    // get serial from usb descriptor
+    libusb_device_handle *handle = nullptr;
+    int libusb_rc = LIBUSB_SUCCESS;
+    libusb_rc = libusb_open(dev, &handle);
+    if (libusb_rc != 0){
+        return (libusb_error) libusb_rc;
+    }
+
+    libusb_rc = libusb_claim_interface(handle, INTERFACE_GATE);
+    if (libusb_rc != 0){
+        libusb_close(handle);
+        return (libusb_error) libusb_rc;
+    }
+
+    USBGateRequest usbGateRequest = {
+	.RequestNum = 12,
+	.RequestSize = 0,
+    };
+
+    libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_OUT, (unsigned char*)&usbGateRequest, sizeof(usbGateRequest), &transferred, TIMEOUT);
+    if (libusb_rc != 0) {
+	libusb_close(handle);
+        return (libusb_error) libusb_rc;
+    }
+
+    USBGateRequest usbGateResponse = { 0 };
+    libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_IN, (unsigned char*)&usbGateResponse, sizeof(usbGateResponse), &transferred, TIMEOUT);
+    if (libusb_rc != 0) {
+	libusb_close(handle);
+        return (libusb_error) libusb_rc;
+    }
+
+    std::vector<uint8_t> respBuffer;
+    respBuffer.resize(response.RequestSize);
+    libusb_rc = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&respBuffer[0], response.RequestSize, &transferred, TIMEOUT);
+    if (libusb_rc != 0) {
+	libusb_close(handle);
+        return libusb_error::LIBUSB_ERROR;
+    }
+
+    size_t serialStrLen = response.RequestSize - sizeof(GateResponse);
+    char *serialStr = (char*)malloc(serialStrLen + 1);
+    memcpy(serialStr, (const char*)&respBuffer[0], serialStrLen);
+    serialStr[serialStrLen] = '\0';
+    serial = serialStr;
+    free(serialStr);
+    outSerial = serial;
+
+    memcpy(&gateResponse, &respBuffer[serialStrLen], sizeof(gateResponse));
+    outGateResponse = gateResponse;
+
+    // Close opened device
+    if(handle != nullptr){
+        libusb_close(handle);
+    }
+
+    return libusb_error::LIBUSB_SUCCESS;
+}
+
 const char* xlink_libusb_strerror(int x) {
     return libusb_strerror((libusb_error) x);
 }
@@ -514,7 +602,7 @@ static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libus
     if((res = libusb_open(dev, &h)) < 0)
     {
         mvLog(MVLOG_DEBUG, "cannot open device: %s\n", xlink_libusb_strerror(res));
-        return (libusb_error) res;
+return (libusb_error) res;
     }
 
     // Get configuration first
