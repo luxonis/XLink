@@ -60,6 +60,10 @@
 
 extern int usbFdWrite;
 extern int usbFdRead;
+
+extern int usbGateFdWrite;
+extern int usbGateFdRead;
+
 #endif  /*USE_USB_VSC*/
 
 // ------------------------------------

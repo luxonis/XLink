@@ -28,6 +28,9 @@
 
 int usbFdWrite = -1;
 int usbFdRead = -1;
+int usbGateFdWrite = -1;
+int usbGateFdRead = -1;
+
 #endif  /*USE_USB_VSC*/
 
 #include "XLinkPublicDefines.h"

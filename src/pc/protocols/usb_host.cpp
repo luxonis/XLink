@@ -23,6 +23,7 @@
 #include <thread>
 #include <chrono>
 #include <cstring>
+#include <vector>
 
 constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
@@ -30,6 +31,7 @@ static const int MX_ID_TIMEOUT_MS = 100;
 
 static constexpr auto DEFAULT_OPEN_TIMEOUT = std::chrono::seconds(5);
 static constexpr auto DEFAULT_WRITE_TIMEOUT = 2000;
+static constexpr auto DEFAULT_READ_TIMEOUT = 2000;
 static constexpr std::chrono::milliseconds DEFAULT_CONNECT_TIMEOUT{20000};
 static constexpr std::chrono::milliseconds DEFAULT_SEND_FILE_TIMEOUT{10000};
 static constexpr auto USB1_CHUNKSZ = 64;
@@ -187,9 +189,9 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
 
                 // Everything passed, fillout details of found device
                 out_foundDevices[numDevicesFound].status = status;
-                out_foundDevices[numDevicesFound].platform = gateResponse.platform;
-                out_foundDevices[numDevicesFound].protocol = gateResponse.protocol;
-                out_foundDevices[numDevicesFound].state = gateResponse.state;
+                out_foundDevices[numDevicesFound].platform = (XLinkPlatform_t)gateResponse.platform;
+                out_foundDevices[numDevicesFound].protocol = (XLinkProtocol_t)gateResponse.protocol;
+                out_foundDevices[numDevicesFound].state = (XLinkDeviceState_t)gateResponse.state;
                 memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
                 strncpy(out_foundDevices[numDevicesFound].name, devicePath.c_str(), sizeof(out_foundDevices[numDevicesFound].name));
                 memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
@@ -536,7 +538,7 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
         return (libusb_error) libusb_rc;
     }
 
-    libusb_rc = libusb_claim_interface(handle, INTERFACE_GATE);
+    libusb_rc = libusb_claim_interface(handle, 0);
     if (libusb_rc != 0){
         libusb_close(handle);
         return (libusb_error) libusb_rc;
@@ -546,29 +548,31 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
 	.RequestNum = 12,
 	.RequestSize = 0,
     };
+                
+    int transferred = 0;
 
-    libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_OUT, (unsigned char*)&usbGateRequest, sizeof(usbGateRequest), &transferred, TIMEOUT);
+    libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_OUT, (unsigned char*)&usbGateRequest, sizeof(usbGateRequest), &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
 	libusb_close(handle);
         return (libusb_error) libusb_rc;
     }
 
     USBGateRequest usbGateResponse = { 0 };
-    libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_IN, (unsigned char*)&usbGateResponse, sizeof(usbGateResponse), &transferred, TIMEOUT);
+    libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_IN, (unsigned char*)&usbGateResponse, sizeof(usbGateResponse), &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
 	libusb_close(handle);
         return (libusb_error) libusb_rc;
     }
 
     std::vector<uint8_t> respBuffer;
-    respBuffer.resize(response.RequestSize);
-    libusb_rc = libusb_bulk_transfer(gate_dev_handle, ENDPOINT_IN_BASE, (unsigned char*)&respBuffer[0], response.RequestSize, &transferred, TIMEOUT);
+    respBuffer.resize(usbGateResponse.RequestSize);
+    libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_IN, (unsigned char*)&respBuffer[0], usbGateResponse.RequestSize, &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
 	libusb_close(handle);
-        return libusb_error::LIBUSB_ERROR;
+        return (libusb_error) libusb_rc;
     }
 
-    size_t serialStrLen = response.RequestSize - sizeof(GateResponse);
+    size_t serialStrLen = usbGateResponse.RequestSize - sizeof(GateResponse);
     char *serialStr = (char*)malloc(serialStrLen + 1);
     memcpy(serialStr, (const char*)&respBuffer[0], serialStrLen);
     serialStr[serialStrLen] = '\0';
@@ -631,6 +635,19 @@ return (libusb_error) res;
         libusb_close(h);
         return (libusb_error) res;
     }
+
+    // TODO(TheMutta): Find a way to enable this conditionally
+    //#if (!defined(USE_USB_VSC))
+    // XLink EPs
+    if((res = libusb_claim_interface(h, 1)) < 0)
+    {
+        mvLog(MVLOG_DEBUG, "claiming interface 1 failed: %s\n", xlink_libusb_strerror(res));
+        libusb_close(h);
+        return (libusb_error) res;
+    }
+    
+
+
     if((res = libusb_get_config_descriptor(dev, 0, &cdesc)) < 0)
     {
         mvLog(MVLOG_DEBUG, "Unable to get USB config descriptor: %s\n", xlink_libusb_strerror(res));
@@ -883,7 +900,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
     }
     return 0;
 
-#else
+    #else
     usbFdRead= open(devPathRead, O_RDWR);
     if(usbFdRead < 0)
     {
@@ -943,7 +960,7 @@ int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void *
         return X_LINK_PLATFORM_ERROR;
     }
     return 0;
-#endif  /*USE_LINK_JTAG*/
+    #endif  /*USE_LINK_JTAG*/
 #else
 
     libusb_device_handle* usbHandle = nullptr;
@@ -1014,7 +1031,7 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 
 
 
-int usb_read(libusb_device_handle *f, void *data, size_t size)
+int usb_read(libusb_device_handle *f, void *data, size_t size, size_t offset)
 {
     const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
@@ -1022,7 +1039,7 @@ int usb_read(libusb_device_handle *f, void *data, size_t size)
         int bt, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
-        int rc = libusb_bulk_transfer(f, USB_ENDPOINT_IN,(unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+        int rc = libusb_bulk_transfer(f, USB_ENDPOINT_IN + offset,(unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
         if(rc)
             return rc;
         data = ((char *)data) + bt;
@@ -1031,7 +1048,7 @@ int usb_read(libusb_device_handle *f, void *data, size_t size)
     return 0;
 }
 
-int usb_write(libusb_device_handle *f, const void *data, size_t size)
+int usb_write(libusb_device_handle *f, const void *data, size_t size, size_t offset)
 {
     const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
@@ -1039,7 +1056,7 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size)
         int bt, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
-        int rc = libusb_bulk_transfer(f, USB_ENDPOINT_OUT, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+        int rc = libusb_bulk_transfer(f, USB_ENDPOINT_OUT + offset, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
         if(rc)
             return rc;
         data = (char *)data + bt;
@@ -1096,7 +1113,7 @@ int usbPlatformRead(void* fdKey, void* data, int size)
     }
     libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
-    rc = usb_read(usbHandle, data, size);
+    rc = usb_read(usbHandle, data, size, 1);
 #endif  /*USE_USB_VSC*/
     return rc;
 }
@@ -1152,10 +1169,120 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
     }
     libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
-    rc = usb_write(usbHandle, data, size);
+    rc = usb_write(usbHandle, data, size, 1);
 #endif  /*USE_USB_VSC*/
     return rc;
 }
+
+int usbPlatformGateRead(void* fdKey, void* data, int size)
+{
+    int rc = 0;
+#ifndef USE_USB_VSC
+    int nread =  0;
+#ifdef USE_LINK_JTAG
+    while (nread < size){
+        nread += read(usbFdWrite, &((char*)data)[nread], size - nread);
+        printf("read %d %d\n", nread, size);
+    }
+#else
+    if(usbFdRead < 0)
+    {
+        return -1;
+    }
+
+    while(nread < size)
+    {
+        int toRead = (PACKET_LENGTH && (size - nread > PACKET_LENGTH)) \
+                        ? PACKET_LENGTH : size - nread;
+
+        while(toRead > 0)
+        {
+            rc = read(usbFdRead, &((char*)data)[nread], toRead);
+            if ( rc < 0)
+            {
+                return -2;
+            }
+            toRead -=rc;
+            nread += rc;
+        }
+        unsigned char acknowledge = 0xEF;
+        int wc = write(usbFdRead, &acknowledge, sizeof(acknowledge));
+        if (wc != sizeof(acknowledge))
+        {
+            return -2;
+        }
+    }
+#endif  /*USE_LINK_JTAG*/
+#else
+
+    void* tmpUsbHandle = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
+
+    rc = usb_read(usbHandle, data, size, 0);
+#endif  /*USE_USB_VSC*/
+    return rc;
+}
+
+int usbPlatformGateWrite(void *fdKey, void *data, int size)
+{
+    int rc = 0;
+#ifndef USE_USB_VSC
+    int byteCount = 0;
+#ifdef USE_LINK_JTAG
+    while (byteCount < size){
+        byteCount += write(usbFdWrite, &((char*)data)[byteCount], size - byteCount);
+        printf("write %d %d\n", byteCount, size);
+    }
+#else
+    if(usbFdWrite < 0)
+    {
+        return -1;
+    }
+    while(byteCount < size)
+    {
+       int toWrite = (PACKET_LENGTH && (size - byteCount > PACKET_LENGTH)) \
+                        ? PACKET_LENGTH:size - byteCount;
+       int wc = write(usbFdWrite, ((char*)data) + byteCount, toWrite);
+
+       if ( wc != toWrite)
+       {
+           return -2;
+       }
+
+       byteCount += toWrite;
+       unsigned char acknowledge;
+       int rc;
+       rc = read(usbFdWrite, &acknowledge, sizeof(acknowledge));
+
+       if ( rc < 0)
+       {
+           return -2;
+       }
+
+       if (acknowledge != 0xEF)
+       {
+           return -2;
+       }
+    }
+#endif  /*USE_LINK_JTAG*/
+#else
+
+    void* tmpUsbHandle = NULL;
+    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+        return -1;
+    }
+    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
+
+    rc = usb_write(usbHandle, data, size, 0);
+#endif  /*USE_USB_VSC*/
+    return rc;
+}
+
 
 #ifdef _WIN32
 #include <initguid.h>
