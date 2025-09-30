@@ -6,6 +6,7 @@
 #include "local_memshd.h"
 #include "../PlatformDeviceFd.h"
 #include "XLinkPrivateFields.h"
+#include "XLinkPublicDefines.h"
 
 #define MVLOG_UNIT_NAME local_memshd
 #include "XLinkLog.h"
@@ -43,7 +44,7 @@ int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, voi
     strcpy(sockAddr.sun_path, socketPath);
 
     if (connect(socketFd, (struct sockaddr *)&sockAddr, sizeof(sockAddr)) < 0) {
-	mvLog(MVLOG_FATAL, "Socket connection failed");
+	mvLog(MVLOG_DEBUG, "Socket connection failed - err: %s\n", strerror(errno));
 	return X_LINK_ERROR;
     }
 
@@ -57,7 +58,6 @@ int shdmemPlatformConnect(const char *devPathRead, const char *devPathWrite, voi
 int shdmemPlatformServer(const char *devPathRead, const char *devPathWrite, void **desc, long *sockFd) {
     const char *socketPath = devPathWrite;
     mvLog(MVLOG_DEBUG, "Shared memory server invoked with socket path %s\n", socketPath);
-
     int socketFd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (socketFd < 0) {
 	    mvLog(MVLOG_FATAL, "Socket creation failed");
@@ -229,8 +229,27 @@ int shdmemSetProtocol(XLinkProtocol_t *protocol, const char* devPathRead, const 
 
 xLinkPlatformErrorCode_t shdmemGetDevices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* out_foundDevices, int sizeFoundDevices, unsigned int *out_amountOfFoundDevices) {
     if (access(SHDMEM_DEFAULT_SOCKET, F_OK) != 0) {
-	return X_LINK_PLATFORM_ERROR;
+	    return X_LINK_PLATFORM_ERROR;
     }
+    // Test if the socket is accessible to determine the X_LINK state.
+    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sock < 0) {
+        return X_LINK_PLATFORM_ERROR;
+    }
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, SHDMEM_DEFAULT_SOCKET, sizeof(addr.sun_path) - 1);
+    XLinkDeviceState_t state = X_LINK_ANY_STATE;
+    if (connect(sock, (struct sockaddr *)&addr,
+                offsetof(struct sockaddr_un, sun_path) + strlen(addr.sun_path) + 1) == 0) {
+        // Someone accepted the connection
+        state = X_LINK_BOOTED;
+    } else {
+        // If it failed, assume the fw isn't running.
+        state = X_LINK_GATE;
+    }
+    close(sock);
 
     // Status
     out_foundDevices[0].status = X_LINK_SUCCESS;
@@ -241,11 +260,11 @@ xLinkPlatformErrorCode_t shdmemGetDevices(const deviceDesc_t in_deviceRequiremen
     memset(out_foundDevices[0].mxid, 0, sizeof(out_foundDevices[0].mxid));
     strncpy(out_foundDevices[0].mxid, in_deviceRequirements.mxid, sizeof(out_foundDevices[0].mxid));
     // Platform
-    out_foundDevices[0].platform = X_LINK_MYRIAD_X;
+    out_foundDevices[0].platform = X_LINK_RVC4; // RVC4 only
     // Protocol
     out_foundDevices[0].protocol = X_LINK_LOCAL_SHDMEM;
     // State
-    out_foundDevices[0].state = X_LINK_BOOTED;
+    out_foundDevices[0].state = state;
 
     *out_amountOfFoundDevices = 1;
 
