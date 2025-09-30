@@ -16,6 +16,7 @@
 #include <chrono>
 #include <atomic>
 #include <cstddef>
+#include "XLinkPrivateFields.h"
 
 
 #define MVLOG_UNIT_NAME tcpip_host
@@ -937,6 +938,32 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
     return 0;
 }
 
+int updateGlobalHandlerWithIsLocalConnectionInfo(struct sockaddr_in *client) {
+    if (!gHandler || !client) {
+        errno = EINVAL;
+        return -1;
+    }
+    gHandler->isLocalConnection = false;
+    struct ifaddrs *ifaddr = NULL;
+    if (getifaddrs(&ifaddr) == -1) {
+        return -1;
+    }
+
+    for (struct ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr) continue;
+        if (ifa->ifa_addr->sa_family == AF_INET) {
+            struct sockaddr_in *sin = (struct sockaddr_in *)ifa->ifa_addr;
+
+            if (sin->sin_addr.s_addr == client->sin_addr.s_addr) {
+                gHandler->isLocalConnection = true;
+                break;
+            }
+        }
+    }
+    freeifaddrs(ifaddr);
+    return 0;
+}
+
 // TODO add IPv6 to tcpipPlatformConnect()
 int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd, long *sockFd)
 {
@@ -1013,6 +1040,9 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     {
         mvLog(MVLOG_FATAL, "Couldn't accept a connection to server socket");
         return X_LINK_PLATFORM_ERROR;
+    }
+    if (updateGlobalHandlerWithIsLocalConnectionInfo(&client) != 0) { // non fatal
+        mvLog(MVLOG_WARN, "Couldn't update XLinkGlobal state with isLocal info. %s\n", strerror(errno));
     }
 
     // Store the socket and create a "unique" key instead

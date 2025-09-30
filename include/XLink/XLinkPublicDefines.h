@@ -172,6 +172,14 @@ typedef struct XLinkGlobalHandler_t
     int loglevel;
     int protocol;
     //Deprecated fields. End.
+
+    /**
+     * Indicates if the XLink connection is 
+     * between the same host.
+     * aka: the protocol is X_LINK_LOCAL_SHDMEM
+     * or the client IP is the same as one of our IPs.
+     */ 
+    bool isLocalConnection;
 } XLinkGlobalHandler_t;
 
 typedef struct

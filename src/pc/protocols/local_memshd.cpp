@@ -5,6 +5,7 @@
 
 #include "local_memshd.h"
 #include "../PlatformDeviceFd.h"
+#include "XLinkPrivateFields.h"
 
 #define MVLOG_UNIT_NAME local_memshd
 #include "XLinkLog.h"
@@ -218,6 +219,10 @@ int shdmemPlatformWriteFd(void *desc, const long fd, void *data2, int size2) {
 int shdmemSetProtocol(XLinkProtocol_t *protocol, const char* devPathRead, const char* devPathWrite) {
     devPathWrite = devPathRead = SHDMEM_DEFAULT_SOCKET;
     *protocol = X_LINK_LOCAL_SHDMEM;
+    if (glHandler) {
+        glHandler->protocol = X_LINK_LOCAL_SHDMEM;
+        glHandler->isLocalConnection = true;
+    }
     return X_LINK_SUCCESS;
 }
 

@@ -100,7 +100,10 @@ int tcpipOrLocalShdmemPlatformServer(XLinkProtocol_t *protocol, const char *devP
     // Asign the final protocol (once both threads finalize)
     if(retTcpIp == 0) {
         *fd = fdTcpIp;
-	*protocol = X_LINK_TCP_IP;
+        *protocol = X_LINK_TCP_IP;
+        if (glHandler) {
+            glHandler->protocol = X_LINK_TCP_IP;
+        }
     }
 
     if(retShdmem == X_LINK_SUCCESS) {
