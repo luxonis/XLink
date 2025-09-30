@@ -12,6 +12,7 @@
 #include <thread>
 
 #include <cstdio>
+#include "XLinkPrivateFields.h"
 
 #if defined(__unix__)
 

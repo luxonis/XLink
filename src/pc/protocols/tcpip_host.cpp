@@ -939,29 +939,35 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
 }
 
 int updateGlobalHandlerWithIsLocalConnectionInfo(struct sockaddr_in *client) {
-    if (!gHandler || !client) {
+    if (!glHandler || !client) {
         errno = EINVAL;
         return -1;
     }
-    gHandler->isLocalConnection = false;
+    glHandler->isLocalConnection = false;
+
+#if defined(__unix__) || defined(__APPLE__)
     struct ifaddrs *ifaddr = NULL;
     if (getifaddrs(&ifaddr) == -1) {
         return -1;
     }
-
     for (struct ifaddrs *ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (!ifa->ifa_addr) continue;
         if (ifa->ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *sin = (struct sockaddr_in *)ifa->ifa_addr;
 
             if (sin->sin_addr.s_addr == client->sin_addr.s_addr) {
-                gHandler->isLocalConnection = true;
+                glHandler->isLocalConnection = true;
                 break;
             }
         }
     }
     freeifaddrs(ifaddr);
     return 0;
+#else
+    // Not supported on this platform
+    errno = ENOTSUP;
+    return -1;
+#endif
 }
 
 // TODO add IPv6 to tcpipPlatformConnect()
