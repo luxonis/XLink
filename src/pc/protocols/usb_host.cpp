@@ -195,7 +195,11 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
 
                 // Everything passed, fillout details of found device
                 out_foundDevices[numDevicesFound].status = status;
-                out_foundDevices[numDevicesFound].platform = (XLinkPlatform_t)gateResponse.platform;
+		if (gateResponse.platform == 4) {
+                	out_foundDevices[numDevicesFound].platform = X_LINK_RVC4;
+		} else {
+                	out_foundDevices[numDevicesFound].platform = X_LINK_RVC3;
+		}
                 out_foundDevices[numDevicesFound].protocol = (XLinkProtocol_t)gateResponse.protocol;
                 out_foundDevices[numDevicesFound].state = (XLinkDeviceState_t)gateResponse.state;
                 memset(out_foundDevices[numDevicesFound].name, 0, sizeof(out_foundDevices[numDevicesFound].name));
