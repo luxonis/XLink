@@ -25,12 +25,6 @@
 #include <cstring>
 #include <vector>
 
-#if defined(__unix__)
-#include <unistd.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#endif
-
 constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
 static const int MX_ID_TIMEOUT_MS = 100;
@@ -602,7 +596,7 @@ const char* xlink_libusb_strerror(int x) {
 }
 
 
-static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev, uint8_t* endpoint, libusb_device_handle*& handle)
+static libusb_error usb_open_device(libusb_device *dev, uint8_t* endpoint, libusb_device_handle*& handle)
 {
     struct libusb_config_descriptor *cdesc;
     const struct libusb_interface_descriptor *ifdesc;
@@ -642,14 +636,17 @@ return (libusb_error) res;
         return (libusb_error) res;
     }
 
-    if (protocol = X_LINK_USB_EP) {
-	if((res = libusb_claim_interface(h, 1)) < 0)
-	{
-            mvLog(MVLOG_DEBUG, "claiming interface 1 failed: %s\n", xlink_libusb_strerror(res));
-            libusb_close(h);
-            return (libusb_error) res;
-	}
+    // TODO(TheMutta): Find a way to enable this conditionally
+    //#if (!defined(USE_USB_VSC))
+    // XLink EPs
+    if((res = libusb_claim_interface(h, 1)) < 0)
+    {
+        mvLog(MVLOG_DEBUG, "claiming interface 1 failed: %s\n", xlink_libusb_strerror(res));
+        libusb_close(h);
+        return (libusb_error) res;
     }
+    
+
 
     if((res = libusb_get_config_descriptor(dev, 0, &cdesc)) < 0)
     {
@@ -756,7 +753,7 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
 
     auto t2 = steady_clock::now();
     do {
-        if((res = usb_open_device(X_LINK_USB_VSC, dev, &endpoint, h)) == LIBUSB_SUCCESS){
+        if((res = usb_open_device(dev, &endpoint, h)) == LIBUSB_SUCCESS){
             break;
         }
         std::this_thread::sleep_for(milliseconds(100));
@@ -785,7 +782,7 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
 
 
 
-xLinkPlatformErrorCode_t usbLinkOpen(XLinkProtocol_t protocol, const char *path, libusb_device_handle*& h)
+xLinkPlatformErrorCode_t usbLinkOpen(const char *path, libusb_device_handle*& h)
 {
     using namespace std::chrono;
     if (path == NULL) {
@@ -810,7 +807,7 @@ xLinkPlatformErrorCode_t usbLinkOpen(XLinkProtocol_t protocol, const char *path,
     }
 
     uint8_t ep = 0;
-    libusb_error libusb_rc = usb_open_device(protocol, dev, &ep, h);
+    libusb_error libusb_rc = usb_open_device(dev, &ep, h);
     if(libusb_rc == LIBUSB_SUCCESS) {
         return X_LINK_PLATFORM_SUCCESS;
     } else if(libusb_rc == LIBUSB_ERROR_ACCESS) {
@@ -870,33 +867,12 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
 void usbLinkClose(libusb_device_handle *f)
 {
     libusb_release_interface(f, 0);
-    libusb_release_interface(f, 1);
     libusb_close(f);
 }
 
-extern int usbFdWrite;
-extern int usbFdRead;
-int usbPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
-{
-#if defined(__unix__)
-    int outfd = open("/dev/usb-ffs/xlink/ep1", O_WRONLY);
-    int infd = open("/dev/usb-ffs/xlink/ep2", O_RDONLY);
-
-    if(outfd < 0 || infd < 0) {
-	return -1;
-    }
-
-    usbFdRead = infd;
-    usbFdWrite = outfd;
- 
-    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) usbFdRead);
-#endif
-
-    return 0;
-}
 
 
-int usbPlatformConnect(XLinkProtocol_t protocol, const char *devPathRead, const char *devPathWrite, void **fd)
+int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if (!defined(USE_USB_VSC))
     #ifdef USE_LINK_JTAG
@@ -925,70 +901,85 @@ int usbPlatformConnect(XLinkProtocol_t protocol, const char *devPathRead, const 
     return 0;
 
     #else
-    usbFdRead= open(devPathRead, O_RDWR);
-    if(usbFdRead < 0)
-    {
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+
+    if (strcmp(devPathRead, "/dev/usb-ffs/xlink") {
+        int outfd = open("/dev/usb-ffs/xlink/ep1", O_WRONLY);
+        int infd = open("/dev/usb-ffs/xlink/ep2", O_RDONLY);
+
+        if(outfd < 0 || infd < 0) {
+	    return X_LINK_PLATFORM_ERROR;
+        }
+
+        usbFdRead = infd;
+        usbFdWrite = outfd;
+    } else {
+        usbFdRead= open(devPathRead, O_RDWR);
+        if(usbFdRead < 0)
+        {
+            return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
+        }
+
+
+        // set tty to raw mode
+        struct termios  tty;
+        speed_t     spd;
+        int rc;
+        rc = tcgetattr(usbFdRead, &tty);
+        if (rc < 0) {
+            close(usbFdRead);
+            usbFdRead = -1;
+            return X_LINK_PLATFORM_ERROR;
+        }
+
+        spd = B115200;
+        cfsetospeed(&tty, (speed_t)spd);
+        cfsetispeed(&tty, (speed_t)spd);
+    
+        cfmakeraw(&tty);
+    
+        rc = tcsetattr(usbFdRead, TCSANOW, &tty);
+        if (rc < 0) {
+            close(usbFdRead);
+            usbFdRead = -1;
+            return X_LINK_PLATFORM_ERROR;
+        }
+    
+        usbFdWrite= open(devPathWrite, O_RDWR);
+        if(usbFdWrite < 0)
+        {
+            close(usbFdRead);
+            usbFdWrite = -1;
+            return X_LINK_PLATFORM_ERROR;
+        }
+        // set tty to raw mode
+        rc = tcgetattr(usbFdWrite, &tty);
+        if (rc < 0) {
+            close(usbFdRead);
+            close(usbFdWrite);
+            usbFdWrite = -1;
+            return X_LINK_PLATFORM_ERROR;
+        }
+    
+        spd = B115200;
+        cfsetospeed(&tty, (speed_t)spd);
+        cfsetispeed(&tty, (speed_t)spd);
+    
+        cfmakeraw(&tty);
+    
+        rc = tcsetattr(usbFdWrite, TCSANOW, &tty);
+        if (rc < 0) {
+            close(usbFdRead);
+            close(usbFdWrite);
+            usbFdWrite = -1;
+            return X_LINK_PLATFORM_ERROR;
+        }
+        return 0;
     }
-    // set tty to raw mode
-    struct termios  tty;
-    speed_t     spd;
-    int rc;
-    rc = tcgetattr(usbFdRead, &tty);
-    if (rc < 0) {
-        close(usbFdRead);
-        usbFdRead = -1;
-        return X_LINK_PLATFORM_ERROR;
-    }
-
-    spd = B115200;
-    cfsetospeed(&tty, (speed_t)spd);
-    cfsetispeed(&tty, (speed_t)spd);
-
-    cfmakeraw(&tty);
-
-    rc = tcsetattr(usbFdRead, TCSANOW, &tty);
-    if (rc < 0) {
-        close(usbFdRead);
-        usbFdRead = -1;
-        return X_LINK_PLATFORM_ERROR;
-    }
-
-    usbFdWrite= open(devPathWrite, O_RDWR);
-    if(usbFdWrite < 0)
-    {
-        close(usbFdRead);
-        usbFdWrite = -1;
-        return X_LINK_PLATFORM_ERROR;
-    }
-    // set tty to raw mode
-    rc = tcgetattr(usbFdWrite, &tty);
-    if (rc < 0) {
-        close(usbFdRead);
-        close(usbFdWrite);
-        usbFdWrite = -1;
-        return X_LINK_PLATFORM_ERROR;
-    }
-
-    spd = B115200;
-    cfsetospeed(&tty, (speed_t)spd);
-    cfsetispeed(&tty, (speed_t)spd);
-
-    cfmakeraw(&tty);
-
-    rc = tcsetattr(usbFdWrite, TCSANOW, &tty);
-    if (rc < 0) {
-        close(usbFdRead);
-        close(usbFdWrite);
-        usbFdWrite = -1;
-        return X_LINK_PLATFORM_ERROR;
-    }
-    return 0;
     #endif  /*USE_LINK_JTAG*/
 #else
 
     libusb_device_handle* usbHandle = nullptr;
-    xLinkPlatformErrorCode_t ret = usbLinkOpen(protocol, devPathWrite, usbHandle);
+    xLinkPlatformErrorCode_t ret = usbLinkOpen(devPathWrite, usbHandle);
 
     if (ret != X_LINK_PLATFORM_SUCCESS)
     {
