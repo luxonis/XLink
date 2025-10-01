@@ -57,10 +57,12 @@
 #include <termios.h>
 
 #include "usb_host.h"
+#endif  /*USE_USB_VSC*/
 
 extern int usbFdWrite;
 extern int usbFdRead;
-#endif  /*USE_USB_VSC*/
+extern int usbGateFdWrite;
+extern int usbGateFdRead;
 
 // ------------------------------------
 // Wrappers declaration. Begin.
@@ -88,6 +90,7 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
+        case X_LINK_USB_EP:
             return usbPlatformWrite(deviceHandle->xLinkFD, data, size);
 
         case X_LINK_PCIE:
@@ -100,8 +103,6 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformWrite(deviceHandle->xLinkFD, data, size);
 #endif
-        case X_LINK_USB_EP:
-	    return usbEpPlatformWrite(deviceHandle->xLinkFD, data, size);
 
 	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
 	    mvLog(MVLOG_ERROR, "Failed to write with TCP_IP_OR_LOCAL_SHDMEM\n");
@@ -138,6 +139,7 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
+	case X_LINK_USB_EP:
             return usbPlatformRead(deviceHandle->xLinkFD, data, size);
 
         case X_LINK_PCIE:
@@ -150,8 +152,6 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformRead(deviceHandle->xLinkFD, data, size, fd);
 #endif
-	case X_LINK_USB_EP:
-	    return usbEpPlatformRead(deviceHandle->xLinkFD, data, size);
 
 	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
 	    mvLog(MVLOG_ERROR, "Failed to read with TCP_IP_OR_LOCAL_SHDMEM\n");
@@ -166,7 +166,7 @@ int XLinkPlatformGateWrite(void *data, int size, int timeout)
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
     }
 
-    return usbEpPlatformGateWrite(data, size, timeout);
+    return usbPlatformGateWrite(NULL, data, size);
 }
 
 int XLinkPlatformGateRead(void *data, int size, int timeout)
@@ -175,7 +175,7 @@ int XLinkPlatformGateRead(void *data, int size, int timeout)
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
     }
 
-    return usbEpPlatformGateRead(data, size, timeout);
+    return usbPlatformGateRead(NULL, data, size);
 }
 
 

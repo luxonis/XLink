@@ -47,12 +47,16 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size);
 int get_pid_by_name(const char* name);
 
 xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* path);
-int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
+int usbPlatformConnect(XLinkProtocol_t protocol, const char *devPathRead, const char *devPathWrite, void **fd);
+int usbPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd);
 int usbPlatformClose(void *fd);
 int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 
 int usbPlatformRead(void *fd, void *data, int size);
 int usbPlatformWrite(void *fd, void *data, int size);
+
+int usbPlatformGateRead(void *fd, void *data, int size);
+int usbPlatformGateWrite(void *fd, void *data, int size);
 
 #else
 
@@ -60,12 +64,16 @@ int usbPlatformWrite(void *fd, void *data, int size);
 static inline int usbInitialize(void* options) { return -1; }
 static inline xLinkPlatformErrorCode_t usbLinkBootBootloader(const char* path) { return X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED; }
 
-static inline int usbPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd) { return -1; }
+static inline int usbPlatformConnect(XLinkProtocol_t protocol, const char *devPathRead, const char *devPathWrite, void **fd) { return -1; }
+static inline int usbPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd) { return -1; }
 static inline int usbPlatformClose(void *fd) { return -1; }
 static inline int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) { return -1; }
 
 static inline int usbPlatformRead(void *fd, void *data, int size) { return -1; }
 static inline int usbPlatformWrite(void *fd, void *data, int size) { return -1; }
+
+static inline int usbPlatformGateRead(void *fd, void *data, int size) { return -1; }
+static inline int usbPlatformGateWrite(void *fd, void *data, int size) { return -1; }
 
 static inline xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
