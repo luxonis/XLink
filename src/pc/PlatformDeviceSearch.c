@@ -58,7 +58,6 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
     xLinkPlatformErrorCode_t PCIe_rc;
     xLinkPlatformErrorCode_t TCPIP_rc;
     xLinkPlatformErrorCode_t SHDMEM_rc;
-    xLinkPlatformErrorCode_t USBEP_rc;
     unsigned numFoundDevices = 0;
     *out_amountOfFoundDevices = 0;
 
@@ -89,19 +88,6 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             return getLocalShdmemDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 #endif
         case X_LINK_ANY_PROTOCOL:
-	    if(XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
-		numFoundDevices = 0;
-	        USBEP_rc = getUSBEPDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, &numFoundDevices);
-                *out_amountOfFoundDevices += numFoundDevices;
-                out_foundDevices += numFoundDevices;
-                // Found enough devices, return
-                if (numFoundDevices >= sizeFoundDevices) {
-                    return X_LINK_PLATFORM_SUCCESS;
-                } else {
-                    sizeFoundDevices -= numFoundDevices;
-                }
-	    }
-
             // If USB protocol is initialized
             if(XLinkIsProtocolInitialized(X_LINK_USB_VSC)) {
                 // Find first correct USB Device
