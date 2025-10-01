@@ -814,6 +814,7 @@ xLinkPlatformErrorCode_t usbLinkOpen(XLinkProtocol_t protocol, const char *path,
     }
 
     uint8_t ep = 0;
+    std::lock_guard<std::mutex> l(mutex);
     libusb_error libusb_rc = usb_open_device(protocol, dev, &ep, h);
     if(libusb_rc == LIBUSB_SUCCESS) {
         return X_LINK_PLATFORM_SUCCESS;
@@ -990,7 +991,6 @@ int usbPlatformConnect(XLinkProtocol_t protocol, const char *devPathRead, const 
     return 0;
     #endif  /*USE_LINK_JTAG*/
 #else
-
     libusb_device_handle* usbHandle = nullptr;
     xLinkPlatformErrorCode_t ret = usbLinkOpen(protocol, devPathWrite, usbHandle);
 
