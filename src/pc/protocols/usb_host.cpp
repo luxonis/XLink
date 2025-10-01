@@ -1204,7 +1204,7 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
     return rc;
 }
 
-int usbEpPlatformGateRead(void *data, int size, int timeout)
+int usbPlatformGateRead(void *data, int size, int timeout)
 {
     std::lock_guard<std::mutex> l(mutex);
 
@@ -1242,7 +1242,7 @@ int usbEpPlatformGateRead(void *data, int size, int timeout)
     return rc;
 }
 
-int usbEpPlatformGateWrite(void *data, int size, int timeout)
+int usbPlatformGateWrite(void *data, int size, int timeout)
 {
     std::lock_guard<std::mutex> l(mutex);
 
