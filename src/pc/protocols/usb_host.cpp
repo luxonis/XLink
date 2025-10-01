@@ -1141,6 +1141,7 @@ int usbPlatformRead(void* fdKey, void* data, int size)
     }
     libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
+    // TODO(TheMutta): Fix for VSC
     rc = usb_read(usbHandle, data, size, 1);
 #endif  /*USE_USB_VSC*/
     return rc;
@@ -1197,49 +1198,88 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
     }
     libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
+    // TODO(TheMutta) fix for VSC
     rc = usb_write(usbHandle, data, size, 1);
 #endif  /*USE_USB_VSC*/
     return rc;
 }
 
-int usbPlatformGateRead(void* fdKey, void* data, int size)
+int usbEpPlatformGateRead(void *data, int size, int timeout)
 {
+    std::lock_guard<std::mutex> l(mutex);
+
     int rc = 0;
-#ifndef USE_USB_VSC
-    return -1;
-#else
 
-    void* tmpUsbHandle = NULL;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
+    /* Get our device */
+    libusb_device_handle *gate_dev_handle = libusb_open_device_with_vid_pid(context, 0x05C6, 0x4321);
+    if (gate_dev_handle == NULL) {
+	rc = LIBUSB_ERROR_NO_DEVICE;
+	return rc;
     }
-    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
+    
+    /* Not strictly necessary, but it is better to use it,
+     * as we're using kernel modules together with our interfaces
+     */
+    rc  = libusb_set_auto_detach_kernel_driver(gate_dev_handle, 1);
+    if (rc != LIBUSB_SUCCESS) {
+        libusb_close(gate_dev_handle);
 
-    rc = usb_read(usbHandle, data, size, 0);
-#endif  /*USE_USB_VSC*/
+	return rc;
+    }
+    
+    libusb_device* dev = libusb_get_device(gate_dev_handle);
+
+    /* Now we claim our ffs interfaces */
+    rc = libusb_claim_interface(gate_dev_handle, 0);
+    if (rc != LIBUSB_SUCCESS) {
+	return rc;
+    }
+
+    rc = libusb_bulk_transfer(gate_dev_handle, USB_ENDPOINT_IN, (unsigned char*)data, size, &rc, timeout);
+    
+    libusb_close(gate_dev_handle);
+
     return rc;
 }
 
-int usbPlatformGateWrite(void *fdKey, void *data, int size)
+int usbEpPlatformGateWrite(void *data, int size, int timeout)
 {
+    std::lock_guard<std::mutex> l(mutex);
+
     int rc = 0;
-#ifndef USE_USB_VSC
-    return -1;
-#else
 
-    void* tmpUsbHandle = NULL;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
+    /* Get our device */
+    libusb_device_handle *gate_dev_handle = libusb_open_device_with_vid_pid(context, 0x05C6, 0x4321);
+    if (gate_dev_handle == NULL) {
+	rc = LIBUSB_ERROR_NO_DEVICE;
+	return rc;
     }
-    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
+    
+    /* Not strictly necessary, but it is better to use it,
+     * as we're using kernel modules together with our interfaces
+     */
+    rc  = libusb_set_auto_detach_kernel_driver(gate_dev_handle, 1);
+    if (rc != LIBUSB_SUCCESS) {
+        libusb_close(gate_dev_handle);
 
-    rc = usb_write(usbHandle, data, size, 0);
-#endif  /*USE_USB_VSC*/
+	return rc;
+    }
+    
+    libusb_device* dev = libusb_get_device(gate_dev_handle);
+
+    /* Now we claim our ffs interfaces */
+    rc = libusb_claim_interface(gate_dev_handle, 0);
+    if (rc != LIBUSB_SUCCESS) {
+
+	return rc;
+    }
+
+    rc = libusb_bulk_transfer(gate_dev_handle, USB_ENDPOINT_OUT, (unsigned char*)data, size, &rc, timeout);
+    
+    libusb_close(gate_dev_handle);
+
     return rc;
 }
-
 
 #ifdef _WIN32
 #include <initguid.h>

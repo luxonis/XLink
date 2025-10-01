@@ -165,7 +165,7 @@ int XLinkPlatformGateWrite(void *data, int size, int timeout)
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
     }
 
-    return usbPlatformGateWrite(NULL, data, size);
+    return usbPlatformGateWrite(data, size, timeout);
 }
 
 int XLinkPlatformGateRead(void *data, int size, int timeout)
@@ -174,7 +174,7 @@ int XLinkPlatformGateRead(void *data, int size, int timeout)
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
     }
 
-    return usbPlatformGateRead(NULL, data, size);
+    return usbPlatformGateRead(data, size, timeout);
 }
 
 
