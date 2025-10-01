@@ -1206,41 +1206,7 @@ int usbPlatformGateRead(void* fdKey, void* data, int size)
 {
     int rc = 0;
 #ifndef USE_USB_VSC
-    int nread =  0;
-#ifdef USE_LINK_JTAG
-    while (nread < size){
-        nread += read(usbFdWrite, &((char*)data)[nread], size - nread);
-        printf("read %d %d\n", nread, size);
-    }
-#else
-    if(usbFdRead < 0)
-    {
-        return -1;
-    }
-
-    while(nread < size)
-    {
-        int toRead = (PACKET_LENGTH && (size - nread > PACKET_LENGTH)) \
-                        ? PACKET_LENGTH : size - nread;
-
-        while(toRead > 0)
-        {
-            rc = read(usbFdRead, &((char*)data)[nread], toRead);
-            if ( rc < 0)
-            {
-                return -2;
-            }
-            toRead -=rc;
-            nread += rc;
-        }
-        unsigned char acknowledge = 0xEF;
-        int wc = write(usbFdRead, &acknowledge, sizeof(acknowledge));
-        if (wc != sizeof(acknowledge))
-        {
-            return -2;
-        }
-    }
-#endif  /*USE_LINK_JTAG*/
+    return -1;
 #else
 
     void* tmpUsbHandle = NULL;
@@ -1259,44 +1225,7 @@ int usbPlatformGateWrite(void *fdKey, void *data, int size)
 {
     int rc = 0;
 #ifndef USE_USB_VSC
-    int byteCount = 0;
-#ifdef USE_LINK_JTAG
-    while (byteCount < size){
-        byteCount += write(usbFdWrite, &((char*)data)[byteCount], size - byteCount);
-        printf("write %d %d\n", byteCount, size);
-    }
-#else
-    if(usbFdWrite < 0)
-    {
-        return -1;
-    }
-    while(byteCount < size)
-    {
-       int toWrite = (PACKET_LENGTH && (size - byteCount > PACKET_LENGTH)) \
-                        ? PACKET_LENGTH:size - byteCount;
-       int wc = write(usbFdWrite, ((char*)data) + byteCount, toWrite);
-
-       if ( wc != toWrite)
-       {
-           return -2;
-       }
-
-       byteCount += toWrite;
-       unsigned char acknowledge;
-       int rc;
-       rc = read(usbFdWrite, &acknowledge, sizeof(acknowledge));
-
-       if ( rc < 0)
-       {
-           return -2;
-       }
-
-       if (acknowledge != 0xEF)
-       {
-           return -2;
-       }
-    }
-#endif  /*USE_LINK_JTAG*/
+    return -1;
 #else
 
     void* tmpUsbHandle = NULL;
