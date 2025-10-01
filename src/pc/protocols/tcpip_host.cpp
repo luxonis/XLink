@@ -938,14 +938,13 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
     return 0;
 }
 
+#if defined(__unix__) || defined(__APPLE__)
 int updateGlobalHandlerWithIsLocalConnectionInfo(struct sockaddr_in *client) {
     if (!glHandler || !client) {
         errno = EINVAL;
         return -1;
     }
     glHandler->isLocalConnection = false;
-
-#if defined(__unix__) || defined(__APPLE__)
     struct ifaddrs *ifaddr = NULL;
     if (getifaddrs(&ifaddr) == -1) {
         return -1;
@@ -963,12 +962,8 @@ int updateGlobalHandlerWithIsLocalConnectionInfo(struct sockaddr_in *client) {
     }
     freeifaddrs(ifaddr);
     return 0;
-#else
-    // Not supported on this platform
-    errno = ENOTSUP;
-    return -1;
-#endif
 }
+#endif
 
 // TODO add IPv6 to tcpipPlatformConnect()
 int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd, long *sockFd)
@@ -1047,9 +1042,11 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
         mvLog(MVLOG_FATAL, "Couldn't accept a connection to server socket");
         return X_LINK_PLATFORM_ERROR;
     }
+#if defined(__unix__) || defined(__APPLE__)
     if (updateGlobalHandlerWithIsLocalConnectionInfo(&client) != 0) { // non fatal
         mvLog(MVLOG_WARN, "Couldn't update XLinkGlobal state with isLocal info. %s\n", strerror(errno));
     }
+#endif
 
     // Store the socket and create a "unique" key instead
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
