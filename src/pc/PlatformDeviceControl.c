@@ -12,7 +12,6 @@
 #include "tcpip_host.h"
 #include "local_memshd.h"
 #include "tcpip_memshd.h"
-#include "usb_host_ep.h"
 #include "XLinkStringUtils.h"
 #include "PlatformDeviceFd.h"
 

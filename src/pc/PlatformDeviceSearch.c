@@ -10,7 +10,6 @@
 #include "pcie_host.h"
 #include "tcpip_host.h"
 #include "local_memshd.h"
-#include "usb_host_ep.h"
 #include "XLinkStringUtils.h"
 
 
@@ -42,10 +41,6 @@ static xLinkPlatformErrorCode_t getLocalShdmemDevices(const deviceDesc_t in_devi
                                                     unsigned int *out_amountOfFoundDevices);
 #endif
 
-static xLinkPlatformErrorCode_t getUSBEPDevices(const deviceDesc_t in_deviceRequirements,
-                                                    deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                    unsigned int *out_amountOfFoundDevices);
-
 // ------------------------------------
 // Helpers declaration. End.
 // ------------------------------------
@@ -70,6 +65,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
     switch (in_deviceRequirements.protocol){
         case X_LINK_USB_CDC:
         case X_LINK_USB_VSC:
+	case X_LINK_USB_EP:
             if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
                 return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
             }
@@ -92,12 +88,6 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
 	    }
             return getLocalShdmemDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 #endif
-	case X_LINK_USB_EP:
-	    if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
-                return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
-	    }
-	    return getUSBEPDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
-
         case X_LINK_ANY_PROTOCOL:
 	    if(XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
 		numFoundDevices = 0;
@@ -204,7 +194,6 @@ char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode) {
 	case X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED";
 	case X_LINK_PLATFORM_TCP_IP_OR_LOCAL_SHDMEM_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED";
         case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED";
-        case X_LINK_PLATFORM_USB_EP_DRIVER_NOT_LOADED: return "X_LINK_PLATFORM_USB_EP_DRIVER_NOT_LOADED";
         case X_LINK_PLATFORM_INVALID_PARAMETERS: return "X_LINK_PLATFORM_INVALID_PARAMETERS";
         default: return "";
     }
@@ -375,26 +364,6 @@ xLinkPlatformErrorCode_t getLocalShdmemDevices(const deviceDesc_t in_deviceRequi
 }
 #endif
 
-xLinkPlatformErrorCode_t getUSBEPDevices(const deviceDesc_t in_deviceRequirements,
-                                                    deviceDesc_t* out_foundDevices, int sizeFoundDevices,
-                                                    unsigned int *out_amountOfFoundDevices)
-{
-    ASSERT_XLINK_PLATFORM(out_foundDevices);
-    ASSERT_XLINK_PLATFORM(out_amountOfFoundDevices);
-    if (in_deviceRequirements.platform == X_LINK_MYRIAD_2) {
-        return X_LINK_PLATFORM_ERROR;
-    }
-
-    if(in_deviceRequirements.state == X_LINK_UNBOOTED) {
-        /**
-         * There is no condition where unbooted
-         * state device to be found using usb.
-        */
-        return X_LINK_PLATFORM_DEVICE_NOT_FOUND;
-    }
-
-    return usbepGetDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
-}
 // ------------------------------------
 // Helpers implementation. End.
 // ------------------------------------

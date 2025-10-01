@@ -15,7 +15,6 @@
 #include "pcie_host.h"
 #include "tcpip_host.h"
 #include "local_memshd.h"
-#include "usb_host_ep.h"
 #include "PlatformDeviceFd.h"
 #include "inttypes.h"
 
