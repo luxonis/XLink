@@ -12,7 +12,8 @@ if(NOT CONFIG_MODE OR (CONFIG_MODE AND NOT XLINK_INSTALL_PUBLIC_ONLY AND XLINK_E
     if(XLINK_LIBUSB_LOCAL)
         add_subdirectory("${XLINK_LIBUSB_LOCAL}" "${CMAKE_CURRENT_BINARY_DIR}/libusb" EXCLUDE_FROM_ALL)
     elseif(NOT XLINK_LIBUSB_SYSTEM)
-        find_package(usb-1.0 ${_QUIET} CONFIG REQUIRED HINTS "${CMAKE_CURRENT_LIST_DIR}/libusb")
+        find_package(PkgConfig REQUIRED)
+	pkg_check_modules(LIBUSB REQUIRED libusb-1.0)
     endif()
 endif()
 

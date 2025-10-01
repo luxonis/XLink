@@ -188,7 +188,7 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
             }
 
 	    // Check for RVC3 and RVC4 first
-	    if(in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4){
+	    if(state == X_LINK_GATE || in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4){
 		GateResponse gateResponse;
 		std::string serial;
 		getLibusbDeviceGateResponse(&desc, devs[i], gateResponse, serial);
