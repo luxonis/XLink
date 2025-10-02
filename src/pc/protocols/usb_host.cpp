@@ -903,6 +903,7 @@ int usbPlatformServer(const char *devPathRead, const char *devPathWrite, void **
 
 int usbPlatformConnect(XLinkProtocol_t protocol, const char *devPathRead, const char *devPathWrite, void **fd)
 {
+    std::lock_guard<std::mutex> l(mutex);
 #if (!defined(USE_USB_VSC))
     #ifdef USE_LINK_JTAG
     struct sockaddr_in serv_addr;
@@ -1012,6 +1013,7 @@ int usbPlatformConnect(XLinkProtocol_t protocol, const char *devPathRead, const 
 
 int usbPlatformClose(void *fdKey)
 {
+    std::lock_guard<std::mutex> l(mutex);
 
 #ifndef USE_USB_VSC
     #ifdef USE_LINK_JTAG
@@ -1095,6 +1097,8 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size, size_t off
 
 int usbPlatformRead(void* fdKey, void* data, int size)
 {
+    std::lock_guard<std::mutex> l(mutex);
+
     int rc = 0;
 #ifndef USE_USB_VSC
     int nread =  0;
@@ -1149,6 +1153,8 @@ int usbPlatformRead(void* fdKey, void* data, int size)
 
 int usbPlatformWrite(void *fdKey, void *data, int size)
 {
+    std::lock_guard<std::mutex> l(mutex);
+
     int rc = 0;
 #ifndef USE_USB_VSC
     int byteCount = 0;
@@ -1208,6 +1214,8 @@ int usbPlatformGateRead(void *data, int size, int timeout)
 {
     std::lock_guard<std::mutex> l(mutex);
 
+    if (context == nullptr) return -1;
+
     int rc = 0;
 
     /* Get our device */
@@ -1245,6 +1253,8 @@ int usbPlatformGateRead(void *data, int size, int timeout)
 int usbPlatformGateWrite(void *data, int size, int timeout)
 {
     std::lock_guard<std::mutex> l(mutex);
+    
+    if (context == nullptr) return -1;
 
     int rc = 0;
 
