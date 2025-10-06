@@ -263,9 +263,6 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
 }
 
 extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libusb_device** pdev) {
-
-    std::lock_guard<std::mutex> l(mutex);
-
     // Get list of usb devices
     static libusb_device **devs = NULL;
     auto numDevices = libusb_get_device_list(context, &devs);
@@ -814,7 +811,6 @@ xLinkPlatformErrorCode_t usbLinkOpen(XLinkProtocol_t protocol, const char *path,
     }
 
     uint8_t ep = 0;
-    std::lock_guard<std::mutex> l(mutex);
     libusb_error libusb_rc = usb_open_device(protocol, dev, &ep, h);
     if(libusb_rc == LIBUSB_SUCCESS) {
         return X_LINK_PLATFORM_SUCCESS;
