@@ -50,6 +50,7 @@ static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
 static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int initialized;
+static bool isServer;
 
 struct UsbSetupPacket {
   uint8_t  requestType;
@@ -889,6 +890,8 @@ int usbPlatformServer(const char *devPathRead, const char *devPathWrite, void **
 
     usbFdRead = infd;
     usbFdWrite = outfd;
+
+    isServer = true;
  
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) usbFdRead);
 #endif
@@ -1001,6 +1004,7 @@ int usbPlatformConnect(XLinkProtocol_t protocol, const char *devPathRead, const 
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
     *fd = createPlatformDeviceFdKey(usbHandle);
 
+    isServer = false;
 #endif  /*USE_USB_VSC*/
 
     return 0;
@@ -1132,17 +1136,22 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
 #endif  /*USE_LINK_JTAG*/
 #else
 
-    void* tmpUsbHandle = NULL;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
-    }
-    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
-
-    if (protocol == X_LINK_USB_EP) {
-	rc = usb_read(usbHandle, data, size, 1);
+    if (isServer) {
+	rc = read(usbFdRead, data, size);
     } else {
-	rc = usb_read(usbHandle, data, size, 0);
+        std::lock_guard<std::mutex> l(mutex);
+        void* tmpUsbHandle = NULL;
+        if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+            mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+            return -1;
+        }
+        libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
+
+        if (protocol == X_LINK_USB_EP) {
+	    rc = usb_read(usbHandle, data, size, 1);
+        } else {
+	    rc = usb_read(usbHandle, data, size, 0);
+        }
     }
 #endif  /*USE_USB_VSC*/
     return rc;
@@ -1192,17 +1201,22 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
 #endif  /*USE_LINK_JTAG*/
 #else
 
-    void* tmpUsbHandle = NULL;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
-    }
-    libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
-
-    if (protocol == X_LINK_USB_EP) {
-	rc = usb_write(usbHandle, data, size, 1);
+    if (isServer) {
+	rc = write(usbFdWrite, data, size);
     } else {
-	rc = usb_write(usbHandle, data, size, 0);
+        std::lock_guard<std::mutex> l(mutex);
+        void* tmpUsbHandle = NULL;
+        if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
+            mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
+            return -1;
+        }
+        libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
+
+        if (protocol == X_LINK_USB_EP) {
+	    rc = usb_write(usbHandle, data, size, 1);
+        } else {
+	    rc = usb_write(usbHandle, data, size, 0);
+        }
     }
 #endif  /*USE_USB_VSC*/
     return rc;
