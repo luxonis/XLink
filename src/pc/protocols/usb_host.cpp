@@ -1093,8 +1093,6 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size, size_t off
 
 int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
 {
-    std::lock_guard<std::mutex> l(mutex);
-
     int rc = 0;
 #ifndef USE_USB_VSC
     int nread =  0;
@@ -1152,8 +1150,6 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
 
 int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size)
 {
-    std::lock_guard<std::mutex> l(mutex);
-
     int rc = 0;
 #ifndef USE_USB_VSC
     int byteCount = 0;
