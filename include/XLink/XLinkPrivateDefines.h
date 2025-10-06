@@ -120,7 +120,6 @@ typedef enum
     
     XLINK_READ_REL_SPEC_RESP,
     XLINK_WRITE_FD_RESP, // only for the shared mem protocol
-
     XLINK_RESP_LAST,
 } xLinkEventType_t;
 

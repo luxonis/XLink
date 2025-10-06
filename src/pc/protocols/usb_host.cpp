@@ -991,6 +991,7 @@ int usbPlatformConnect(XLinkProtocol_t protocol, const char *devPathRead, const 
     return 0;
     #endif  /*USE_LINK_JTAG*/
 #else
+
     libusb_device_handle* usbHandle = nullptr;
     xLinkPlatformErrorCode_t ret = usbLinkOpen(protocol, devPathWrite, usbHandle);
 
