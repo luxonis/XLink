@@ -137,7 +137,7 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-	case X_LINK_USB_EP:
+        case X_LINK_USB_EP:
             return usbPlatformRead(deviceHandle->protocol, deviceHandle->xLinkFD, data, size);
 
         case X_LINK_PCIE:

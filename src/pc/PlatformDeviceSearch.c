@@ -64,7 +64,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
     switch (in_deviceRequirements.protocol){
         case X_LINK_USB_CDC:
         case X_LINK_USB_VSC:
-	    case X_LINK_USB_EP:
+        case X_LINK_USB_EP:
             if(!XLinkIsProtocolInitialized(in_deviceRequirements.protocol)) {
                 return X_LINK_PLATFORM_DRIVER_NOT_LOADED+in_deviceRequirements.protocol;
             }
@@ -89,7 +89,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             return getLocalShdmemDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
 #endif
 
-case X_LINK_ANY_PROTOCOL:
+        case X_LINK_ANY_PROTOCOL:
             // If USB protocol is initialized
             if(XLinkIsProtocolInitialized(X_LINK_USB_VSC)) {
                 // Find first correct USB Device
@@ -105,7 +105,6 @@ case X_LINK_ANY_PROTOCOL:
                 }
             }
 
- 
             // TODO(themarpe) - reenable PCIe
             (void) PCIe_rc;
             /*

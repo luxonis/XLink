@@ -644,7 +644,7 @@ XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
         case X_LINK_PLATFORM_DEVICE_BUSY:
             return X_LINK_DEVICE_ALREADY_IN_USE;
         case X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED:
-	    case X_LINK_PLATFORM_USB_EP_DRIVER_NOT_LOADED:
+        case X_LINK_PLATFORM_USB_EP_DRIVER_NOT_LOADED:
             return X_LINK_INIT_USB_ERROR;
         case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED:
             return X_LINK_INIT_TCP_IP_ERROR;
@@ -700,9 +700,9 @@ const char* XLinkProtocolToStr(XLinkProtocol_t val) {
         case X_LINK_PCIE: return "X_LINK_PCIE";
         case X_LINK_IPC: return "X_LINK_IPC";
         case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
-	    case X_LINK_LOCAL_SHDMEM: return "X_LINK_LOCAL_SHDMEM";
+       case X_LINK_LOCAL_SHDMEM: return "X_LINK_LOCAL_SHDMEM";
         case X_LINK_TCP_IP_OR_LOCAL_SHDMEM: return "X_LINK_TCP_IP_OR_LOCAL_SHDMEM";
-	    case X_LINK_USB_EP: return "X_LINK_USB_EP";
+        case X_LINK_USB_EP: return "X_LINK_USB_EP";
         case X_LINK_NMB_OF_PROTOCOLS: return "X_LINK_NMB_OF_PROTOCOLS";
         case X_LINK_ANY_PROTOCOL: return "X_LINK_ANY_PROTOCOL";
         default:

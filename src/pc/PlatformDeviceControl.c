@@ -92,7 +92,7 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler)
     // check for failed initialization; LIBUSB_SUCCESS = 0
     if (usbInitialize(globalHandler->options) != 0) {
         xlinkSetProtocolInitialized(X_LINK_USB_VSC, 0);
-	    xlinkSetProtocolInitialized(X_LINK_USB_EP, 0);
+        xlinkSetProtocolInitialized(X_LINK_USB_EP, 0);
     }
 
     // Initialize tcpip protocol if necessary
@@ -188,7 +188,7 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
     switch (*protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-	    case X_LINK_USB_EP:
+        case X_LINK_USB_EP:
             return usbPlatformConnect(*protocol, devPathRead, devPathWrite, fd);
 
         case X_LINK_PCIE:
@@ -212,9 +212,9 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
 xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t *protocol, void** fd)
 {
     switch (*protocol) {
-	case X_LINK_USB_VSC:
+        case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-	case X_LINK_USB_EP:
+        case X_LINK_USB_EP:
             return usbPlatformServer(devPathRead, devPathWrite, fd);
 
         case X_LINK_TCP_IP:
@@ -268,7 +268,8 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformClose(deviceHandle->xLinkFD);
+	case X_LINK_USB_EP:
+            return usbPlatformClose(deviceHandle->protocol, deviceHandle->xLinkFD);
 
         case X_LINK_PCIE:
             return pciePlatformClose(deviceHandle->xLinkFD);
