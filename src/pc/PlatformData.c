@@ -90,7 +90,7 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
         case X_LINK_USB_EP:
-            return usbPlatformWrite(deviceHandle->xLinkFD, data, size);
+            return usbPlatformWrite(deviceHandle->protocol, deviceHandle->xLinkFD, data, size);
 
         case X_LINK_PCIE:
             return pciePlatformWrite(deviceHandle->xLinkFD, data, size);
@@ -139,7 +139,7 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
 	case X_LINK_USB_EP:
-            return usbPlatformRead(deviceHandle->xLinkFD, data, size);
+            return usbPlatformRead(deviceHandle->protocol, deviceHandle->xLinkFD, data, size);
 
         case X_LINK_PCIE:
             return pciePlatformRead(deviceHandle->xLinkFD, data, size);

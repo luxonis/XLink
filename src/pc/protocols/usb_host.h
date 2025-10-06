@@ -52,8 +52,8 @@ int usbPlatformServer(const char *devPathRead, const char *devPathWrite, void **
 int usbPlatformClose(void *fd);
 int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 
-int usbPlatformRead(void *fd, void *data, int size);
-int usbPlatformWrite(void *fd, void *data, int size);
+int usbPlatformRead(XLinkProtocol_t protocol, void *fd, void *data, int size);
+int usbPlatformWrite(XLinkProtocol_t protocol, void *fd, void *data, int size);
 
 int usbPlatformGateRead(void *data, int size, int timeout);
 int usbPlatformGateWrite(void *data, int size, int timeout);
@@ -69,8 +69,8 @@ static inline int usbPlatformServer(const char *devPathRead, const char *devPath
 static inline int usbPlatformClose(void *fd) { return -1; }
 static inline int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length) { return -1; }
 
-static inline int usbPlatformRead(void *fd, void *data, int size) { return -1; }
-static inline int usbPlatformWrite(void *fd, void *data, int size) { return -1; }
+static inline int usbPlatformRead(XLinkProtocol_t protocol, void *fd, void *data, int size) { return -1; }
+static inline int usbPlatformWrite(XLinkProtocol_t protocol, void *fd, void *data, int size) { return -1; }
 
 static inline int usbPlatformGateRead(void *data, int size, int timeout) { return -1; }
 static inline int usbPlatformGateWrite(void *data, int size, int timeout) { return -1; }

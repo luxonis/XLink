@@ -1091,7 +1091,7 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size, size_t off
     return 0;
 }
 
-int usbPlatformRead(void* fdKey, void* data, int size)
+int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
 {
     std::lock_guard<std::mutex> l(mutex);
 
@@ -1141,13 +1141,16 @@ int usbPlatformRead(void* fdKey, void* data, int size)
     }
     libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
-    // TODO(TheMutta): Fix for VSC
-    rc = usb_read(usbHandle, data, size, 1);
+    if (protocol == X_LINK_USB_EP) {
+	rc = usb_read(usbHandle, data, size, 1);
+    } else {
+	rc = usb_read(usbHandle, data, size, 0);
+    }
 #endif  /*USE_USB_VSC*/
     return rc;
 }
 
-int usbPlatformWrite(void *fdKey, void *data, int size)
+int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size)
 {
     std::lock_guard<std::mutex> l(mutex);
 
@@ -1200,8 +1203,11 @@ int usbPlatformWrite(void *fdKey, void *data, int size)
     }
     libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
-    // TODO(TheMutta) fix for VSC
-    rc = usb_write(usbHandle, data, size, 1);
+    if (protocol == X_LINK_USB_EP) {
+	rc = usb_write(usbHandle, data, size, 1);
+    } else {
+	rc = usb_write(usbHandle, data, size, 0);
+    }
 #endif  /*USE_USB_VSC*/
     return rc;
 }
