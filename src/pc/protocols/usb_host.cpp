@@ -1139,7 +1139,7 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
     if (isServer) {
 	rc = read(usbFdRead, data, size);
     } else {
-        std::lock_guard<std::mutex> l(mutex);
+        //std::lock_guard<std::mutex> l(mutex);
         void* tmpUsbHandle = NULL;
         if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
             mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
@@ -1204,7 +1204,7 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
     if (isServer) {
 	rc = write(usbFdWrite, data, size);
     } else {
-        std::lock_guard<std::mutex> l(mutex);
+        //std::lock_guard<std::mutex> l(mutex);
         void* tmpUsbHandle = NULL;
         if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
             mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
