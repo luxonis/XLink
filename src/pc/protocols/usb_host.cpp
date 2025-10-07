@@ -194,15 +194,15 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
 
 	    // Check for RVC3 and RVC4 first
 	    if(state == X_LINK_GATE || in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4){
-		GateResponse gateResponse;
-		getLibusbDeviceGateResponse(&desc, devs[i], gateResponse, mxId);
+                GateResponse gateResponse;
+                getLibusbDeviceGateResponse(&desc, devs[i], gateResponse, mxId);
 
-                // Everything passed, fillout details of found device
-		if (gateResponse.platform == 4) {
-                	platform = X_LINK_RVC4;
-		} else {
-                	platform = X_LINK_RVC3;
-		}
+		// Everything passed, fillout details of found device
+                if (gateResponse.platform == 4) {
+                    platform = X_LINK_RVC4;
+                } else {
+                    platform = X_LINK_RVC3;
+                }
                 protocol = (XLinkProtocol_t)gateResponse.protocol;
                 state = (XLinkDeviceState_t)gateResponse.state;
 	    } else {
@@ -632,12 +632,7 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
 
     // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
     libusb_set_auto_detach_kernel_driver(h, 1);
-    if((res = libusb_claim_interface(h, 0)) < 0)
-    {
-        mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
-        libusb_close(h);
-        return (libusb_error) res;
-    }
+
 
     if (protocol == X_LINK_USB_EP) {
 	if((res = libusb_claim_interface(h, 1)) < 0)
@@ -646,6 +641,13 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
             libusb_close(h);
             return (libusb_error) res;
 	}
+    } else {
+        if((res = libusb_claim_interface(h, 0)) < 0)
+        {
+           mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
+           libusb_close(h);
+           return (libusb_error) res;
+        }
     }
 
     if((res = libusb_get_config_descriptor(dev, 0, &cdesc)) < 0)
