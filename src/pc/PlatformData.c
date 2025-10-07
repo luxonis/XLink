@@ -157,22 +157,22 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
     }
 }
 
-int XLinkPlatformGateWrite(void *data, int size, int timeout)
+int XLinkPlatformGateWrite(const char *name, void *data, int size, int timeout)
 {
     if(!XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
     }
 
-    return usbPlatformGateWrite(data, size, timeout);
+    return usbPlatformGateWrite(name, data, size, timeout);
 }
 
-int XLinkPlatformGateRead(void *data, int size, int timeout)
+int XLinkPlatformGateRead(const char *name, void *data, int size, int timeout)
 {
     if(!XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
     }
 
-    return usbPlatformGateRead(data, size, timeout);
+    return usbPlatformGateRead(name, data, size, timeout);
 }
 
 

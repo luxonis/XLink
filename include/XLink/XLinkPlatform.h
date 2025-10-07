@@ -91,8 +91,8 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size);
 int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void *data2, int size2);
 int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, long *fd);
-int XLinkPlatformGateWrite(void *data, int size, int timeout);
-int XLinkPlatformGateRead(void *data, int size, int timeout);
+int XLinkPlatformGateWrite(const char *name, void *data, int size, int timeout);
+int XLinkPlatformGateRead(const char *name, void *data, int size, int timeout);
 
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment);
 void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment);

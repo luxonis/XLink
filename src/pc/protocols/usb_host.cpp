@@ -639,7 +639,7 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
         return (libusb_error) res;
     }
 
-    if (protocol = X_LINK_USB_EP) {
+    if (protocol == X_LINK_USB_EP) {
 	if((res = libusb_claim_interface(h, 1)) < 0)
 	{
             mvLog(MVLOG_DEBUG, "claiming interface 1 failed: %s\n", xlink_libusb_strerror(res));
@@ -1222,7 +1222,7 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
     return rc;
 }
 
-int usbPlatformGateRead(void *data, int size, int timeout)
+int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
 {
     std::lock_guard<std::mutex> l(mutex);
 
@@ -1231,7 +1231,15 @@ int usbPlatformGateRead(void *data, int size, int timeout)
     int rc = 0;
 
     /* Get our device */
-    libusb_device_handle *gate_dev_handle = libusb_open_device_with_vid_pid(context, 0x05C6, 0x4321);
+    libusb_device *gate_dev;
+    refLibusbDeviceByName(name, &gate_dev);
+    if (gate_dev == NULL) {
+	rc = LIBUSB_ERROR_NO_DEVICE;
+	return rc;
+    }
+
+    libusb_device_handle *gate_dev_handle;
+    libusb_open(gate_dev, &gate_dev_handle);
     if (gate_dev_handle == NULL) {
 	rc = LIBUSB_ERROR_NO_DEVICE;
 	return rc;
@@ -1264,7 +1272,7 @@ int usbPlatformGateRead(void *data, int size, int timeout)
     return rc;
 }
 
-int usbPlatformGateWrite(void *data, int size, int timeout)
+int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
 {
     std::lock_guard<std::mutex> l(mutex);
     
@@ -1273,7 +1281,15 @@ int usbPlatformGateWrite(void *data, int size, int timeout)
     int rc = 0;
 
     /* Get our device */
-    libusb_device_handle *gate_dev_handle = libusb_open_device_with_vid_pid(context, 0x05C6, 0x4321);
+    libusb_device *gate_dev;
+    refLibusbDeviceByName(name, &gate_dev);
+    if (gate_dev == NULL) {
+	rc = LIBUSB_ERROR_NO_DEVICE;
+	return rc;
+    }
+
+    libusb_device_handle *gate_dev_handle;
+    libusb_open(gate_dev, &gate_dev_handle);
     if (gate_dev_handle == NULL) {
 	rc = LIBUSB_ERROR_NO_DEVICE;
 	return rc;
