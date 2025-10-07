@@ -650,6 +650,16 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
     uint16_t bcdusb=-1;
     libusb_error res = LIBUSB_ERROR_ACCESS;
 
+    // Commands to enable watchdog on unbooted MX device
+    static const uint8_t wdog_en_cmd[] = {
+        // Header
+        0x4D, 0x41, 0x32, 0x78,
+        // WD Protection - start
+        0x9A, 0xA8, 0x00, 0x32, 0x20, 0xAD, 0xDE, 0xD0, 0xF1,
+        0x9A, 0x9C, 0x00, 0x32, 0x20, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x9A, 0xA8, 0x00, 0x32, 0x20, 0xAD, 0xDE, 0xD0, 0xF1,
+        0x9A, 0xA4, 0x00, 0x32, 0x20, 0x01, 0x00, 0x00, 0x00,
+    };
 
     auto t1 = steady_clock::now();
     do {
@@ -672,7 +682,10 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
     } while(steady_clock::now() - t2 < DEFAULT_CONNECT_TIMEOUT);
 
     if(res == LIBUSB_SUCCESS) {
-        rc = send_file(h, endpoint, mvcmd, size, bcdusb);
+        rc = send_file(h, endpoint, wdog_en_cmd, sizeof(wdog_en_cmd), bcdusb);
+        if(rc == 0) {
+            rc = send_file(h, endpoint, mvcmd, size, bcdusb);
+        }
         libusb_release_interface(h, 0);
         libusb_close(h);
     } else {
