@@ -102,9 +102,8 @@ static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceS
     {{0x03E7, 0xf63b}, X_LINK_BOOTED},
     {{0x03E7, 0xf63c}, X_LINK_BOOTLOADER},
     {{0x03E7, 0xf63d}, X_LINK_FLASH_BOOTED},
-    {{0x05C6, 0x4321}, X_LINK_GATE},
+    {{0x05C6, 0x901d}, X_LINK_GATE},
 };
-
 
 struct USBGateRequest {
     uint32_t RequestNum;
@@ -871,7 +870,7 @@ void usbLinkClose(XLinkProtocol_t protocol, libusb_device_handle *f)
     libusb_release_interface(f, 0);
 
     if (protocol = X_LINK_USB_EP) {
-	libusb_release_interface(f, 1);
+         libusb_release_interface(f, 1);
     }
 
     libusb_close(f);
