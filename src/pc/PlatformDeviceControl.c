@@ -204,6 +204,7 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
 	case X_LINK_LOCAL_SHDMEM:
 	    return shdmemPlatformConnect(devPathRead, devPathWrite, fd);
 #endif
+
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
