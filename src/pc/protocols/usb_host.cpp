@@ -25,6 +25,7 @@
 #include <cstring>
 #include <vector>
 
+// Used server side only
 #if defined(__unix__)
 #include <unistd.h>
 #include <stdlib.h>
@@ -244,6 +245,7 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
             memset(out_foundDevices[numDevicesFound].mxid, 0, sizeof(out_foundDevices[numDevicesFound].mxid));
             strncpy(out_foundDevices[numDevicesFound].mxid, mxId.c_str(), sizeof(out_foundDevices[numDevicesFound].mxid));
             numDevicesFound++;
+
         }
 
     }
@@ -867,10 +869,11 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
 
 void usbLinkClose(XLinkProtocol_t protocol, libusb_device_handle *f)
 {
-    libusb_release_interface(f, 0);
 
     if (protocol = X_LINK_USB_EP) {
-         libusb_release_interface(f, 1);
+        libusb_release_interface(f, 1);
+    } else {
+        libusb_release_interface(f, 0);
     }
 
     libusb_close(f);

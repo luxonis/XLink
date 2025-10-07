@@ -268,7 +268,7 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-	case X_LINK_USB_EP:
+        case X_LINK_USB_EP:
             return usbPlatformClose(deviceHandle->protocol, deviceHandle->xLinkFD);
 
         case X_LINK_PCIE:
