@@ -611,7 +611,7 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
     if((res = libusb_open(dev, &h)) < 0)
     {
         mvLog(MVLOG_DEBUG, "cannot open device: %s\n", xlink_libusb_strerror(res));
-	return (libusb_error) res;
+        return (libusb_error) res;
     }
 
     // Get configuration first
@@ -637,18 +637,18 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
 
 
     if (protocol == X_LINK_USB_EP) {
-	if((res = libusb_claim_interface(h, 1)) < 0)
-	{
+        if((res = libusb_claim_interface(h, 1)) < 0)
+        {
             mvLog(MVLOG_DEBUG, "claiming interface 1 failed: %s\n", xlink_libusb_strerror(res));
             libusb_close(h);
             return (libusb_error) res;
-	}
+        }
     } else {
         if((res = libusb_claim_interface(h, 0)) < 0)
         {
-           mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
-           libusb_close(h);
-           return (libusb_error) res;
+            mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
+            libusb_close(h);
+            return (libusb_error) res;
         }
     }
 
@@ -1142,7 +1142,7 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
 #else
 
     if (isServer) {
-	rc = read(usbFdRead, data, size);
+        rc = read(usbFdRead, data, size);
     } else {
         //std::lock_guard<std::mutex> l(mutex);
         void* tmpUsbHandle = NULL;
@@ -1153,9 +1153,9 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
         libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
         if (protocol == X_LINK_USB_EP) {
-	    rc = usb_read(usbHandle, data, size, USB_ENDPOINT_IN + 1);
+            rc = usb_read(usbHandle, data, size, USB_ENDPOINT_IN + 1);
         } else {
-	    rc = usb_read(usbHandle, data, size, USB_ENDPOINT_IN + 0);
+            rc = usb_read(usbHandle, data, size, USB_ENDPOINT_IN + 0);
         }
     }
 #endif  /*USE_USB_VSC*/
@@ -1207,7 +1207,7 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
 #else
 
     if (isServer) {
-	rc = write(usbFdWrite, data, size);
+        rc = write(usbFdWrite, data, size);
     } else {
         //std::lock_guard<std::mutex> l(mutex);
         void* tmpUsbHandle = NULL;
@@ -1218,9 +1218,9 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
         libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
         if (protocol == X_LINK_USB_EP) {
-	    rc = usb_write(usbHandle, data, size, USB_ENDPOINT_OUT + 1);
+            rc = usb_write(usbHandle, data, size, USB_ENDPOINT_OUT + 1);
         } else {
-	    rc = usb_write(usbHandle, data, size, USB_ENDPOINT_OUT + 0);
+            rc = usb_write(usbHandle, data, size, USB_ENDPOINT_OUT + 0);
         }
     }
 #endif  /*USE_USB_VSC*/
@@ -1239,15 +1239,15 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
     libusb_device *gate_dev;
     refLibusbDeviceByName(name, &gate_dev);
     if (gate_dev == NULL) {
-	rc = LIBUSB_ERROR_NO_DEVICE;
-	return rc;
+        rc = LIBUSB_ERROR_NO_DEVICE;
+        return rc;
     }
 
     libusb_device_handle *gate_dev_handle;
     libusb_open(gate_dev, &gate_dev_handle);
     if (gate_dev_handle == NULL) {
-	rc = LIBUSB_ERROR_NO_DEVICE;
-	return rc;
+        rc = LIBUSB_ERROR_NO_DEVICE;
+        return rc;
     }
     
     /* Not strictly necessary, but it is better to use it,
@@ -1257,7 +1257,7 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
 
-	return rc;
+        return rc;
     }
     
     libusb_device* dev = libusb_get_device(gate_dev_handle);
@@ -1267,7 +1267,7 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
 
-	return rc;
+        return rc;
     }
 
     rc = libusb_bulk_transfer(gate_dev_handle, USB_ENDPOINT_IN, (unsigned char*)data, size, &rc, timeout);
@@ -1289,15 +1289,15 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
     libusb_device *gate_dev;
     refLibusbDeviceByName(name, &gate_dev);
     if (gate_dev == NULL) {
-	rc = LIBUSB_ERROR_NO_DEVICE;
-	return rc;
+        rc = LIBUSB_ERROR_NO_DEVICE;
+        return rc;
     }
 
     libusb_device_handle *gate_dev_handle;
     libusb_open(gate_dev, &gate_dev_handle);
     if (gate_dev_handle == NULL) {
-	rc = LIBUSB_ERROR_NO_DEVICE;
-	return rc;
+        rc = LIBUSB_ERROR_NO_DEVICE;
+        return rc;
     }
     
     /* Not strictly necessary, but it is better to use it,
@@ -1307,7 +1307,7 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
 
-	return rc;
+        return rc;
     }
     
     libusb_device* dev = libusb_get_device(gate_dev_handle);
@@ -1317,7 +1317,7 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
 
-	return rc;
+        return rc;
     }
 
     rc = libusb_bulk_transfer(gate_dev_handle, USB_ENDPOINT_OUT, (unsigned char*)data, size, &rc, timeout);

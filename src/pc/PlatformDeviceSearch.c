@@ -70,7 +70,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
             }
             // Check if protocol is initialized
             return getUSBDevices(in_deviceRequirements, out_foundDevices, sizeFoundDevices, out_amountOfFoundDevices);
-            
+
         /* TODO(themarpe) - reenable PCIe
         case X_LINK_PCIE:
             return getPCIeDeviceName(0, state, in_deviceRequirements, out_foundDevice);
@@ -104,6 +104,7 @@ xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRe
                     sizeFoundDevices -= numFoundDevices;
                 }
             }
+
 
             // TODO(themarpe) - reenable PCIe
             (void) PCIe_rc;

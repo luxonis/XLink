@@ -121,9 +121,9 @@ XLinkError_t XLinkGateWrite(const char *name, void *data, int size, int timeout)
 {
     int rc = XLinkPlatformGateWrite(name, data, size, timeout);
     if(rc < 0) {
-	return X_LINK_ERROR;
+        return X_LINK_ERROR;
     } else {
-	return X_LINK_SUCCESS;
+        return X_LINK_SUCCESS;
     }
 }
 
@@ -131,9 +131,9 @@ XLinkError_t XLinkGateRead(const char *name, void *data, int size, int timeout)
 {
     int rc = XLinkPlatformGateRead(name, data, size, timeout);
     if(rc < 0) {
-	return X_LINK_ERROR;
+        return X_LINK_ERROR;
     } else {
-	return X_LINK_SUCCESS;
+        return X_LINK_SUCCESS;
     }
 }
 
