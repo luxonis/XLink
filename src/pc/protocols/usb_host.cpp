@@ -1063,7 +1063,7 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 
 
 
-int usb_read(libusb_device_handle *f, void *data, size_t size, size_t offset)
+int usb_read(libusb_device_handle *f, void *data, size_t size, uint8_t ep)
 {
     const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
@@ -1071,7 +1071,7 @@ int usb_read(libusb_device_handle *f, void *data, size_t size, size_t offset)
         int bt, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
-        int rc = libusb_bulk_transfer(f, USB_ENDPOINT_IN + offset,(unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+        int rc = libusb_bulk_transfer(f, ep, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
         if(rc)
             return rc;
         data = ((char *)data) + bt;
@@ -1080,7 +1080,7 @@ int usb_read(libusb_device_handle *f, void *data, size_t size, size_t offset)
     return 0;
 }
 
-int usb_write(libusb_device_handle *f, const void *data, size_t size, size_t offset)
+int usb_write(libusb_device_handle *f, const void *data, size_t size, uint8_t ep)
 {
     const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
@@ -1088,7 +1088,7 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size, size_t off
         int bt, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
-        int rc = libusb_bulk_transfer(f, USB_ENDPOINT_OUT + offset, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+        int rc = libusb_bulk_transfer(f, ep, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
         if(rc)
             return rc;
         data = (char *)data + bt;
@@ -1150,9 +1150,9 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
         libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
         if (protocol == X_LINK_USB_EP) {
-	    rc = usb_read(usbHandle, data, size, 1);
+	    rc = usb_read(usbHandle, data, size, USB_ENDPOINT_IN + 1);
         } else {
-	    rc = usb_read(usbHandle, data, size, 0);
+	    rc = usb_read(usbHandle, data, size, USB_ENDPOINT_IN + 0);
         }
     }
 #endif  /*USE_USB_VSC*/
@@ -1215,9 +1215,9 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
         libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
         if (protocol == X_LINK_USB_EP) {
-	    rc = usb_write(usbHandle, data, size, 1);
+	    rc = usb_write(usbHandle, data, size, USB_ENDPOINT_OUT + 1);
         } else {
-	    rc = usb_write(usbHandle, data, size, 0);
+	    rc = usb_write(usbHandle, data, size, USB_ENDPOINT_OUT + 0);
         }
     }
 #endif  /*USE_USB_VSC*/
