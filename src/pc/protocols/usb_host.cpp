@@ -576,12 +576,13 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
         return (libusb_error) libusb_rc;
     }
 
+
     size_t serialStrLen = usbGateResponse.RequestSize - sizeof(GateResponse);
-    char *serialStr = (char*)malloc(serialStrLen + 1);
-    memcpy(serialStr, (const char*)&respBuffer[0], serialStrLen);
-    serialStr[serialStrLen] = '\0';
-    serial = serialStr;
-    free(serialStr);
+    serial.resize(serialStrLen + 1);
+    for (int i = 0; i < serialStrLen; ++i) {
+        serial[i] = respBuffer[i];
+    }
+    serial[serialStrLen] = '\0';
     outSerial = serial;
 
     memcpy(&gateResponse, &respBuffer[serialStrLen], sizeof(gateResponse));
