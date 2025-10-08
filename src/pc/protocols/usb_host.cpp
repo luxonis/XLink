@@ -685,6 +685,7 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
             mvLog(MVLOG_DEBUG, "claiming interface 1 failed: %s\n", xlink_libusb_strerror(res));
             libusb_close(h);
             return (libusb_error) res;
+	}
     } else {
         if((res = libusb_claim_interface(h, 0)) < 0){
            mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
