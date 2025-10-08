@@ -466,7 +466,9 @@ pcieHostError_t pcie_find_device_port(
         if (strncmp(entry->d_name, "mxlk", 4) == 0)
         {
             // Save name
-            snprintf(found_device, name_length, "/dev/%s", entry->d_name);
+            snprintf(found_device, XLINK_MAX_NAME_SIZE, "/dev/%.*s",
+                     (int)(XLINK_MAX_NAME_SIZE - 6), entry->d_name);
+
             // Get state of device
             if (pcie_get_device_state(found_device, &platformState) != 0) {
                 closedir(dp);

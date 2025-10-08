@@ -8,17 +8,14 @@ on:
     branches-ignore:
       - xlink_upstream
 
-
-
 jobs:
-
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
-        compiler: [default]
+        compiler: [default, clang]
         libusb: [ON, OFF]
         include:
           - os: windows-latest

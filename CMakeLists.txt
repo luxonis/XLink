@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # With additions of Luxonis
 
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.10)
 
 
 ### Constants
@@ -14,11 +14,6 @@ project(${TARGET_NAME} LANGUAGES C CXX)
 
 set(PROJECT_EXPORT_GROUP "${PROJECT_NAME}Targets")
 
-# Set default installation directory
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "Installation Directory" FORCE)
-endif()
-
 # Compile with USB protocol capabilities
 option(XLINK_ENABLE_LIBUSB "Enable USB protocol which requires libusb library" ON)
 # Build examples
@@ -28,7 +23,7 @@ option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
 # Install headers only (skip binary lib in install tree)
 option(XLINK_INSTALL_PUBLIC_ONLY "Install only header interface target (XLinkPublic)" OFF)
 
-# Specify exporting all symbols on Windows (WIP: shared library on windows doesn't yet work fully (eg logging))
+# Specify exporting all symbols on Windows
 if(WIN32 AND BUILD_SHARED_LIBS)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON CACHE BOOL "")
 endif()
@@ -85,7 +80,7 @@ if(XLINK_ENABLE_LIBUSB)
         if(WIN32 AND NOT MINGW)
             target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib)
             # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
-            target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
+	    target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
         endif()
     endif()
     if(WIN32 AND NOT MINGW)

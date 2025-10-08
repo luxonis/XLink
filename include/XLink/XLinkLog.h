@@ -31,6 +31,8 @@ extern "C" {
 #include <inttypes.h>
 #include "XLinkExport.h"
 
+#include "XLinkExport.h"
+
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
