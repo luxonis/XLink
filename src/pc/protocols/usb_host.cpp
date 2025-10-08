@@ -17,8 +17,7 @@
 
 // std
 #include <mutex>
-#include <unordered_map>
-#include <algorithm>
+#include <atomic>
 #include <string>
 #include <thread>
 #include <chrono>
@@ -51,7 +50,7 @@ static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
 static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int initialized;
-static bool isServer;
+static std::atomic<bool> isServer { false };
 
 struct UsbSetupPacket {
   uint8_t  requestType;
