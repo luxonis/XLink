@@ -3,10 +3,10 @@ name: Dev Workflow
 on:
   push:
     branches-ignore:
-      - xlink_upstream
+      [xlink_upstream]
   pull_request:
     branches-ignore:
-      - xlink_upstream
+      [xlink_upstream]
 
 jobs:
   build:
@@ -16,43 +16,89 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
         compiler: [default, clang]
-        libusb: [ON, OFF]
-        include:
-          - os: windows-latest
-            compiler: mingw
-            libusb: ON
-          - os: windows-latest
-            compiler: mingw
-            libusb: OFF
+        enable-libusb: [ON, OFF]
+        libusb-system: [ON, OFF]
+        exclude:
+        # libusb-system is only valid on macOS & Ubuntu
+        - os: windows-latest
+          libusb-system: ON
+        # clang is only valid on macOS & Ubuntu
+        - os: windows-latest
+          compiler: clang
+        # Prevent meaningless combos where libusb-system ON but libusb disabled
+        - enable-libusb: OFF
+          libusb-system: ON
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         submodules: 'recursive'
 
-    - name: Install libusb
-      if: matrix.os == 'macos-latest' && matrix.libusb == 'ON'
+    # Install system libusb only when requested AND on supported OSes
+    - name: Install libusb (macOS)
+      if: matrix.os == 'macos-latest' && matrix['libusb-system'] == 'ON'
       run: |
         brew install libusb
 
-    - name: Install libusb
-      if: matrix.os == 'ubuntu-latest' && matrix.libusb == 'ON'
+    - name: Install libusb (Ubuntu)
+      if: matrix.os == 'ubuntu-latest' && matrix['libusb-system'] == 'ON'
       run: |
-        sudo apt-get install libusb-1.0-0-dev libusb-1.0-0
+        sudo apt-get update
+        sudo apt-get install -y libusb-1.0-0-dev libusb-1.0-0
+
+    # --- Local libusb when SYSTEM_LIBUSB=OFF but libusb is enabled ---
+    - name: Build & install local libusb (all OSes)
+      if: matrix['enable-libusb'] == 'ON' && matrix['libusb-system'] == 'OFF'
+      shell: bash
+      run: |
+        set -euxo pipefail
+        # Where to install local libusb
+        PREFIX="${GITHUB_WORKSPACE}/.local/libusb"
+        mkdir -p "${PREFIX}"
+
+        # Get libusb (shallow)
+        git clone --depth=1 https://github.com/luxonis/libusb.git --branch cmake-android-mainline
+        cmake -S libusb -B build-libusb \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
+          -DWITH_UDEV=OFF \
+          -DBUILD_SHARED_LIBS=ON
+        cmake --build build-libusb --config Release --parallel
+        cmake --build build-libusb --config Release --target install
+
+        # Export usb-1.0_DIR for later CMake configure
+        # (CMake package config is placed here by libusb)
+        echo "USB1_DIR=${PREFIX}/lib/cmake/usb-1.0" >> "$GITHUB_ENV"
 
     - name: Setup MinGW compiler
       if: matrix.compiler == 'mingw'
       run: |
-        choco install mingw
-        choco upgrade mingw
+        choco install -y mingw
+        choco upgrade -y mingw
 
-    - name: configure (Debug)
-      if: matrix.compiler == 'default'
-      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.libusb }}
+    # Configure (Debug)
+    - name: configure (Debug) - default/clang
+      if: matrix.compiler == 'default' || matrix.compiler == 'clang'
+      shell: bash
+      run: >
+        cmake . -Bbuild
+        -DXLINK_BUILD_EXAMPLES=ON
+        -DXLINK_BUILD_TESTS=ON
+        -DXLINK_ENABLE_LIBUSB=${{ matrix['enable-libusb'] }}
+        -DXLINK_LIBUSB_SYSTEM=${{ matrix['libusb-system'] }}
+        -D"usb-1.0_DIR=$USB1_DIR"
 
-    - name: configure (Debug)
+    - name: configure (Debug) - MinGW
       if: matrix.compiler == 'mingw'
-      run: cmake . -Bbuild -DXLINK_BUILD_EXAMPLES=ON -DXLINK_BUILD_TESTS=ON -DXLINK_ENABLE_LIBUSB=${{ matrix.libusb }} -G"MinGW Makefiles"
+      shell: bash
+      run: >
+        cmake . -Bbuild
+        -DXLINK_BUILD_EXAMPLES=ON
+        -DXLINK_BUILD_TESTS=ON
+        -DXLINK_ENABLE_LIBUSB=${{ matrix['enable-libusb'] }}
+        -DXLINK_LIBUSB_SYSTEM=${{ matrix['libusb-system'] }}
+        -D"usb-1.0_DIR=$USB1_DIR"
+        -G "MinGW Makefiles"
 
     - name: build (Debug)
       run: cmake --build build --parallel --config Debug
@@ -62,7 +108,15 @@ jobs:
       run: ctest --test-dir build -C Debug --output-on-failure
 
     - name: reconfigure (Release)
-      run: cmake . -Bbuild -DCMAKE_BUILD_TYPE=Release
+      shell: bash
+      run: >
+        cmake . -Bbuild
+        -DCMAKE_BUILD_TYPE=Release
+        -DXLINK_BUILD_EXAMPLES=ON
+        -DXLINK_BUILD_TESTS=ON
+        -DXLINK_ENABLE_LIBUSB=${{ matrix['enable-libusb'] }}
+        -DXLINK_LIBUSB_SYSTEM=${{ matrix['libusb-system'] }}
+        -D"usb-1.0_DIR=$USB1_DIR"
 
     - name: build (Release)
       run: cmake --build build --parallel --config Release
