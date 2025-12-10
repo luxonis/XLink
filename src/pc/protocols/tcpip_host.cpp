@@ -1116,6 +1116,16 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
         return -1;
     }
 
+#if (defined(_WIN32) || defined(_WIN64) )
+    // Force immediate ACKs
+    int freq = 1;
+    DWORD bytes;
+    if(WSAIoctl(sock, _WSAIOW(IOC_VENDOR, 23), &freq, sizeof(freq), NULL, 0, &bytes, NULL, NULL) != 0)
+    {
+        mvLog(MVLOG_WARN, "WSAIoctl _WSAIOW(IOC_VENDOR, 23) could not be set");
+    }
+#endif
+
 #if defined(TCP_QUICKACK)
     if(tcpip_setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &on, sizeof(on)) < 0)
     {
