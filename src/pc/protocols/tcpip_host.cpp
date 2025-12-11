@@ -33,6 +33,7 @@
 #pragma comment(lib, "iphlpapi.lib")
 #define tcpip_errno WSAGetLastError()
 #define ERRNO_EAGAIN WSAETIMEDOUT
+#define SIO_TCP_SET_ACK_FREQUENCY _WSAIOW(IOC_VENDOR, 23)
 
 #else
 
@@ -1120,9 +1121,9 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     // Force immediate ACKs
     int freq = 1;
     DWORD bytes;
-    if(WSAIoctl(sock, _WSAIOW(IOC_VENDOR, 23), &freq, sizeof(freq), NULL, 0, &bytes, NULL, NULL) != 0)
+    if(WSAIoctl(sock, SIO_TCP_SET_ACK_FREQUENCY, &freq, sizeof(freq), NULL, 0, &bytes, NULL, NULL) != 0)
     {
-        mvLog(MVLOG_WARN, "WSAIoctl _WSAIOW(IOC_VENDOR, 23) could not be set");
+        mvLog(MVLOG_WARN, "WSAIoctl SIO_TCP_SET_ACK_FREQUENCY could not be set");
     }
 #endif
 
