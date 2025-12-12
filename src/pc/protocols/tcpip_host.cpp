@@ -1048,6 +1048,15 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
         return X_LINK_PLATFORM_ERROR;
     }
 
+    // Disable Nagle to reduce latency on the accepted connection
+    int on = 1;
+    if(tcpip_setsockopt(connfd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
+    {
+        perror("setsockopt TCP_NODELAY (server)");
+        tcpip_close_socket(connfd);
+        return X_LINK_PLATFORM_ERROR;
+    }
+
     // Store the socket and create a "unique" key instead
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) connfd);
