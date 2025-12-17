@@ -220,13 +220,13 @@ int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDevice
     return XLinkPlatformIsDescriptionValid(in_deviceDesc, state);
 }
 
-XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequirements, deviceDesc_t *out_foundDevice)
+XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequirements, deviceDesc_t *out_foundDevice, int timeoutMs)
 {
     XLINK_RET_IF(out_foundDevice == NULL);
 
     xLinkPlatformErrorCode_t rc;
     unsigned numFoundDevices = 0;
-    rc = XLinkPlatformFindDevices(in_deviceRequirements, out_foundDevice, 1, &numFoundDevices, XLINK_DEVICE_DEFAULT_SEARCH_TIMEOUT_MS);
+    rc = XLinkPlatformFindDevices(in_deviceRequirements, out_foundDevice, 1, &numFoundDevices, timeoutMs);
     if(numFoundDevices <= 0){
         return X_LINK_DEVICE_NOT_FOUND;
     }

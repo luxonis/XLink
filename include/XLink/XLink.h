@@ -116,7 +116,7 @@ int XLinkIsProtocolInitialized(const XLinkProtocol_t protocol);
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequirements,
-                                          deviceDesc_t *out_foundDevice);
+                                          deviceDesc_t *out_foundDevice, int timeout);
 
 /**
  * @brief Returns all Myriad devices description which meets the requirements
