@@ -15,7 +15,7 @@
 #define EXTRACT_STREAM_ID(streamId) ((streamId) & STREAM_ID_MASK)
 
 #define COMBINE_IDS(streamId, linkid) \
-    streamId = streamId | ((linkid & LINK_ID_MASK) << LINK_ID_SHIFT);
+    streamId = streamId | (((uint32_t)(linkid) & LINK_ID_MASK) << LINK_ID_SHIFT);
 
 // ------------------------------------
 // Global fields declaration. Begin.
