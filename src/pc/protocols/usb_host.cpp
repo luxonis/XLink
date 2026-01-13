@@ -770,6 +770,7 @@ xLinkPlatformErrorCode_t usbLinkOpen(const char *path, libusb_device_handle*& h)
 
     uint8_t ep = 0;
     libusb_error libusb_rc = usb_open_device(dev, &ep, h);
+    libusb_unref_device(dev);
     if(libusb_rc == LIBUSB_SUCCESS) {
         return X_LINK_PLATFORM_SUCCESS;
     } else if(libusb_rc == LIBUSB_ERROR_ACCESS) {
