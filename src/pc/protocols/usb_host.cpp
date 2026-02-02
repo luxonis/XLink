@@ -572,22 +572,22 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
     }
 
     USBGateRequest usbGateRequest = {
-	.RequestNum = 12,
-	.RequestSize = 0,
+        .RequestNum = 12,
+        .RequestSize = 0,
     };
-                
+
     int transferred = 0;
 
     libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_OUT, (unsigned char*)&usbGateRequest, sizeof(usbGateRequest), &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
-	libusb_close(handle);
+        libusb_close(handle);
         return (libusb_error) libusb_rc;
     }
 
     USBGateRequest usbGateResponse = { 0 };
     libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_IN, (unsigned char*)&usbGateResponse, sizeof(usbGateResponse), &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
-	libusb_close(handle);
+        libusb_close(handle);
         return (libusb_error) libusb_rc;
     }
 
@@ -595,7 +595,7 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
     respBuffer.resize(usbGateResponse.RequestSize);
     libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_IN, (unsigned char*)&respBuffer[0], usbGateResponse.RequestSize, &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
-	libusb_close(handle);
+        libusb_close(handle);
         return (libusb_error) libusb_rc;
     }
 
@@ -685,7 +685,7 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
             mvLog(MVLOG_DEBUG, "claiming interface 1 failed: %s\n", xlink_libusb_strerror(res));
             libusb_close(h);
             return (libusb_error) res;
-	}
+        }
     } else {
         if((res = libusb_claim_interface(h, 0)) < 0){
            mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
@@ -931,7 +931,7 @@ int usbPlatformServer(const char *devPathRead, const char *devPathWrite, void **
     int infd = open("/dev/usb-ffs/xlink/ep2", O_RDONLY);
 
     if(outfd < 0 || infd < 0) {
-	return -1;
+        return -1;
     }
 
     usbFdRead = infd;
@@ -1184,7 +1184,7 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
 #else
 
     if(isServer){
-	    rc = read(usbFdRead, data, size);
+        rc = read(usbFdRead, data, size);
     } else {
         void* tmpUsbHandle = NULL;
         if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
@@ -1248,7 +1248,7 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
 #else
 
     if(isServer){
-	    rc = write(usbFdWrite, data, size);
+        rc = write(usbFdWrite, data, size);
     } else {
         void* tmpUsbHandle = NULL;
         if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
