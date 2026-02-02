@@ -974,8 +974,9 @@ extern int usbFdRead;
 int usbPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if defined(__unix__)
-    int outfd = open("/dev/usb-ffs/xlink/ep1", O_WRONLY);
-    int infd = open("/dev/usb-ffs/xlink/ep2", O_RDONLY);
+    // FIXME: get this info from the caller, don't hardcode here
+    int outfd = open("/dev/usb-ffs/device/ep1", O_WRONLY);
+    int infd = open("/dev/usb-ffs/device/ep2", O_RDONLY);
 
     if(outfd < 0 || infd < 0) {
         return -1;

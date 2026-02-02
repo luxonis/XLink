@@ -37,7 +37,7 @@ int main(int argc, const char** argv){
     }
 
     XLinkHandler_t handler;
-    handler.devicePath = "/dev/usb-ffs/xlink"; 
+    handler.devicePath = "/dev/usb-ffs/device";
     handler.protocol = X_LINK_USB_EP;
     XLinkServerOnly(&handler);
 
