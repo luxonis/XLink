@@ -246,6 +246,30 @@ static int tcpip_setsockopt(int __fd, int __level, int __optname, const void *__
 #endif
 }
 
+// macOS bind_to_if helper
+static int tcpip_bind_to_if(TCPIP_SOCKET sock, const char* ifname) {
+#if defined(__APPLE__)
+    // macOS: bind to interface by index
+    unsigned int ifindex = if_nametoindex(ifname);
+    if (ifindex == 0) return -1;
+    if (setsockopt(sock, IPPROTO_IP, IP_BOUND_IF, &ifindex, sizeof(ifindex)) < 0) {
+        return -1;
+    }
+    return 0;
+#else
+    return -1;
+#endif
+}
+
+// macOS unbind_to_if helper
+static void tcpip_unbind_if(TCPIP_SOCKET sock) {
+#if defined(__APPLE__)
+    // Clear binding: index 0 means "any"
+    unsigned int ifindex = 0;
+    setsockopt(sock, IPPROTO_IP, IP_BOUND_IF, &ifindex, sizeof(ifindex));
+#endif
+}
+
 static tcpipHostError_t tcpip_create_socket(TCPIP_SOCKET* out_sock, bool broadcast, int timeout_ms)
 {
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -401,14 +425,20 @@ static tcpipHostError_t tcpip_send_broadcast(TCPIP_SOCKET sock){
 
                 // send broadcast message
                 struct sockaddr_in broadcast_addr;
+                memset(&broadcast_addr, 0, sizeof(broadcast_addr));
                 broadcast_addr.sin_family = family;
                 broadcast_addr.sin_addr.s_addr = ip_broadcast.sin_addr.s_addr;
                 broadcast_addr.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
+                // macOS - bind this socket to the specific interface
+                bool bound = (tcpip_bind_to_if(sock, ifa->ifa_name) == 0);
 
                 tcpipHostCommand_t send_buffer = TCPIP_HOST_CMD_DEVICE_DISCOVER;
                 if(sendto(sock, reinterpret_cast<const char*>(&send_buffer), sizeof(send_buffer), 0, (struct sockaddr *) &broadcast_addr, sizeof(broadcast_addr)) < 0)
                 {
                     // Ignore if not successful. The devices on that interface won't be found
+                }
+                if (bound) {
+                    tcpip_unbind_if(sock); // remove binding so we can send on the next interface
                 }
             } else {
                 DEBUG("Not up and running.");
@@ -523,6 +553,7 @@ xLinkPlatformErrorCode_t tcpip_perform_search(void* ctx, deviceDesc_t* devices, 
         // TODO(themarpe) - Add IPv6 capabilities
         // send unicast device discovery
         struct sockaddr_in device_address;
+        memset(&device_address, 0, sizeof(device_address));
         device_address.sin_family = AF_INET;
         device_address.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
 
@@ -678,6 +709,7 @@ xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequireme
         // TODO(themarpe) - Add IPv6 capabilities
         // send unicast device discovery
         struct sockaddr_in device_address;
+        memset(&device_address, 0, sizeof(device_address));
         device_address.sin_family = AF_INET;
         device_address.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
 
@@ -844,6 +876,7 @@ xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name){
     // TODO(themarpe) - Add IPv6 capabilities
     // send unicast reboot to bootloader
     struct sockaddr_in device_address;
+    memset(&device_address, 0, sizeof(device_address));
     device_address.sin_family = AF_INET;
     device_address.sin_port = htons(DEFAULT_DEVICE_DISCOVERY_PORT);
 
@@ -1012,6 +1045,15 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     if(connfd < 0)
     {
         mvLog(MVLOG_FATAL, "Couldn't accept a connection to server socket");
+        return X_LINK_PLATFORM_ERROR;
+    }
+
+    // Disable Nagle to reduce latency on the accepted connection
+    int on = 1;
+    if(tcpip_setsockopt(connfd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
+    {
+        perror("setsockopt TCP_NODELAY (server)");
+        tcpip_close_socket(connfd);
         return X_LINK_PLATFORM_ERROR;
     }
 

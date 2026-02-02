@@ -43,6 +43,7 @@
 constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
 static const int MX_ID_TIMEOUT_MS = 100;
+static const int MX_ID_NOPS_TIMEOUT_MS = 500;
 
 static constexpr auto DEFAULT_OPEN_TIMEOUT = std::chrono::seconds(5);
 static constexpr auto DEFAULT_WRITE_TIMEOUT = 2000;
@@ -373,12 +374,14 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
         libusb_device_handle *handle = nullptr;
         int libusb_rc = LIBUSB_SUCCESS;
 
-        // Retry getting MX ID for 15ms
-        const std::chrono::milliseconds RETRY_TIMEOUT{15}; // 15ms
+        // Retry getting MX ID for 1 second
+        const std::chrono::milliseconds RETRY_TIMEOUT{1000}; // 1000ms
         const std::chrono::microseconds SLEEP_BETWEEN_RETRIES{100}; // 100us
 
+        int tryCount = 0;
         auto t1 = std::chrono::steady_clock::now();
         do {
+            tryCount++;
 
             // Open device - if not already
             if(handle == nullptr){
@@ -451,6 +454,27 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
                 // ///////////////////////
                 // Start
+                // If first attempt was unsuccessful, try sending NOPs to clear out potential bad state
+                if (tryCount > 1) {
+                    int size = 256 * 1024 + 16;
+                    uint8_t *nops = (uint8_t *)calloc(size, 1);
+                    if (nops) {
+                        transferred = 0;
+                        libusb_rc = libusb_bulk_transfer(handle, send_ep, nops, size, &transferred, MX_ID_NOPS_TIMEOUT_MS);
+                        mvLog(MVLOG_DEBUG, "Sending NOPs to %s\n", devicePath.c_str());
+                        free(nops);
+                        if (libusb_rc < 0 || size != transferred) {
+                            mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, size);
+                            // Mark as error and retry
+                            libusb_rc = -1;
+                            // retry
+                            std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
+                            continue;
+                        }
+                    }
+                }
+
+                mvLog(MVLOG_DEBUG, "Sending MXID read to %s, try %d\n", devicePath.c_str(), tryCount);
                 // WD Protection & MXID Retrieval Command
                 transferred = 0;
                 libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT_MS);
@@ -793,6 +817,16 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
     uint16_t bcdusb=-1;
     libusb_error res = LIBUSB_ERROR_ACCESS;
 
+    // Commands to enable watchdog on unbooted MX device
+    static const uint8_t wdog_en_cmd[] = {
+        // Header
+        0x4D, 0x41, 0x32, 0x78,
+        // WD Protection - start
+        0x9A, 0xA8, 0x00, 0x32, 0x20, 0xAD, 0xDE, 0xD0, 0xF1,
+        0x9A, 0x9C, 0x00, 0x32, 0x20, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x9A, 0xA8, 0x00, 0x32, 0x20, 0xAD, 0xDE, 0xD0, 0xF1,
+        0x9A, 0xA4, 0x00, 0x32, 0x20, 0x01, 0x00, 0x00, 0x00,
+    };
 
     auto t1 = steady_clock::now();
     do {
@@ -815,7 +849,10 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
     } while(steady_clock::now() - t2 < DEFAULT_CONNECT_TIMEOUT);
 
     if(res == LIBUSB_SUCCESS) {
-        rc = send_file(h, endpoint, mvcmd, size, bcdusb);
+        rc = send_file(h, endpoint, wdog_en_cmd, sizeof(wdog_en_cmd), bcdusb);
+        if(rc == 0) {
+            rc = send_file(h, endpoint, mvcmd, size, bcdusb);
+        }
         libusb_release_interface(h, 0);
         libusb_close(h);
     } else {
@@ -863,6 +900,7 @@ xLinkPlatformErrorCode_t usbLinkOpen(XLinkProtocol_t protocol, const char *path,
 
     uint8_t ep = 0;
     libusb_error libusb_rc = usb_open_device(protocol, dev, &ep, h);
+    libusb_unref_device(dev);
     if(libusb_rc == LIBUSB_SUCCESS) {
         return X_LINK_PLATFORM_SUCCESS;
     } else if(libusb_rc == LIBUSB_ERROR_ACCESS) {
