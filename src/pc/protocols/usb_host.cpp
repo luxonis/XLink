@@ -51,8 +51,17 @@ static constexpr std::chrono::milliseconds DEFAULT_CONNECT_TIMEOUT{20000};
 static constexpr std::chrono::milliseconds DEFAULT_SEND_FILE_TIMEOUT{10000};
 static constexpr auto USB1_CHUNKSZ = 64;
 
-static constexpr int USB_ENDPOINT_IN = 0x81;
-static constexpr int USB_ENDPOINT_OUT = 0x01;
+static constexpr int USB_VSC_INTERFACE = 0;
+static constexpr int USB_VSC_ENDPOINT_IN = 0x81;
+static constexpr int USB_VSC_ENDPOINT_OUT = 0x01;
+
+// TBD could be taken from the USB descriptor, based on strings
+static constexpr int USB_EP_INTERFACE_GATE = 2;
+static constexpr int USB_EP_INTERFACE_DEVICE = 3;
+static constexpr int USB_EP_ENDPOINT_GATE_IN = 0x83;
+static constexpr int USB_EP_ENDPOINT_GATE_OUT = 0x03;
+static constexpr int USB_EP_ENDPOINT_DEVICE_IN = 0x84;
+static constexpr int USB_EP_ENDPOINT_DEVICE_OUT = 0x04;
 
 static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
 
@@ -565,7 +574,7 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
         return (libusb_error) libusb_rc;
     }
 
-    libusb_rc = libusb_claim_interface(handle, 0);
+    libusb_rc = libusb_claim_interface(handle, USB_EP_INTERFACE_GATE);
     if (libusb_rc != 0){
         libusb_close(handle);
         return (libusb_error) libusb_rc;
@@ -578,14 +587,14 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
 
     int transferred = 0;
 
-    libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_OUT, (unsigned char*)&usbGateRequest, sizeof(usbGateRequest), &transferred, DEFAULT_WRITE_TIMEOUT);
+    libusb_rc = libusb_bulk_transfer(handle, USB_EP_ENDPOINT_GATE_OUT, (unsigned char*)&usbGateRequest, sizeof(usbGateRequest), &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
         libusb_close(handle);
         return (libusb_error) libusb_rc;
     }
 
     USBGateRequest usbGateResponse = { 0 };
-    libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_IN, (unsigned char*)&usbGateResponse, sizeof(usbGateResponse), &transferred, DEFAULT_WRITE_TIMEOUT);
+    libusb_rc = libusb_bulk_transfer(handle, USB_EP_ENDPOINT_GATE_IN, (unsigned char*)&usbGateResponse, sizeof(usbGateResponse), &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
         libusb_close(handle);
         return (libusb_error) libusb_rc;
@@ -593,7 +602,7 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
 
     std::vector<uint8_t> respBuffer;
     respBuffer.resize(usbGateResponse.RequestSize);
-    libusb_rc = libusb_bulk_transfer(handle, USB_ENDPOINT_IN, (unsigned char*)&respBuffer[0], usbGateResponse.RequestSize, &transferred, DEFAULT_WRITE_TIMEOUT);
+    libusb_rc = libusb_bulk_transfer(handle, USB_EP_ENDPOINT_GATE_IN, (unsigned char*)&respBuffer[0], usbGateResponse.RequestSize, &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
         libusb_close(handle);
         return (libusb_error) libusb_rc;
@@ -681,14 +690,14 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
     libusb_set_auto_detach_kernel_driver(h, 1);
 
     if(protocol == X_LINK_USB_EP){
-        if((res = libusb_claim_interface(h, 1)) < 0){
-            mvLog(MVLOG_DEBUG, "claiming interface 1 failed: %s\n", xlink_libusb_strerror(res));
+        if((res = libusb_claim_interface(h, USB_EP_INTERFACE_DEVICE)) < 0){
+            mvLog(MVLOG_DEBUG, "claiming interface %d failed: %s\n", USB_EP_INTERFACE_DEVICE, xlink_libusb_strerror(res));
             libusb_close(h);
             return (libusb_error) res;
         }
     } else {
-        if((res = libusb_claim_interface(h, 0)) < 0){
-           mvLog(MVLOG_DEBUG, "claiming interface 0 failed: %s\n", xlink_libusb_strerror(res));
+        if((res = libusb_claim_interface(h, USB_VSC_INTERFACE)) < 0){
+           mvLog(MVLOG_DEBUG, "claiming interface %d failed: %s\n", USB_VSC_INTERFACE, xlink_libusb_strerror(res));
            libusb_close(h);
            return (libusb_error) res;
         }
@@ -914,9 +923,9 @@ void usbLinkClose(XLinkProtocol_t protocol, libusb_device_handle *f)
 {
 
     if (protocol == X_LINK_USB_EP){
-        libusb_release_interface(f, 1);
+        libusb_release_interface(f, USB_EP_INTERFACE_DEVICE);
     } else {
-        libusb_release_interface(f, 0);
+        libusb_release_interface(f, USB_VSC_INTERFACE);
     }
 
     libusb_close(f);
@@ -1194,9 +1203,9 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
         libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
         if(protocol == X_LINK_USB_EP) {
-            rc = usb_read(usbHandle, data, size, USB_ENDPOINT_IN + 1);
+            rc = usb_read(usbHandle, data, size, USB_EP_ENDPOINT_DEVICE_IN);
         } else {
-            rc = usb_read(usbHandle, data, size, USB_ENDPOINT_IN + 0);
+            rc = usb_read(usbHandle, data, size, USB_VSC_ENDPOINT_IN);
         }
     }
 #endif  /*USE_USB_VSC*/
@@ -1258,9 +1267,9 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
         libusb_device_handle* usbHandle = (libusb_device_handle*) tmpUsbHandle;
 
         if(protocol == X_LINK_USB_EP){
-            rc = usb_write(usbHandle, data, size, USB_ENDPOINT_OUT + 1);
+            rc = usb_write(usbHandle, data, size, USB_EP_ENDPOINT_DEVICE_OUT);
         } else {
-            rc = usb_write(usbHandle, data, size, USB_ENDPOINT_OUT + 0);
+            rc = usb_write(usbHandle, data, size, USB_VSC_ENDPOINT_OUT);
         }
     }
 #endif  /*USE_USB_VSC*/
@@ -1303,14 +1312,14 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
     libusb_device* dev = libusb_get_device(gate_dev_handle);
 
     /* Now we claim our ffs interfaces */
-    rc = libusb_claim_interface(gate_dev_handle, 0);
+    rc = libusb_claim_interface(gate_dev_handle, USB_EP_INTERFACE_GATE);
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
 
         return rc;
     }
 
-    rc = libusb_bulk_transfer(gate_dev_handle, USB_ENDPOINT_IN, (unsigned char*)data, size, &rc, timeout);
+    rc = libusb_bulk_transfer(gate_dev_handle, USB_EP_ENDPOINT_GATE_IN, (unsigned char*)data, size, &rc, timeout);
     
     libusb_close(gate_dev_handle);
 
@@ -1353,14 +1362,14 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
     libusb_device* dev = libusb_get_device(gate_dev_handle);
 
     /* Now we claim our ffs interfaces */
-    rc = libusb_claim_interface(gate_dev_handle, 0);
+    rc = libusb_claim_interface(gate_dev_handle, USB_EP_INTERFACE_GATE);
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
 
         return rc;
     }
 
-    rc = libusb_bulk_transfer(gate_dev_handle, USB_ENDPOINT_OUT, (unsigned char*)data, size, &rc, timeout);
+    rc = libusb_bulk_transfer(gate_dev_handle, USB_EP_ENDPOINT_GATE_OUT, (unsigned char*)data, size, &rc, timeout);
     
     libusb_close(gate_dev_handle);
 
