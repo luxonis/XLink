@@ -50,6 +50,7 @@ static constexpr auto DEFAULT_WRITE_TIMEOUT = 2000;
 static constexpr auto DEFAULT_READ_TIMEOUT = 2000;
 static constexpr std::chrono::milliseconds DEFAULT_CONNECT_TIMEOUT{20000};
 static constexpr std::chrono::milliseconds DEFAULT_SEND_FILE_TIMEOUT{10000};
+static constexpr size_t SERVER_CHUNKSZ = 15 * 1024 * 1024;
 static constexpr auto USB1_CHUNKSZ = 64;
 
 static constexpr int USB_VSC_INTERFACE = 0;
@@ -1190,6 +1191,42 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size, uint8_t ep
     return 0;
 }
 
+#if defined(__unix__)
+static int usb_server_read(int fd, void* data, int size) {
+    size_t totalRead = 0;
+    auto* readPtr = static_cast<char*>(data);
+    const size_t readSize = static_cast<size_t>(size);
+
+    while(totalRead < readSize) {
+        const size_t chunk = std::min(SERVER_CHUNKSZ, readSize - totalRead);
+        const auto rc = read(fd, readPtr + totalRead, chunk);
+        if(rc <= 0) {
+            return -1;
+        }
+        totalRead += static_cast<size_t>(rc);
+    }
+
+    return static_cast<int>(totalRead);
+}
+
+static int usb_server_write(int fd, const void* data, int size) {
+    size_t totalWritten = 0;
+    const auto* writePtr = static_cast<const char*>(data);
+    const size_t writeSize = static_cast<size_t>(size);
+
+    while(totalWritten < writeSize) {
+        const size_t chunk = std::min(SERVER_CHUNKSZ, writeSize - totalWritten);
+        const auto rc = write(fd, writePtr + totalWritten, chunk);
+        if(rc <= 0) {
+            return -1;
+        }
+        totalWritten += static_cast<size_t>(rc);
+    }
+
+    return static_cast<int>(totalWritten);
+}
+#endif
+
 int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
 {
     int rc = 0;
@@ -1233,7 +1270,7 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
 
     if(isServer){
 #if defined(__unix__)
-        rc = read(usbFdRead, data, size);
+        rc = usb_server_read(usbFdRead, data, size);
 #else
         rc = -1;
 #endif
@@ -1301,7 +1338,7 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
 
     if(isServer){
 #if defined(__unix__)
-        rc = usb_write(usbFdWrite, data, size);
+        rc = usb_server_write(usbFdWrite, data, size);
 #else
         rc = -1;
 #endif
