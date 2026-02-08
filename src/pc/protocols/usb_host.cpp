@@ -1232,7 +1232,11 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
 #else
 
     if(isServer){
+#if defined(__unix__)
         rc = read(usbFdRead, data, size);
+#else
+        rc = -1;
+#endif
     } else {
         void* tmpUsbHandle = NULL;
         if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
@@ -1296,7 +1300,11 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
 #else
 
     if(isServer){
-        rc = write(usbFdWrite, data, size);
+#if defined(__unix__)
+        rc = usb_write(usbFdWrite, data, size);
+#else
+        rc = -1;
+#endif
     } else {
         void* tmpUsbHandle = NULL;
         if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
