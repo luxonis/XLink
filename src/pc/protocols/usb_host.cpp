@@ -605,10 +605,7 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
         return (libusb_error) libusb_rc;
     }
 
-    USBGateRequest usbGateRequest = {
-        .RequestNum = 12,
-        .RequestSize = 0,
-    };
+    USBGateRequest usbGateRequest = {12, 0};
 
     int transferred = 0;
 
