@@ -140,6 +140,8 @@ static std::string getLibusbDevicePath(libusb_device *dev);
 static libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev, std::string& outMxId);
 static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* pDesc, libusb_device *dev, GateResponse& outGateResponse, std::string& outSerial);
 static const char* xlink_libusb_strerror(int x);
+static bool libusbDeviceHasInterface(libusb_device* dev, int interfaceNumber);
+static xLinkPlatformErrorCode_t refLibusbDeviceByNameWithInterface(const char* name, int interfaceNumber, libusb_device** pdev);
 #ifdef _WIN32
 std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev);
 #endif
@@ -213,10 +215,17 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
 
             // Check for RVC3 and RVC4 first
             if(state == X_LINK_GATE || in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4){
+                if(!libusbDeviceHasInterface(devs[i], USB_EP_INTERFACE_GATE)) {
+                    // This may be the case on Windows with WinUSB, separate devices created for each interface
+                    continue;
+                }
                 
                 GateResponse gateResponse;
-                getLibusbDeviceGateResponse(&desc, devs[i], gateResponse, mxId);
-                
+                auto gateRc = getLibusbDeviceGateResponse(&desc, devs[i], gateResponse, mxId);
+                if(gateRc != LIBUSB_SUCCESS) {
+                    continue;
+                }
+
                 if (gateResponse.platform == 4){
                     platform = X_LINK_RVC4;
                 } else {
@@ -286,6 +295,10 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
 }
 
 extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libusb_device** pdev) {
+    return refLibusbDeviceByNameWithInterface(name, -1, pdev);
+}
+
+static xLinkPlatformErrorCode_t refLibusbDeviceByNameWithInterface(const char* name, int interfaceNumber, libusb_device** pdev) {
     // Get list of usb devices
     static libusb_device **devs = NULL;
     auto numDevices = libusb_get_device_list(context, &devs);
@@ -304,6 +317,10 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libu
         // Check if compare with name
         std::string requiredName(name);
         if(requiredName.length() > 0 && requiredName == devicePath){
+            if(interfaceNumber >= 0 && !libusbDeviceHasInterface(devs[i], interfaceNumber)) {
+                continue;
+            }
+
             // Found, increase ref and exit the loop
             libusb_ref_device(devs[i]);
             *pdev = devs[i];
@@ -351,6 +368,33 @@ std::string getLibusbDevicePath(libusb_device *dev) {
 
     // Return the device path
     return devicePath;
+}
+
+static bool libusbDeviceHasInterface(libusb_device* dev, int interfaceNumber) {
+    if(dev == nullptr) {
+        return false;
+    }
+
+    libusb_config_descriptor* cdesc = nullptr;
+    auto rc = libusb_get_config_descriptor(dev, 0, &cdesc);
+    if(rc != LIBUSB_SUCCESS || cdesc == nullptr) {
+        return false;
+    }
+
+    bool found = false;
+    for(int i = 0; i < cdesc->bNumInterfaces && !found; i++) {
+        const auto& iface = cdesc->interface[i];
+        for(int alt = 0; alt < iface.num_altsetting && !found; alt++) {
+            const auto& ifdesc = iface.altsetting[alt];
+            if(interfaceNumber >= 0 && ifdesc.bInterfaceNumber != interfaceNumber) {
+                continue;
+            }
+            found = true;
+        }
+    }
+
+    libusb_free_config_descriptor(cdesc);
+    return found;
 }
 
 libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev, std::string& outMxId)
@@ -886,7 +930,14 @@ xLinkPlatformErrorCode_t usbLinkOpen(XLinkProtocol_t protocol, const char *path,
 
     auto t1 = steady_clock::now();
     do {
-        if(refLibusbDeviceByName(path, &dev) == X_LINK_PLATFORM_SUCCESS){
+        auto refRc = X_LINK_PLATFORM_ERROR;
+        if(protocol == X_LINK_USB_EP){
+            refRc = refLibusbDeviceByNameWithInterface(path, USB_EP_INTERFACE_DEVICE, &dev);
+        } else {
+            refRc = refLibusbDeviceByName(path, &dev);
+        }
+
+        if(refRc == X_LINK_PLATFORM_SUCCESS){
             found = true;
             break;
         }
@@ -1366,9 +1417,9 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
     int rc = 0;
 
     /* Get our device */
-    libusb_device *gate_dev;
-    refLibusbDeviceByName(name, &gate_dev);
-    if (gate_dev == NULL) {
+    libusb_device *gate_dev = NULL;
+    auto refRc = refLibusbDeviceByNameWithInterface(name, USB_EP_INTERFACE_GATE, &gate_dev);
+    if (refRc != X_LINK_PLATFORM_SUCCESS || gate_dev == NULL) {
         rc = LIBUSB_ERROR_NO_DEVICE;
         return rc;
     }
@@ -1384,7 +1435,7 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
      * as we're using kernel modules together with our interfaces
      */
     rc  = libusb_set_auto_detach_kernel_driver(gate_dev_handle, 1);
-    if (rc != LIBUSB_SUCCESS) {
+    if (rc != LIBUSB_SUCCESS && rc != LIBUSB_ERROR_NOT_SUPPORTED) {
         libusb_close(gate_dev_handle);
 
         return rc;
@@ -1416,9 +1467,9 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
     int rc = 0;
 
     /* Get our device */
-    libusb_device *gate_dev;
-    refLibusbDeviceByName(name, &gate_dev);
-    if (gate_dev == NULL) {
+    libusb_device *gate_dev = NULL;
+    auto refRc = refLibusbDeviceByNameWithInterface(name, USB_EP_INTERFACE_GATE, &gate_dev);
+    if (refRc != X_LINK_PLATFORM_SUCCESS || gate_dev == NULL) {
         rc = LIBUSB_ERROR_NO_DEVICE;
         return rc;
     }
@@ -1434,7 +1485,7 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
      * as we're using kernel modules together with our interfaces
      */
     rc  = libusb_set_auto_detach_kernel_driver(gate_dev_handle, 1);
-    if (rc != LIBUSB_SUCCESS) {
+    if (rc != LIBUSB_SUCCESS && rc != LIBUSB_ERROR_NOT_SUPPORTED) {
         libusb_close(gate_dev_handle);
 
         return rc;
