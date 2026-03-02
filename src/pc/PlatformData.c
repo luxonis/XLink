@@ -56,10 +56,12 @@
 #include <termios.h>
 
 #include "usb_host.h"
+#endif  /*USE_USB_VSC*/
 
 extern int usbFdWrite;
 extern int usbFdRead;
-#endif  /*USE_USB_VSC*/
+extern int usbGateFdWrite;
+extern int usbGateFdRead;
 
 // ------------------------------------
 // Wrappers declaration. Begin.
@@ -87,7 +89,8 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformWrite(deviceHandle->xLinkFD, data, size);
+        case X_LINK_USB_EP:
+            return usbPlatformWrite(deviceHandle->protocol, deviceHandle->xLinkFD, data, size);
 
         case X_LINK_PCIE:
             return pciePlatformWrite(deviceHandle->xLinkFD, data, size);
@@ -134,7 +137,8 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformRead(deviceHandle->xLinkFD, data, size);
+        case X_LINK_USB_EP:
+            return usbPlatformRead(deviceHandle->protocol, deviceHandle->xLinkFD, data, size);
 
         case X_LINK_PCIE:
             return pciePlatformRead(deviceHandle->xLinkFD, data, size);
@@ -152,6 +156,26 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
 }
+
+int XLinkPlatformGateWrite(const char *name, void *data, int size, int timeout)
+{
+    if(!XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
+    }
+
+    return usbPlatformGateWrite(name, data, size, timeout);
+}
+
+int XLinkPlatformGateRead(const char *name, void *data, int size, int timeout)
+{
+    if(!XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
+    }
+
+    return usbPlatformGateRead(name, data, size, timeout);
+}
+
+
 
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment)
 {
