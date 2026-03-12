@@ -1063,6 +1063,19 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
 
     mvLog(MVLOG_INFO, "Start Clean Dispatcher...");
 
+    // Close the device socket early to interrupt the EventReader thread.
+    // Without this, recv() in the EventReader blocks indefinitely on a dead
+    // connection, preventing the thread from exiting even after cleanup.
+    // The dispatcherDeviceFdDown flag prevents double-close when
+    // dispatcherReset also calls closeDeviceFd before calling us.
+    // Note: we cannot call dispatcherDeviceFdDown() here because it takes
+    // reset_mutex, which dispatcherReset already holds when it calls us —
+    // that would deadlock (reset_mutex is non-recursive).
+    if (!curr->dispatcherDeviceFdDown) {
+        glControlFunc->closeDeviceFd(&curr->deviceHandle);
+        curr->dispatcherDeviceFdDown = 1;
+    }
+
     if (XLink_sem_post(&curr->notifyDispatcherSem)) {
         mvLog(MVLOG_ERROR,"can't post semaphore\n"); //to allow us to get a NULL event
     }
