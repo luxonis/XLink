@@ -89,11 +89,20 @@ XLinkError_t XLinkSearchForDevices(const deviceDesc_t in_deviceRequirements,
 
 
 /**
- * @brief Connects to specific device, starts dispatcher and pings remote
+ * @brief Connects to specific device, starts dispatcher and pings remote.
+ *        Uses XLINK_CONNECT_TIMEOUT as the default timeout for the ping handshake.
  * @param[in,out] handler - XLink communication parameters (file path name for underlying layer)
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkConnect(XLinkHandler_t* handler);
+
+/**
+ * @brief Connects to specific device with a configurable timeout for the ping handshake.
+ * @param[in,out] handler - XLink communication parameters (file path name for underlying layer)
+ * @param[in] timeoutMs - timeout in milliseconds for the ping round-trip. Use XLINK_NO_RW_TIMEOUT for infinite wait.
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT on timeout
+ */
+XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, unsigned int timeoutMs);
 
 /**
  * @brief Puts device into bootloader mode
@@ -214,14 +223,26 @@ XLinkError_t XLinkGetProfilingData(linkId_t id, XLinkProf_t* prof);
 // ------------------------------------
 
 /**
- * @brief Opens a stream in the remote that can be written to by the local
- *        Allocates stream_write_size (aligned up to 64 bytes) for that stream
+ * @brief Opens a stream in the remote that can be written to by the local.
+ *        Allocates stream_write_size (aligned up to 64 bytes) for that stream.
+ *        Uses XLINK_OPEN_STREAM_TIMEOUT as the default timeout.
  * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
  * @param[in] name - stream name
  * @param[in] stream_write_size - stream buffer size
  * @return Link Id: INVALID_STREAM_ID for failure
  */
 streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size);
+
+/**
+ * @brief Opens a stream with a configurable timeout.
+ *        Allocates stream_write_size (aligned up to 64 bytes) for that stream.
+ * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
+ * @param[in] name - stream name
+ * @param[in] stream_write_size - stream buffer size
+ * @param[in] timeoutMs - timeout in milliseconds. Use XLINK_NO_RW_TIMEOUT for infinite wait.
+ * @return Link Id: INVALID_STREAM_ID for failure (including timeout)
+ */
+streamId_t XLinkOpenStreamWithTimeout(linkId_t id, const char* name, int stream_write_size, unsigned int timeoutMs);
 
 /**
  * @brief Closes stream for any further data transfer

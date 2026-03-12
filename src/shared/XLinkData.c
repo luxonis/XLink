@@ -45,11 +45,16 @@ static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_lin
 
 streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
 {
+    return XLinkOpenStreamWithTimeout(id, name, stream_write_size, XLINK_OPEN_STREAM_TIMEOUT);
+}
+
+streamId_t XLinkOpenStreamWithTimeout(linkId_t id, const char* name, int stream_write_size, unsigned int timeoutMs)
+{
     XLINK_RET_ERR_IF(name == NULL, INVALID_STREAM_ID);
     XLINK_RET_ERR_IF(stream_write_size < 0, INVALID_STREAM_ID);
 
     xLinkDesc_t* link = getLinkById(id);
-    mvLog(MVLOG_DEBUG,"%s() id %d link %p\n", __func__, id, link);
+    mvLog(MVLOG_DEBUG,"%s() id %d link %p timeout %u\n", __func__, id, link, timeoutMs);
     XLINK_RET_ERR_IF(link == NULL, INVALID_STREAM_ID);
     XLINK_RET_ERR_IF(getXLinkState(link) != XLINK_UP, INVALID_STREAM_ID);
     XLINK_RET_ERR_IF(strlen(name) >= MAX_STREAM_NAME_LENGTH, INVALID_STREAM_ID);
@@ -65,9 +70,10 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
                    name, MAX_STREAM_NAME_LENGTH - 1);
 
         DispatcherAddEvent(EVENT_LOCAL, &event);
-        XLINK_RET_ERR_IF(
-            DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
-            INVALID_STREAM_ID);
+        if (DispatcherWaitEventComplete(&link->deviceHandle, timeoutMs)) {
+            mvLog(MVLOG_ERROR, "Open stream \"%s\" timed out after %u ms", name, timeoutMs);
+            return INVALID_STREAM_ID;
+        }
 
 #ifndef __DEVICE__
         XLinkError_t eventStatus = checkEventHeader(event.header);

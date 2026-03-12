@@ -27,6 +27,8 @@ extern "C"
 #endif
 #define XLINK_MAX_PACKETS_PER_STREAM 64
 #define XLINK_NO_RW_TIMEOUT 0xFFFFFFFF
+#define XLINK_CONNECT_TIMEOUT 5000        /* 5s default timeout for XLinkConnect ping handshake */
+#define XLINK_OPEN_STREAM_TIMEOUT 5000    /* 5s default timeout for XLinkOpenStream */
 
 
 typedef enum {
