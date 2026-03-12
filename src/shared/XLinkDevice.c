@@ -227,6 +227,12 @@ XLinkError_t XLinkSearchForDevices(const deviceDesc_t in_deviceRequirements,
 //Called only from app - per device
 XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 {
+    return XLinkConnectWithTimeout(handler, XLINK_CONNECT_TIMEOUT);
+}
+
+//Called only from app - per device, with configurable timeout
+XLinkError_t XLinkConnectWithTimeout(XLinkHandler_t* handler, unsigned int timeoutMs)
+{
     XLINK_RET_IF(handler == NULL);
     if (strnlen(handler->devicePath, MAX_PATH_LENGTH) < 2) {
         mvLog(MVLOG_ERROR, "Device path is incorrect");
@@ -235,7 +241,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 
     xLinkDesc_t* link = getNextAvailableLink();
     XLINK_RET_IF(link == NULL);
-    mvLog(MVLOG_DEBUG,"%s() device name %s glHandler %p protocol %d\n", __func__, handler->devicePath, glHandler, handler->protocol);
+    mvLog(MVLOG_DEBUG,"%s() device name %s glHandler %p protocol %d timeout %u\n", __func__, handler->devicePath, glHandler, handler->protocol, timeoutMs);
 
     link->deviceHandle.protocol = handler->protocol;
     int connectStatus = XLinkPlatformConnect(handler->devicePath2, handler->devicePath,
@@ -263,7 +269,8 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     event.deviceHandle = link->deviceHandle;
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
-    if (DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT)) {
+    if (DispatcherWaitEventComplete(&link->deviceHandle, timeoutMs)) {
+        mvLog(MVLOG_ERROR, "Ping handshake timed out after %u ms", timeoutMs);
         DispatcherClean(&link->deviceHandle);
         return X_LINK_TIMEOUT;
     }
