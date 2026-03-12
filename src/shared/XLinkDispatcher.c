@@ -417,19 +417,31 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
 
     int rc = 0;
     if (timeoutMs != XLINK_NO_RW_TIMEOUT) {
-        // This is a workaround for sem_timedwait being influenced by the system clock change.
-        // This is a temporary solution. TODO: replace this with something more efficient.
-        while (timeoutMs--) {
+        // Use monotonic clock to measure elapsed time accurately.
+        // This replaces the previous iteration-counting workaround that was added
+        // because sem_timedwait uses CLOCK_REALTIME (affected by NTP/clock jumps).
+        // steady_clock/CLOCK_MONOTONIC is immune to system clock changes.
+        XLinkTimespec start;
+        getMonotonicTimestamp(&start);
+        uint64_t startMs = start.tv_sec * 1000 + start.tv_nsec / 1000000;
+
+        while (1) {
             rc = XLink_sem_trywait(id);
             if (!rc) {
                 break;
-            } else {
-#if (defined(_WIN32) || defined(_WIN64) )
-                Sleep(1);
-#else
-                usleep(1000);
-#endif
             }
+            XLinkTimespec now;
+            getMonotonicTimestamp(&now);
+            uint64_t nowMs = now.tv_sec * 1000 + now.tv_nsec / 1000000;
+            if (nowMs - startMs >= timeoutMs) {
+                rc = -1;
+                break;
+            }
+#if (defined(_WIN32) || defined(_WIN64) )
+            Sleep(1);
+#else
+            usleep(1000);
+#endif
         }
     } else {
         while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
