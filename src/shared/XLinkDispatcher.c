@@ -1065,6 +1065,7 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     }
 
     mvLog(MVLOG_INFO, "Start Clean Dispatcher...");
+    curr->resetXLink = 1;
 
     if (XLink_sem_post(&curr->notifyDispatcherSem)) {
         mvLog(MVLOG_ERROR,"can't post semaphore\n"); //to allow us to get a NULL event
@@ -1085,8 +1086,6 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
     dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
 
-    curr->schedulerId = -1;
-    curr->resetXLink = 1;
     XLink_sem_destroy(&curr->addEventSem);
     XLink_sem_destroy(&curr->notifyDispatcherSem);
     localSem_t* temp = curr->eventSemaphores;
@@ -1096,9 +1095,13 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
         XLink_sem_destroy(&temp->sem);
         temp++;
     }
-    numSchedulers--;
 
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
+
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&num_schedulers_mutex) != 0, 1);
+    curr->schedulerId = -1;
+    numSchedulers--;
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, 1);
 
     mvLog(MVLOG_INFO, "Clean Dispatcher Successfully...");
     if(pthread_mutex_unlock(&clean_mutex) != 0) {

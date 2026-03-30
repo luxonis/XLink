@@ -374,6 +374,8 @@ XLinkError_t XLinkResetRemote(linkId_t id)
         return X_LINK_ERROR;
     }
 
+    freeGivenLink(link);
+
     return X_LINK_SUCCESS;
 }
 
@@ -425,6 +427,8 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
         mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
         return X_LINK_ERROR;
     }
+
+    freeGivenLink(link);
 
     return ret;
 

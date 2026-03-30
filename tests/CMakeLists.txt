@@ -83,6 +83,9 @@ xlink_add_client_server_test(multiple_connection_test 16 10 multiple_connection_
 # connection shutdown test
 xlink_add_client_server_test(connection_shutdown_test 8 10)
 
+# reset/connect/reconnect stress test
+xlink_add_client_server_test(reset_reconnect_stress_test 64 8 reset_reconnect_stress_test.sh)
+
 # RTT test
 xlink_add_test(rtt_test rtt_test.cpp)
 

@@ -823,7 +823,6 @@ void dispatcherCloseLink(void* fd, int fullClose)
         return;
     }
 
-    link->id = INVALID_LINK_ID;
     link->deviceHandle.xLinkFD = NULL;
     link->peerState = XLINK_NOT_INIT;
     link->nextUniqueStreamId = 0;
@@ -841,10 +840,6 @@ void dispatcherCloseLink(void* fd, int fullClose)
 
         // XLink reset stream
         XLinkStreamReset(stream);
-    }
-
-    if(XLink_sem_destroy(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_DEBUG, "Cannot destroy dispatcherClosedSem\n");
     }
 }
 
