@@ -117,7 +117,6 @@ typedef struct {
 
 //These will be common for all, Initialized only once
 DispatcherControlFunctions* glControlFunc;
-int numSchedulers;
 xLinkSchedulerState_t schedulerState[MAX_SCHEDULERS];
 sem_t addSchedulerSem;
 
@@ -152,7 +151,7 @@ static void* eventSchedulerRun(void* ctx);
 static int isEventTypeRequest(xLinkEventPriv_t* event);
 static void postAndMarkEventServed(xLinkEventPriv_t *event);
 static int createUniqueID();
-static int findAvailableScheduler();
+static int findAndAssignAvailableScheduler();
 static xLinkSchedulerState_t* findCorrespondingScheduler(void* xLinkFD);
 
 static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr);
@@ -204,7 +203,6 @@ XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc) {
     }
 
     glControlFunc = controlFunc;
-    numSchedulers = 0;
 
     if (sem_init(&addSchedulerSem, 0, 1)) {
         mvLog(MVLOG_ERROR, "Can't create semaphore\n");
@@ -237,12 +235,7 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
 
     pthread_attr_t attr;
     int eventIdx;
-    if (numSchedulers >= MAX_SCHEDULERS)
-    {
-        mvLog(MVLOG_ERROR,"Max number Schedulers reached!\n");
-        return -1;
-    }
-    int idx = findAvailableScheduler();
+    int idx = findAndAssignAvailableScheduler();
     if (idx == -1) {
         mvLog(MVLOG_ERROR,"Max number Schedulers reached!\n");
         return -1;
@@ -259,7 +252,8 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     schedulerState[idx].server = server;
 
     schedulerState[idx].deviceHandle = link->deviceHandle;
-    schedulerState[idx].schedulerId = idx;
+    // When avilable scheduler is found its already assigned as taken
+    // schedulerState[idx].schedulerId = idx;
 
     schedulerState[idx].lQueue.cur = schedulerState[idx].lQueue.q;
     schedulerState[idx].lQueue.curProc = schedulerState[idx].lQueue.q;
@@ -330,7 +324,6 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
 
     pthread_detach(schedulerState[idx].xLinkThreadId);
 
-    numSchedulers++;
     if (pthread_attr_destroy(&attr) != 0) {
         mvLog(MVLOG_ERROR,"pthread_attr_destroy error");
     }
@@ -790,12 +783,7 @@ static void* eventSchedulerRun(void* ctx)
     if (dispatcherReset(curr) != 0) {
         mvLog(MVLOG_WARN, "Failed to reset or was already reset");
     }
-
-    if (curr->resetXLink != 1) {
-        mvLog(MVLOG_ERROR,"Scheduler thread stopped");
-    } else {
-        mvLog(MVLOG_INFO,"Scheduler thread stopped");
-    }
+    // Note - dispatcher/scheduler is not valid after this point. Existing curr pointer to it, should not be used anymore.
 
     return NULL;
 }
@@ -839,35 +827,33 @@ static int createUniqueID()
     return idCopy;
 }
 
-int findAvailableScheduler()
+int findAndAssignAvailableScheduler()
 {
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&num_schedulers_mutex) != 0, -1);
     int i;
-    for (i = 0; i < MAX_SCHEDULERS; i++)
-        if (schedulerState[i].schedulerId == -1)
+    for (i = 0; i < MAX_SCHEDULERS; i++) {
+        if (schedulerState[i].schedulerId == -1) {
+            schedulerState[i].schedulerId = i;
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, -1);
             return i;
+        }
+    }
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, -1);
     return -1;
 }
 
 static xLinkSchedulerState_t* findCorrespondingScheduler(void* xLinkFD)
 {
+    XLINK_RET_ERR_IF(xLinkFD == NULL, NULL);
     int i;
     XLINK_RET_ERR_IF(pthread_mutex_lock(&num_schedulers_mutex) != 0, NULL);
-    if (xLinkFD == NULL) { //in case of myriad there should be one scheduler
-        if (numSchedulers == 1) {
-            XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, NULL);
-            return &schedulerState[0];
-        } else {
-            XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, NULL);
-            return NULL;
-        }
-    }
-    for (i=0; i < MAX_SCHEDULERS; i++)
+    for (i=0; i < MAX_SCHEDULERS; i++) {
         if (schedulerState[i].schedulerId != -1 &&
             schedulerState[i].deviceHandle.xLinkFD == xLinkFD) {
-            XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, NULL);
+                XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, NULL);
                 return &schedulerState[i];
         }
-
+    }
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, NULL);
     return NULL;
 }
@@ -1085,7 +1071,6 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
     dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
 
-    curr->schedulerId = -1;
     curr->resetXLink = 1;
     XLink_sem_destroy(&curr->addEventSem);
     XLink_sem_destroy(&curr->notifyDispatcherSem);
@@ -1096,15 +1081,18 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
         XLink_sem_destroy(&temp->sem);
         temp++;
     }
-    numSchedulers--;
 
-    XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
-
-    mvLog(MVLOG_INFO, "Clean Dispatcher Successfully...");
+    if(pthread_mutex_unlock(&(curr->queueMutex)) != 0) {
+        mvLog(MVLOG_ERROR, "Failed to unlock queueMutex after clearing dispatcher");
+    }
     if(pthread_mutex_unlock(&clean_mutex) != 0) {
         mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
     }
-    XLINK_RET_ERR_IF(pthread_mutex_destroy(&(curr->queueMutex)) != 0, 1);
+    if(pthread_mutex_destroy(&(curr->queueMutex)) != 0) {
+        mvLog(MVLOG_ERROR, "Failed to destroy queueMutex");
+    }
+
+    mvLog(MVLOG_INFO, "Clean Dispatcher Successfully...");
     return 0;
 }
 
@@ -1170,6 +1158,11 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
         mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
         return 1;
     }
+
+    // Deassign scheduler ONLY AFTER fully cleaned up
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&num_schedulers_mutex) != 0, 1);
+    curr->schedulerId = -1;
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, 1);
 
     return 0;
 }

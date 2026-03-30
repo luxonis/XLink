@@ -1095,11 +1095,15 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     const size_t maxlen = 255;
     size_t len = strnlen(devPathWrite, maxlen + 1);
-    if (len == 0 || len >= maxlen + 1)
+    if (len == 0 || len >= maxlen + 1) {
+        tcpip_close_socket(sock);
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
     char *const serv_ip = (char *)malloc(len + 1);
-    if (!serv_ip)
+    if (!serv_ip) {
+        tcpip_close_socket(sock);
         return X_LINK_PLATFORM_ERROR;
+    }
     serv_ip[0] = 0;
     // Parse port if specified, or use default
     int port = TCPIP_LINK_SOCKET_PORT;
