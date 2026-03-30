@@ -69,6 +69,36 @@ macro(xlink_add_client_server_test test_name num_iterations timeout)
     )
 endmacro()
 
+macro(xlink_add_client_server_env_test test_name num_iterations timeout env_args)
+    if(NOT TARGET ${test_name}_client)
+        add_executable(${test_name}_client ${test_name}.cpp)
+        target_compile_definitions(${test_name}_client PRIVATE XLINK_TEST_CLIENT)
+        target_link_libraries(${test_name}_client ${TARGET_NAME})
+    endif()
+
+    if(NOT TARGET ${test_name}_server)
+        add_executable(${test_name}_server ${test_name}.cpp)
+        target_compile_definitions(${test_name}_server PRIVATE XLINK_TEST_SERVER)
+        target_link_libraries(${test_name}_server ${TARGET_NAME})
+    endif()
+
+    if("${ARGV4}" STREQUAL "")
+        set(test_script "${CMAKE_CURRENT_LIST_DIR}/bash/test_client_server.sh")
+    else()
+        set(test_script "${CMAKE_CURRENT_LIST_DIR}/bash/${ARGV4}")
+    endif()
+
+    add_test(NAME ${test_name}_${ARGV5} COMMAND
+        ${CMAKE_COMMAND} -E env ${env_args}
+        ${BASH_EXECUTABLE} "${test_script}"
+        "$<TARGET_FILE:${test_name}_server>"
+        "$<TARGET_FILE:${test_name}_client>"
+        "${num_iterations}"
+        "${timeout}"
+        COMMAND_EXPAND_LISTS
+    )
+endmacro()
+
 # Tests
 
 # Multiple stream open (10 iterations)
@@ -85,6 +115,42 @@ xlink_add_client_server_test(connection_shutdown_test 8 10)
 
 # reset/connect/reconnect stress test
 xlink_add_client_server_test(reset_reconnect_stress_test 64 8 reset_reconnect_stress_test.sh)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 32 8
+    "XLINK_STRESS_JITTER_MS=0"
+    reset_reconnect_stress_test.sh no_jitter)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 32 8
+    "XLINK_STRESS_JITTER_MS=5"
+    reset_reconnect_stress_test.sh low_jitter)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 64 8
+    "XLINK_STRESS_JITTER_MS=25"
+    reset_reconnect_stress_test.sh default_jitter)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 64 8
+    "XLINK_STRESS_JITTER_MS=75"
+    reset_reconnect_stress_test.sh high_jitter)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 24 8
+    "XLINK_STRESS_PAYLOAD_MIB=1;XLINK_STRESS_JITTER_MS=25"
+    reset_reconnect_stress_test.sh payload_1m)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 24 8
+    "XLINK_STRESS_PAYLOAD_MIB=8;XLINK_STRESS_JITTER_MS=25"
+    reset_reconnect_stress_test.sh payload_8m)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 32 8
+    "XLINK_STRESS_PAYLOAD_MIB=32;XLINK_STRESS_JITTER_MS=25"
+    reset_reconnect_stress_test.sh payload_32m)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 24 8
+    "XLINK_STRESS_WRITE_REPEAT_COUNT=2;XLINK_STRESS_PAYLOAD_MIB=8"
+    reset_reconnect_stress_test.sh repeat_2x)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 16 8
+    "XLINK_STRESS_WRITE_REPEAT_COUNT=4;XLINK_STRESS_PAYLOAD_MIB=4"
+    reset_reconnect_stress_test.sh repeat_4x)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 64 8
+    "XLINK_STRESS_RESET_TIMEOUT_MS=100;XLINK_STRESS_JITTER_MS=25"
+    reset_reconnect_stress_test.sh reset_100ms)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 64 8
+    "XLINK_STRESS_RESET_TIMEOUT_MS=500;XLINK_STRESS_JITTER_MS=25"
+    reset_reconnect_stress_test.sh reset_500ms)
+xlink_add_client_server_env_test(reset_reconnect_stress_test 64 8
+    "XLINK_STRESS_CONNECT_TIMEOUT_MS=5000;XLINK_STRESS_JITTER_MS=25"
+    reset_reconnect_stress_test.sh connect_5s)
 
 # RTT test
 xlink_add_test(rtt_test rtt_test.cpp)

@@ -18,15 +18,51 @@
 namespace {
 
 constexpr int kNumConnections = 4;
-constexpr std::size_t kPayloadSize = 20 * 1024 * 1024;
-constexpr std::size_t kStreamSize = kPayloadSize + (1 * 1024 * 1024);
+constexpr std::size_t kDefaultPayloadSize = 20 * 1024 * 1024;
+constexpr std::size_t kDefaultPayloadSlack = 1 * 1024 * 1024;
 constexpr int kConnectRetryMs = 50;
-constexpr int kConnectTimeoutMs = 15000;
-constexpr int kResetTimeoutMs = 250;
+constexpr int kDefaultConnectTimeoutMs = 15000;
+constexpr int kDefaultResetTimeoutMs = 250;
 constexpr int kServerShutdownTimeoutMs = 10000;
-constexpr int kMaxJitterMs = 25;
-constexpr int kClientHangTimeoutMs = 5000;
+constexpr int kDefaultMaxJitterMs = 25;
+constexpr int kDefaultClientHangTimeoutMs = 5000;
+constexpr int kDefaultWriteRepeatCount = 1;
 constexpr char kStreamName[] = "payload";
+
+struct StressConfig {
+    std::size_t payloadSize = kDefaultPayloadSize;
+    std::size_t streamSize = kDefaultPayloadSize + kDefaultPayloadSlack;
+    int connectTimeoutMs = kDefaultConnectTimeoutMs;
+    int resetTimeoutMs = kDefaultResetTimeoutMs;
+    int maxJitterMs = kDefaultMaxJitterMs;
+    int clientHangTimeoutMs = kDefaultClientHangTimeoutMs;
+    int serverHangTimeoutMs = kDefaultClientHangTimeoutMs;
+    int writeRepeatCount = kDefaultWriteRepeatCount;
+};
+
+int readEnvInt(const char* name, int fallback) {
+    const char* value = std::getenv(name);
+    if (value == nullptr || value[0] == '\0') {
+        return fallback;
+    }
+
+    const int parsed = std::atoi(value);
+    return parsed > 0 ? parsed : fallback;
+}
+
+StressConfig readConfig() {
+    StressConfig cfg;
+    const int payloadMiB = readEnvInt("XLINK_STRESS_PAYLOAD_MIB", static_cast<int>(kDefaultPayloadSize / (1024 * 1024)));
+    cfg.payloadSize = static_cast<std::size_t>(payloadMiB) * 1024 * 1024;
+    cfg.streamSize = cfg.payloadSize + kDefaultPayloadSlack;
+    cfg.connectTimeoutMs = readEnvInt("XLINK_STRESS_CONNECT_TIMEOUT_MS", kDefaultConnectTimeoutMs);
+    cfg.resetTimeoutMs = readEnvInt("XLINK_STRESS_RESET_TIMEOUT_MS", kDefaultResetTimeoutMs);
+    cfg.maxJitterMs = readEnvInt("XLINK_STRESS_JITTER_MS", kDefaultMaxJitterMs);
+    cfg.clientHangTimeoutMs = readEnvInt("XLINK_STRESS_CLIENT_HANG_TIMEOUT_MS", kDefaultClientHangTimeoutMs);
+    cfg.serverHangTimeoutMs = readEnvInt("XLINK_STRESS_SERVER_HANG_TIMEOUT_MS", kDefaultClientHangTimeoutMs);
+    cfg.writeRepeatCount = readEnvInt("XLINK_STRESS_WRITE_REPEAT_COUNT", kDefaultWriteRepeatCount);
+    return cfg;
+}
 
 uint32_t nextRand(uint32_t& state) {
     state = (state * 1664525u) + 1013904223u;
@@ -118,6 +154,7 @@ const char* serverPhaseToStr(ServerPhase phase) {
 #ifdef XLINK_TEST_CLIENT
 
 int main(int argc, char** argv) {
+    const StressConfig cfg = readConfig();
     XLinkGlobalHandler_t gHandler = {};
     if (XLinkInitialize(&gHandler) != X_LINK_SUCCESS) {
         std::printf("Failed to initialize XLink\n");
@@ -141,7 +178,7 @@ int main(int argc, char** argv) {
         devicePaths.emplace_back(argv[i + 2]);
     }
 
-    std::vector<std::uint8_t> payload(kPayloadSize);
+    std::vector<std::uint8_t> payload(cfg.payloadSize);
     for (std::size_t i = 0; i < payload.size(); ++i) {
         payload[i] = static_cast<std::uint8_t>(i & 0xFF);
     }
@@ -173,8 +210,8 @@ int main(int argc, char** argv) {
             if (progressSum != previousProgressSum) {
                 previousProgressSum = progressSum;
                 lastProgressAt = now;
-            } else if (now - lastProgressAt > std::chrono::milliseconds(kClientHangTimeoutMs)) {
-                std::printf("WATCHDOG: no client progress for %d ms\n", kClientHangTimeoutMs);
+            } else if (now - lastProgressAt > std::chrono::milliseconds(cfg.clientHangTimeoutMs)) {
+                std::printf("WATCHDOG: no client progress for %d ms\n", cfg.clientHangTimeoutMs);
                 for (int i = 0; i < kNumConnections; ++i) {
                     const auto phase = static_cast<ClientPhase>(phases[i].load());
                     std::printf("WATCHDOG: conn=%d round=%d phase=%s progress=%d\n",
@@ -195,14 +232,14 @@ int main(int argc, char** argv) {
                 rounds[connection].store(round);
                 phases[connection].store(static_cast<int>(ClientPhase::ConnectStart));
                 progress[connection].fetch_add(1);
-                fuzzSleep(rngState, kMaxJitterMs);
+                fuzzSleep(rngState, cfg.maxJitterMs);
 
                 XLinkHandler_t handler = {};
                 handler.devicePath = &devicePaths[connection][0];
                 handler.protocol = X_LINK_TCP_IP;
 
                 XLinkError_t connectStatus = X_LINK_ERROR;
-                const auto connectDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kConnectTimeoutMs);
+                const auto connectDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(cfg.connectTimeoutMs);
                 do {
                     connectStatus = XLinkConnect(&handler);
                     if (connectStatus == X_LINK_SUCCESS) {
@@ -219,10 +256,10 @@ int main(int argc, char** argv) {
 
                 phases[connection].store(static_cast<int>(ClientPhase::ConnectOk));
                 progress[connection].fetch_add(1);
-                fuzzSleep(rngState, kMaxJitterMs);
+                fuzzSleep(rngState, cfg.maxJitterMs);
 
                 phases[connection].store(static_cast<int>(ClientPhase::OpenStart));
-                auto stream = XLinkOpenStream(handler.linkId, kStreamName, kStreamSize);
+                auto stream = XLinkOpenStream(handler.linkId, kStreamName, cfg.streamSize);
                 if (stream == INVALID_STREAM_ID) {
                     phases[connection].store(static_cast<int>(ClientPhase::Failed));
                     fail(success, abortFlag, "open stream failed", connection, round);
@@ -232,19 +269,21 @@ int main(int argc, char** argv) {
                 phases[connection].store(static_cast<int>(ClientPhase::OpenOk));
                 progress[connection].fetch_add(1);
                 phases[connection].store(static_cast<int>(ClientPhase::WriteStart));
-                const auto writeStatus = XLinkWriteData(stream, payload.data(), payload.size());
-                if (writeStatus != X_LINK_SUCCESS) {
-                    phases[connection].store(static_cast<int>(ClientPhase::Failed));
-                    fail(success, abortFlag, "write failed", connection, round, writeStatus);
-                    return;
+                for (int writeIdx = 0; writeIdx < cfg.writeRepeatCount; ++writeIdx) {
+                    const auto writeStatus = XLinkWriteData(stream, payload.data(), payload.size());
+                    if (writeStatus != X_LINK_SUCCESS) {
+                        phases[connection].store(static_cast<int>(ClientPhase::Failed));
+                        fail(success, abortFlag, "write failed", connection, round, writeStatus);
+                        return;
+                    }
                 }
 
                 phases[connection].store(static_cast<int>(ClientPhase::WriteOk));
                 progress[connection].fetch_add(1);
-                fuzzSleep(rngState, kMaxJitterMs);
+                fuzzSleep(rngState, cfg.maxJitterMs);
 
                 phases[connection].store(static_cast<int>(ClientPhase::ResetStart));
-                const auto resetStatus = XLinkResetRemoteTimeout(handler.linkId, kResetTimeoutMs);
+                const auto resetStatus = XLinkResetRemoteTimeout(handler.linkId, cfg.resetTimeoutMs);
                 if (resetStatus != X_LINK_SUCCESS) {
                     phases[connection].store(static_cast<int>(ClientPhase::Failed));
                     fail(success, abortFlag, "reset failed", connection, round, resetStatus);
@@ -292,6 +331,7 @@ int main(int argc, const char** argv) {
         return -1;
     }
 
+    const StressConfig cfg = readConfig();
     XLinkGlobalHandler_t gHandler = {};
     gHandler.protocol = X_LINK_TCP_IP;
     mvLogDefaultLevelSet(MVLOG_ERROR);
@@ -328,7 +368,7 @@ int main(int argc, const char** argv) {
             } else if (currentPhase == static_cast<int>(ServerPhase::Start) ||
                        currentPhase == static_cast<int>(ServerPhase::ServerOnlyStart)) {
                 lastProgressAt = now;
-            } else if (now - lastProgressAt > std::chrono::milliseconds(kClientHangTimeoutMs)) {
+            } else if (now - lastProgressAt > std::chrono::milliseconds(cfg.serverHangTimeoutMs)) {
                 std::printf("SERVER WATCHDOG: ip=%s phase=%s\n", serverIp.c_str(),
                     serverPhaseToStr(static_cast<ServerPhase>(currentPhase)));
                 std::fflush(stdout);
@@ -350,7 +390,7 @@ int main(int argc, const char** argv) {
 
     serverPhase.store(static_cast<int>(ServerPhase::ServerOnlyOk));
     serverPhase.store(static_cast<int>(ServerPhase::OpenStart));
-    auto stream = XLinkOpenStream(handler.linkId, kStreamName, kStreamSize);
+    auto stream = XLinkOpenStream(handler.linkId, kStreamName, cfg.streamSize);
     if (stream == INVALID_STREAM_ID) {
         serverPhase.store(static_cast<int>(ServerPhase::Failed));
         std::printf("Server failed to open stream\n");
@@ -361,25 +401,27 @@ int main(int argc, const char** argv) {
 
     serverPhase.store(static_cast<int>(ServerPhase::OpenOk));
     serverPhase.store(static_cast<int>(ServerPhase::ReadStart));
-    streamPacketDesc_t packet = {};
-    const auto readStatus = XLinkReadMoveData(stream, &packet);
-    if (readStatus != X_LINK_SUCCESS) {
-        serverPhase.store(static_cast<int>(ServerPhase::Failed));
-        std::printf("Server read failed: %s\n", XLinkErrorToStr(readStatus));
-        serverDone.store(true);
-        watchdog.join();
-        return -1;
-    }
+    for (int readIdx = 0; readIdx < cfg.writeRepeatCount; ++readIdx) {
+        streamPacketDesc_t packet = {};
+        const auto readStatus = XLinkReadMoveData(stream, &packet);
+        if (readStatus != X_LINK_SUCCESS) {
+            serverPhase.store(static_cast<int>(ServerPhase::Failed));
+            std::printf("Server read failed: %s\n", XLinkErrorToStr(readStatus));
+            serverDone.store(true);
+            watchdog.join();
+            return -1;
+        }
 
-    serverPhase.store(static_cast<int>(ServerPhase::ReadOk));
-    const bool payloadMatches = packet.length == kPayloadSize;
-    XLinkDeallocateMoveData(packet.data, packet.length);
-    if (!payloadMatches) {
-        serverPhase.store(static_cast<int>(ServerPhase::Failed));
-        std::printf("Unexpected payload length: %u\n", packet.length);
-        serverDone.store(true);
-        watchdog.join();
-        return -1;
+        serverPhase.store(static_cast<int>(ServerPhase::ReadOk));
+        const bool payloadMatches = packet.length == cfg.payloadSize;
+        XLinkDeallocateMoveData(packet.data, packet.length);
+        if (!payloadMatches) {
+            serverPhase.store(static_cast<int>(ServerPhase::Failed));
+            std::printf("Unexpected payload length: %u\n", packet.length);
+            serverDone.store(true);
+            watchdog.join();
+            return -1;
+        }
     }
 
     serverPhase.store(static_cast<int>(ServerPhase::WaitLinkDown));
