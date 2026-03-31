@@ -7,9 +7,12 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include <unistd.h>
 
 #include "XLink/XLink.h"
 #include "XLink/XLinkLog.h"
@@ -38,6 +41,7 @@ struct StressConfig {
     int clientHangTimeoutMs = kDefaultClientHangTimeoutMs;
     int serverHangTimeoutMs = kDefaultClientHangTimeoutMs;
     int writeRepeatCount = kDefaultWriteRepeatCount;
+    bool dumpOnWatchdog = false;
 };
 
 int readEnvInt(const char* name, int fallback) {
@@ -61,7 +65,25 @@ StressConfig readConfig() {
     cfg.clientHangTimeoutMs = readEnvInt("XLINK_STRESS_CLIENT_HANG_TIMEOUT_MS", kDefaultClientHangTimeoutMs);
     cfg.serverHangTimeoutMs = readEnvInt("XLINK_STRESS_SERVER_HANG_TIMEOUT_MS", kDefaultClientHangTimeoutMs);
     cfg.writeRepeatCount = readEnvInt("XLINK_STRESS_WRITE_REPEAT_COUNT", kDefaultWriteRepeatCount);
+    cfg.dumpOnWatchdog = readEnvInt("XLINK_STRESS_DUMP_ON_WATCHDOG", 0) != 0;
     return cfg;
+}
+
+void dumpStacksIfEnabled(const StressConfig& cfg, const char* role, const char* detail) {
+    if (!cfg.dumpOnWatchdog) {
+        return;
+    }
+
+    std::ostringstream dumpPath;
+    dumpPath << "/tmp/xlink_stress_" << role << "_" << getpid() << ".sample.txt";
+
+    char command[1024];
+    std::snprintf(command, sizeof(command),
+        "/usr/bin/sample %d 1 1 -mayDie -file %s >/dev/null 2>&1",
+        static_cast<int>(getpid()), dumpPath.str().c_str());
+    const int rc = std::system(command);
+    std::printf("%s WATCHDOG DUMP: %s detail=%s rc=%d\n",
+        role, dumpPath.str().c_str(), detail, rc);
 }
 
 uint32_t nextRand(uint32_t& state) {
@@ -217,6 +239,7 @@ int main(int argc, char** argv) {
                     std::printf("WATCHDOG: conn=%d round=%d phase=%s progress=%d\n",
                         i, rounds[i].load(), phaseToStr(phase), progress[i].load());
                 }
+                dumpStacksIfEnabled(cfg, "client", "client_progress_timeout");
                 std::fflush(stdout);
                 std::_Exit(2);
             }
@@ -371,6 +394,7 @@ int main(int argc, const char** argv) {
             } else if (now - lastProgressAt > std::chrono::milliseconds(cfg.serverHangTimeoutMs)) {
                 std::printf("SERVER WATCHDOG: ip=%s phase=%s\n", serverIp.c_str(),
                     serverPhaseToStr(static_cast<ServerPhase>(currentPhase)));
+                dumpStacksIfEnabled(cfg, "server", serverPhaseToStr(static_cast<ServerPhase>(currentPhase)));
                 std::fflush(stdout);
                 std::_Exit(3);
             }

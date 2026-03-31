@@ -60,6 +60,7 @@ macro(xlink_add_client_server_test test_name num_iterations timeout)
 
     # Add to test suite
     add_test(NAME ${test_name} COMMAND
+        ${CMAKE_COMMAND} -E env XLINK_STRESS_DUMP_ON_WATCHDOG=1
         ${BASH_EXECUTABLE} "${test_script}"
         "$<TARGET_FILE:${test_name}_server>"
         "$<TARGET_FILE:${test_name}_client>"
@@ -89,7 +90,7 @@ macro(xlink_add_client_server_env_test test_name num_iterations timeout env_args
     endif()
 
     add_test(NAME ${test_name}_${ARGV5} COMMAND
-        ${CMAKE_COMMAND} -E env ${env_args}
+        ${CMAKE_COMMAND} -E env XLINK_STRESS_DUMP_ON_WATCHDOG=1 ${env_args}
         ${BASH_EXECUTABLE} "${test_script}"
         "$<TARGET_FILE:${test_name}_server>"
         "$<TARGET_FILE:${test_name}_client>"
@@ -133,8 +134,8 @@ xlink_add_client_server_env_test(reset_reconnect_stress_test 24 8
 xlink_add_client_server_env_test(reset_reconnect_stress_test 24 8
     "XLINK_STRESS_PAYLOAD_MIB=8;XLINK_STRESS_JITTER_MS=25"
     reset_reconnect_stress_test.sh payload_8m)
-xlink_add_client_server_env_test(reset_reconnect_stress_test 32 8
-    "XLINK_STRESS_PAYLOAD_MIB=32;XLINK_STRESS_JITTER_MS=25"
+xlink_add_client_server_env_test(reset_reconnect_stress_test 32 12
+    "XLINK_STRESS_PAYLOAD_MIB=32;XLINK_STRESS_JITTER_MS=25;XLINK_STRESS_CLIENT_HANG_TIMEOUT_MS=12000;XLINK_STRESS_SERVER_HANG_TIMEOUT_MS=12000"
     reset_reconnect_stress_test.sh payload_32m)
 xlink_add_client_server_env_test(reset_reconnect_stress_test 24 8
     "XLINK_STRESS_WRITE_REPEAT_COUNT=2;XLINK_STRESS_PAYLOAD_MIB=8"
@@ -148,9 +149,14 @@ xlink_add_client_server_env_test(reset_reconnect_stress_test 64 8
 xlink_add_client_server_env_test(reset_reconnect_stress_test 64 8
     "XLINK_STRESS_RESET_TIMEOUT_MS=500;XLINK_STRESS_JITTER_MS=25"
     reset_reconnect_stress_test.sh reset_500ms)
-xlink_add_client_server_env_test(reset_reconnect_stress_test 64 8
-    "XLINK_STRESS_CONNECT_TIMEOUT_MS=5000;XLINK_STRESS_JITTER_MS=25"
+xlink_add_client_server_env_test(reset_reconnect_stress_test 64 20
+    "XLINK_STRESS_CONNECT_TIMEOUT_MS=5000;XLINK_STRESS_JITTER_MS=25;XLINK_STRESS_CLIENT_HANG_TIMEOUT_MS=18000;XLINK_STRESS_SERVER_HANG_TIMEOUT_MS=18000"
     reset_reconnect_stress_test.sh connect_5s)
+
+# resource cleanup / leak smoke test
+xlink_add_client_server_env_test(resource_cleanup_test 500 10
+    "XLINK_LEAK_TEST_WARMUP_ROUNDS=50;XLINK_LEAK_TEST_SAMPLE_EVERY_ROUNDS=50;XLINK_LEAK_TEST_CLIENT_TIMEOUT=300"
+    resource_cleanup_test.sh smoke)
 
 # RTT test
 xlink_add_test(rtt_test rtt_test.cpp)

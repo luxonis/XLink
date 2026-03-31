@@ -1,18 +1,34 @@
 #include "XLink.h"
 
-#include <mutex>
 #include <functional>
+#include <mutex>
 #include <unordered_map>
 
+namespace {
 
-static std::mutex mtx;
-static uint16_t uniqueId{0};
-static std::unordered_map<int, std::function<void(linkId_t)>> callbacks;
+std::mutex& getCallbacksMutex() {
+    static auto* mtx = new std::mutex();
+    return *mtx;
+}
+
+uint16_t& getUniqueId() {
+    static auto* uniqueId = new uint16_t{0};
+    return *uniqueId;
+}
+
+std::unordered_map<int, std::function<void(linkId_t)>>& getCallbacks() {
+    static auto* callbacks = new std::unordered_map<int, std::function<void(linkId_t)>>();
+    return *callbacks;
+}
+
+}  // namespace
 
 extern "C" {
 
 int XLinkAddLinkDownCb(void (*cb)(linkId_t)) {
-    std::unique_lock<std::mutex> l(mtx);
+    auto& callbacks = getCallbacks();
+    auto& uniqueId = getUniqueId();
+    std::unique_lock<std::mutex> l(getCallbacksMutex());
 
     uint16_t cbId = uniqueId++;
     if(callbacks.count(cbId)) {
@@ -24,7 +40,8 @@ int XLinkAddLinkDownCb(void (*cb)(linkId_t)) {
 }
 
 int XLinkRemoveLinkDownCb(int cbId) {
-    std::unique_lock<std::mutex> l(mtx);
+    auto& callbacks = getCallbacks();
+    std::unique_lock<std::mutex> l(getCallbacksMutex());
     if(callbacks.count(cbId)) {
         callbacks.erase(cbId);
     } else {
@@ -35,7 +52,8 @@ int XLinkRemoveLinkDownCb(int cbId) {
 }
 
 void XLinkPlatformLinkDownNotify(linkId_t linkId) {
-    std::unique_lock<std::mutex> l(mtx);
+    auto& callbacks = getCallbacks();
+    std::unique_lock<std::mutex> l(getCallbacksMutex());
     for(const auto& kv : callbacks) {
         kv.second(linkId);
     }

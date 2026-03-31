@@ -12,6 +12,7 @@ SERVER_EXECUTABLE=$1
 CLIENT_EXECUTABLE=$2
 NUM_ROUNDS=$3
 TIMEOUT=$4
+DIAGNOSTIC_CLIENT_GRACE_MS=${XLINK_STRESS_DIAGNOSTIC_CLIENT_GRACE_MS:-0}
 
 IP="127.0.0.1"
 START_PORT="11690"
@@ -47,6 +48,9 @@ while kill -0 "$CLIENT_PID" 2>/dev/null; do
     for pid in "${SERVER_LOOP_PIDS[@]}"; do
         if ! kill -0 "$pid" 2>/dev/null; then
             if ! wait "$pid"; then
+                if [[ "$DIAGNOSTIC_CLIENT_GRACE_MS" -gt 0 ]]; then
+                    sleep "$(awk "BEGIN { print $DIAGNOSTIC_CLIENT_GRACE_MS / 1000 }")"
+                fi
                 kill "$CLIENT_PID" 2>/dev/null || true
                 wait "$CLIENT_PID" || true
                 exit 1
