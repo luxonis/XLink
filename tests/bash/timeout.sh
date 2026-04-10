@@ -58,21 +58,39 @@ if (($# == 0 || interval <= 0)); then
     exit 1
 fi
 
+if command -v setsid >/dev/null 2>&1; then
+    setsid "$@" &
+else
+    "$@" &
+fi
+commandPid=$!
+
+cleanup() {
+    if kill -0 "$commandPid" 2>/dev/null; then
+        kill -s SIGTERM -- "-$commandPid" 2>/dev/null || kill -s SIGTERM "$commandPid" 2>/dev/null || true
+        sleep "$delay"
+        kill -s SIGKILL -- "-$commandPid" 2>/dev/null || kill -s SIGKILL "$commandPid" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT TERM INT
+
 # kill -0 pid   Exit code indicates if a signal may be sent to $pid process.
 (
     ((t = timeout))
 
     while ((t > 0)); do
-        sleep $interval
-        kill -0 $$ || exit 0
+        sleep "$interval"
+        kill -0 "$commandPid" 2>/dev/null || exit 0
         ((t -= interval))
     done
 
-    # Be nice, post SIGTERM first.
-    # The 'exit 0' below will be executed if any preceeding command fails.
-    kill -s SIGTERM $$ && kill -0 $$ || exit 0
-    sleep $delay
-    kill -s SIGKILL $$
+    cleanup
 ) 2> /dev/null &
+watchdogPid=$!
 
-exec "$@"
+wait "$commandPid"
+commandStatus=$?
+trap - EXIT TERM INT
+kill "$watchdogPid" 2>/dev/null || true
+wait "$watchdogPid" 2>/dev/null || true
+exit "$commandStatus"

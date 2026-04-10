@@ -81,7 +81,10 @@ int XLink_sem_destroy(XLink_sem_t* sem)
 int XLink_sem_post(XLink_sem_t* sem)
 {
     XLINK_RET_ERR_IF(sem == NULL, -1);
-    if (sem->refs < 0) {
+    XLINK_RET_IF_FAIL(pthread_mutex_lock(&ref_mutex));
+    const int isDestroyed = (sem->refs < 0);
+    XLINK_RET_IF_FAIL(pthread_mutex_unlock(&ref_mutex));
+    if (isDestroyed) {
         return -1;
     }
 
@@ -94,7 +97,7 @@ int XLink_sem_wait(XLink_sem_t* sem)
 
     XLINK_RET_IF_FAIL(XLink_sem_inc(sem));
     int ret;
-    while(((ret = sem_wait(&sem->psem) == -1) && errno == EINTR))
+    while(((ret = sem_wait(&sem->psem)) == -1) && errno == EINTR)
         continue;
     XLINK_RET_IF_FAIL(XLink_sem_dec(sem));
 
@@ -143,6 +146,8 @@ int XLink_sem_get_refs(XLink_sem_t* sem, int *sval)
 {
     XLINK_RET_ERR_IF(sem == NULL, -1);
 
+    XLINK_RET_IF_FAIL(pthread_mutex_lock(&ref_mutex));
     *sval = sem->refs;
+    XLINK_RET_IF_FAIL(pthread_mutex_unlock(&ref_mutex));
     return 0;
 }

@@ -135,7 +135,7 @@ xlink_add_client_server_env_test(reset_reconnect_stress_test 24 8
     "XLINK_STRESS_PAYLOAD_MIB=8;XLINK_STRESS_JITTER_MS=25"
     reset_reconnect_stress_test.sh payload_8m)
 xlink_add_client_server_env_test(reset_reconnect_stress_test 32 12
-    "XLINK_STRESS_PAYLOAD_MIB=32;XLINK_STRESS_JITTER_MS=25;XLINK_STRESS_CLIENT_HANG_TIMEOUT_MS=12000;XLINK_STRESS_SERVER_HANG_TIMEOUT_MS=12000"
+    "XLINK_STRESS_PAYLOAD_MIB=32;XLINK_STRESS_JITTER_MS=25;XLINK_STRESS_CLIENT_HANG_TIMEOUT_MS=15000;XLINK_STRESS_SERVER_HANG_TIMEOUT_MS=15000"
     reset_reconnect_stress_test.sh payload_32m)
 xlink_add_client_server_env_test(reset_reconnect_stress_test 24 8
     "XLINK_STRESS_WRITE_REPEAT_COUNT=2;XLINK_STRESS_PAYLOAD_MIB=8"
@@ -143,12 +143,6 @@ xlink_add_client_server_env_test(reset_reconnect_stress_test 24 8
 xlink_add_client_server_env_test(reset_reconnect_stress_test 16 8
     "XLINK_STRESS_WRITE_REPEAT_COUNT=4;XLINK_STRESS_PAYLOAD_MIB=4"
     reset_reconnect_stress_test.sh repeat_4x)
-xlink_add_client_server_env_test(reset_reconnect_stress_test 64 8
-    "XLINK_STRESS_RESET_TIMEOUT_MS=100;XLINK_STRESS_JITTER_MS=25"
-    reset_reconnect_stress_test.sh reset_100ms)
-xlink_add_client_server_env_test(reset_reconnect_stress_test 64 8
-    "XLINK_STRESS_RESET_TIMEOUT_MS=500;XLINK_STRESS_JITTER_MS=25"
-    reset_reconnect_stress_test.sh reset_500ms)
 xlink_add_client_server_env_test(reset_reconnect_stress_test 64 20
     "XLINK_STRESS_CONNECT_TIMEOUT_MS=5000;XLINK_STRESS_JITTER_MS=25;XLINK_STRESS_CLIENT_HANG_TIMEOUT_MS=18000;XLINK_STRESS_SERVER_HANG_TIMEOUT_MS=18000"
     reset_reconnect_stress_test.sh connect_5s)

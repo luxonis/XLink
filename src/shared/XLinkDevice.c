@@ -186,9 +186,10 @@ XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
     XLINK_RET_IF(link == NULL);
     mvLog(MVLOG_DEBUG,"%s() device name %s glHandler %p protocol %d\n", __func__, handler->devicePath, glHandler, handler->protocol);
 
-    link->deviceHandle.protocol = handler->protocol;
+    XLinkProtocol_t protocol = handler->protocol;
+    void* xLinkFD = NULL;
     int connectStatus = XLinkPlatformServer(handler->devicePath2, handler->devicePath,
-                                             &link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
+                                             &protocol, &xLinkFD);
 
     if (connectStatus < 0) {
         /**
@@ -202,6 +203,11 @@ XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
         // Return an informative error
         return parsePlatformError(connectStatus);
     }
+
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, X_LINK_ERROR);
+    link->deviceHandle.protocol = protocol;
+    link->deviceHandle.xLinkFD = xLinkFD;
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, X_LINK_ERROR);
 
     XLINK_RET_ERR_IF(
         DispatcherStartServer(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
@@ -276,9 +282,10 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     XLINK_RET_IF(link == NULL);
     mvLog(MVLOG_DEBUG,"%s() device name %s glHandler %p protocol %d\n", __func__, handler->devicePath, glHandler, handler->protocol);
 
-    link->deviceHandle.protocol = handler->protocol;
+    XLinkProtocol_t protocol = handler->protocol;
+    void* xLinkFD = NULL;
     int connectStatus = XLinkPlatformConnect(handler->devicePath2, handler->devicePath,
-                                             &link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
+                                             &protocol, &xLinkFD);
     
     if (connectStatus < 0) {
         /**
@@ -292,6 +299,11 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
         // Return an informative error
         return parsePlatformError(connectStatus);
     }
+
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, X_LINK_ERROR);
+    link->deviceHandle.protocol = protocol;
+    link->deviceHandle.xLinkFD = xLinkFD;
+    XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, X_LINK_ERROR);
     
     XLINK_RET_ERR_IF(
         DispatcherStart(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
@@ -627,6 +639,7 @@ void freeGivenLink(xLinkDesc_t* link) {
     }
 
     link->id = INVALID_LINK_ID;
+    link->deviceHandle.xLinkFD = NULL;
     if (XLink_sem_destroy(&link->dispatcherClosedSem)) {
         mvLog(MVLOG_ERROR, "Cannot destroy semaphore\n");
     }

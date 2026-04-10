@@ -823,7 +823,6 @@ void dispatcherCloseLink(void* fd, int fullClose)
         return;
     }
 
-    link->deviceHandle.xLinkFD = NULL;
     link->peerState = XLINK_NOT_INIT;
     link->nextUniqueStreamId = 0;
 

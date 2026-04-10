@@ -13,6 +13,8 @@ CLIENT_EXECUTABLE=$2
 NUM_ROUNDS=$3
 TIMEOUT=$4
 DIAGNOSTIC_CLIENT_GRACE_MS=${XLINK_STRESS_DIAGNOSTIC_CLIENT_GRACE_MS:-0}
+WRAPPER_GRACE_SEC=${XLINK_STRESS_WRAPPER_GRACE_SEC:-8}
+SERVER_TIMEOUT=$((TIMEOUT + WRAPPER_GRACE_SEC))
 
 IP="127.0.0.1"
 START_PORT="11690"
@@ -33,13 +35,13 @@ for ((i=0; i<NUM_CONNECTIONS; i++)); do
     (
         for ((round=0; round<NUM_ROUNDS; round++)); do
             echo "Starting server conn $i round $round"
-            "$SOURCE_DIR/timeout.sh" -t "$TIMEOUT" -d 3 "$SERVER_EXECUTABLE" "${CONNECTION_IPS[$i]}"
+            "$SOURCE_DIR/timeout.sh" -t "$SERVER_TIMEOUT" -d 3 "$SERVER_EXECUTABLE" "${CONNECTION_IPS[$i]}"
         done
     ) &
     SERVER_LOOP_PIDS+=($!)
 done
 
-CLIENT_TIMEOUT=$((TIMEOUT + (NUM_ROUNDS * 2) + 10))
+CLIENT_TIMEOUT=$((SERVER_TIMEOUT + (NUM_ROUNDS * 2) + 10))
 "$SOURCE_DIR/timeout.sh" -t "$CLIENT_TIMEOUT" -d 3 "$CLIENT_EXECUTABLE" "$NUM_ROUNDS" "${CONNECTION_IPS[@]}" &
 CLIENT_PID=$!
 

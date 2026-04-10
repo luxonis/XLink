@@ -22,6 +22,8 @@ option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
 # Install headers only (skip binary lib in install tree)
 option(XLINK_INSTALL_PUBLIC_ONLY "Install only header interface target (XLinkPublic)" OFF)
+option(XLINK_ENABLE_ASAN "Build with AddressSanitizer" OFF)
+option(XLINK_ENABLE_TSAN "Build with ThreadSanitizer" OFF)
 
 # Specify exporting all symbols on Windows
 if(WIN32 AND BUILD_SHARED_LIBS)
@@ -32,10 +34,16 @@ if(XLINK_LIBUSB_LOCAL AND XLINK_LIBUSB_SYSTEM)
     message(FATAL_ERROR "XLINK_LIBUSB_LOCAL and XLINK_LIBUSB_SYSTEM options are mutually exclusive!")
 endif()
 
+if(XLINK_ENABLE_ASAN AND XLINK_ENABLE_TSAN)
+    message(FATAL_ERROR "XLINK_ENABLE_ASAN and XLINK_ENABLE_TSAN are mutually exclusive!")
+endif()
+
 message(STATUS "Configuring XLink with the following options:")
 message(STATUS "  XLINK_BUILD_EXAMPLES: ${XLINK_BUILD_EXAMPLES}")
 message(STATUS "  XLINK_BUILD_TESTS: ${XLINK_BUILD_TESTS}")
 message(STATUS "  XLINK_ENABLE_LIBUSB: ${XLINK_ENABLE_LIBUSB}")
+message(STATUS "  XLINK_ENABLE_ASAN: ${XLINK_ENABLE_ASAN}")
+message(STATUS "  XLINK_ENABLE_TSAN: ${XLINK_ENABLE_TSAN}")
 if(XLINK_ENABLE_LIBUSB)
     message(STATUS "    XLINK_LIBUSB_LOCAL: ${XLINK_LIBUSB_LOCAL}")
     message(STATUS "    XLINK_LIBUSB_SYSTEM: ${XLINK_LIBUSB_SYSTEM}")
@@ -44,6 +52,24 @@ endif()
 # Include XLink sources & flags helpers
 include(cmake/XLink.cmake)
 include(cmake/Flags.cmake)
+
+if(XLINK_ENABLE_ASAN OR XLINK_ENABLE_TSAN)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang|GNU" OR NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        message(FATAL_ERROR "Sanitizers require Clang or GCC compatible compilers")
+    endif()
+
+    set(XLINK_SANITIZER_FLAGS "")
+    if(XLINK_ENABLE_ASAN)
+        set(XLINK_SANITIZER_FLAGS "-fsanitize=address -fno-omit-frame-pointer")
+    elseif(XLINK_ENABLE_TSAN)
+        set(XLINK_SANITIZER_FLAGS "-fsanitize=thread -fno-omit-frame-pointer")
+    endif()
+
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${XLINK_SANITIZER_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${XLINK_SANITIZER_FLAGS}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${XLINK_SANITIZER_FLAGS}")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${XLINK_SANITIZER_FLAGS}")
+endif()
 
 # Create library target
 add_library(${TARGET_NAME} ${XLINK_SOURCES})

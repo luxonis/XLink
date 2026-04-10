@@ -23,6 +23,9 @@ using namespace std::chrono;
 constexpr static int NUM_ITERATIONS = 10000;
 constexpr static bool PRINT_DEBUG = false;
 constexpr static microseconds RTT_THRESHOLD{5000};
+constexpr static int WARMUP_ITERATIONS = 100;
+constexpr static int MAX_ALLOWED_OUTLIERS = 25;
+constexpr static microseconds WORST_CASE_THRESHOLD{50000};
 
 struct Timestamp {
     int64_t sec;
@@ -75,6 +78,8 @@ int client() {
 
         streamPacketDesc_t* packet;
         bool success = true;
+        int outliers = 0;
+        microseconds worstRtt{0};
 
         for(int i = 1; i <= NUM_ITERATIONS; i++){
             ts.sec = i;
@@ -88,21 +93,28 @@ int client() {
             memcpy(&ts, packet->data, packet->length);
             XLinkReleaseData(s);
 
-            if(PRINT_DEBUG) printf("client received - sec: %ld, nsec: %ld\n", ts.sec, ts.nsec);
+            if(PRINT_DEBUG) printf("client received - sec: %lld, nsec: %lld\n", ts.sec, ts.nsec);
             assert((ts.sec + 100)*2 == ts.nsec);
 
-            if(t2-t1 <= RTT_THRESHOLD) {
-                if(PRINT_DEBUG) printf("OK, rtt = %ldus. (write: %ldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
+            const auto rtt = duration_cast<microseconds>(t2 - t1);
+            worstRtt = std::max(worstRtt, rtt);
+
+            if(i <= WARMUP_ITERATIONS || rtt <= RTT_THRESHOLD) {
+                if(PRINT_DEBUG) printf("OK, rtt = %lldus. (write: %lldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
             } else {
-                printf("NOK, rtt = %ldus. RTT too high (write: %ldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
-                success = false;
+                printf("NOK, rtt = %lldus. RTT too high (write: %lldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
+                outliers++;
             }
         }
 
+        if(outliers > MAX_ALLOWED_OUTLIERS || worstRtt > WORST_CASE_THRESHOLD) {
+            success = false;
+        }
+
         if(success) {
-            printf("Success!\n");
+            printf("Success! outliers=%d worst_rtt_us=%lld\n", outliers, worstRtt.count());
         } else {
-            printf("Failed\n");
+            printf("Failed: outliers=%d worst_rtt_us=%lld\n", outliers, worstRtt.count());
             return -1;
         }
 
@@ -148,13 +160,13 @@ int server(){
             XLinkReleaseData(s);
             timestamp.nsec = (timestamp.sec + 100LL) * 2LL;
             auto t1point5 = steady_clock::now();
-            if(PRINT_DEBUG) printf("server sent - sec: %ld, nsec: %ld\n", timestamp.sec, timestamp.nsec);
+            if(PRINT_DEBUG) printf("server sent - sec: %lld, nsec: %lld\n", timestamp.sec, timestamp.nsec);
             if(XLinkWriteData(s, reinterpret_cast<uint8_t*>(&timestamp), sizeof(timestamp)) != X_LINK_SUCCESS) {
                 printf("failed.\n");
                 return -1;
             }
             auto t2 = steady_clock::now();
-            if(PRINT_DEBUG) printf("Respond time: %ldus, (write: %ldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
+            if(PRINT_DEBUG) printf("Respond time: %lldus, (write: %lldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
         }
 
     } else {

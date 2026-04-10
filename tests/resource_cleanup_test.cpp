@@ -25,7 +25,6 @@ namespace {
 constexpr std::size_t kPayloadSize = 4096;
 constexpr int kConnectRetryMs = 5;
 constexpr int kDefaultConnectTimeoutMs = 5000;
-constexpr int kDefaultResetTimeoutMs = 1000;
 constexpr int kDefaultWarmupRounds = 200;
 constexpr int kDefaultSampleEveryRounds = 100;
 constexpr std::size_t kDefaultRssGrowthLimitKiB = 24 * 1024;
@@ -35,7 +34,6 @@ constexpr char kStreamName[] = "resource_cleanup";
 
 struct LeakTestConfig {
     int connectTimeoutMs = kDefaultConnectTimeoutMs;
-    int resetTimeoutMs = kDefaultResetTimeoutMs;
     int warmupRounds = kDefaultWarmupRounds;
     int sampleEveryRounds = kDefaultSampleEveryRounds;
     std::size_t rssGrowthLimitKiB = kDefaultRssGrowthLimitKiB;
@@ -61,7 +59,6 @@ int readEnvInt(const char* name, int fallback) {
 LeakTestConfig readConfig() {
     LeakTestConfig cfg;
     cfg.connectTimeoutMs = readEnvInt("XLINK_LEAK_TEST_CONNECT_TIMEOUT_MS", kDefaultConnectTimeoutMs);
-    cfg.resetTimeoutMs = readEnvInt("XLINK_LEAK_TEST_RESET_TIMEOUT_MS", kDefaultResetTimeoutMs);
     cfg.warmupRounds = readEnvInt("XLINK_LEAK_TEST_WARMUP_ROUNDS", kDefaultWarmupRounds);
     cfg.sampleEveryRounds = readEnvInt("XLINK_LEAK_TEST_SAMPLE_EVERY_ROUNDS", kDefaultSampleEveryRounds);
     cfg.rssGrowthLimitKiB = static_cast<std::size_t>(readEnvInt("XLINK_LEAK_TEST_RSS_GROWTH_LIMIT_KIB",
@@ -209,7 +206,7 @@ int main(int argc, char** argv) {
             return -1;
         }
 
-        const XLinkError_t resetStatus = XLinkResetRemoteTimeout(handler.linkId, cfg.resetTimeoutMs);
+        const XLinkError_t resetStatus = XLinkResetRemote(handler.linkId);
         if (resetStatus != X_LINK_SUCCESS) {
             std::printf("FAIL: round=%d reset failed (%s)\n", round, XLinkErrorToStr(resetStatus));
             return -1;
