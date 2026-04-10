@@ -37,24 +37,25 @@ int main(int argc, const char** argv){
     }
 
     XLinkHandler_t handler;
-    handler.devicePath = "/dev/usb-ffs/device";
+    static char devicePath[] = "/dev/usb-ffs/device";
+    handler.devicePath = devicePath;
     handler.protocol = X_LINK_USB_EP;
     XLinkServerOnly(&handler);
 
 
     // loop through streams
-    auto s = XLinkOpenStream(0, "test_0", sizeof(DUMMY_DATA) * 2);
+    auto s = XLinkOpenStream(&handler, "test_0", sizeof(DUMMY_DATA) * 2);
     assert(s != INVALID_STREAM_ID);
 
     //    auto w = XLinkWriteData2(s, (uint8_t*) &s, sizeof(s/2), ((uint8_t*) &s) + sizeof(s/2), sizeof(s) - sizeof(s/2));
     //    assert(w == X_LINK_SUCCESS);
 
-    auto w = XLinkWriteData(s, (uint8_t*) &s, sizeof(s));
+    auto w = XLinkWriteData(&handler, s, (uint8_t*) &s, sizeof(s));
     assert(w == X_LINK_SUCCESS);
     
     
     streamPacketDesc_t p;
-    w = XLinkReadMoveData(s, &p);
+    w = XLinkReadMoveData(&handler, s, &p);
     assert(w == X_LINK_SUCCESS);
     XLinkDeallocateMoveData(p.data, p.length);
     

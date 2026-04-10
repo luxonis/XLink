@@ -18,37 +18,37 @@
 
 #include "XLinkLog.h"
 
-xLinkDesc_t* getLinkById(linkId_t id)
+XLinkSession_t* getSession(const XLinkHandler_t* handler)
 {
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, NULL);
-
-    int i;
-    for (i = 0; i < MAX_LINKS; i++) {
-        if (availableXLinks[i].id == id) {
-            XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
-            return &availableXLinks[i];
-        }
-    }
-
-    XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
-    return NULL;
+    XLINK_RET_ERR_IF(handler == NULL, NULL);
+    return handler->session;
 }
 
-xLinkDesc_t* getLink(void* fd)
+xLinkDesc_t* getLink(const XLinkHandler_t* handler)
 {
+    XLinkSession_t* session = getSession(handler);
+    XLINK_RET_ERR_IF(session == NULL, NULL);
+    return &session->link;
+}
 
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, NULL);
+XLinkSession_t* getSessionFromDeviceHandle(const xLinkDeviceHandle_t* deviceHandle)
+{
+    XLINK_RET_ERR_IF(deviceHandle == NULL, NULL);
+    return deviceHandle->session;
+}
 
-    int i;
-    for (i = 0; i < MAX_LINKS; i++) {
-        if (availableXLinks[i].deviceHandle.xLinkFD == fd) {
-            XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
-            return &availableXLinks[i];
-        }
-    }
+xLinkDesc_t* getLinkFromDeviceHandle(const xLinkDeviceHandle_t* deviceHandle)
+{
+    XLinkSession_t* session = getSessionFromDeviceHandle(deviceHandle);
+    XLINK_RET_ERR_IF(session == NULL, NULL);
+    return &session->link;
+}
 
-    XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
-    return NULL;
+xLinkSchedulerState_t* getSchedulerFromDeviceHandle(const xLinkDeviceHandle_t* deviceHandle)
+{
+    XLinkSession_t* session = getSessionFromDeviceHandle(deviceHandle);
+    XLINK_RET_ERR_IF(session == NULL, NULL);
+    return &session->scheduler;
 }
 
 streamId_t getStreamIdByName(xLinkDesc_t* link, const char* name)
@@ -64,10 +64,9 @@ streamId_t getStreamIdByName(xLinkDesc_t* link, const char* name)
     return INVALID_STREAM_ID;
 }
 
-streamDesc_t* getStreamById(void* fd, streamId_t id)
+streamDesc_t* getStreamById(xLinkDesc_t* link, streamId_t id)
 {
     XLINK_RET_ERR_IF(id == INVALID_STREAM_ID, NULL);
-    xLinkDesc_t* link = getLink(fd);
     XLINK_RET_ERR_IF(link == NULL, NULL);
     int stream;
     for (stream = 0; stream < XLINK_MAX_STREAMS; stream++) {

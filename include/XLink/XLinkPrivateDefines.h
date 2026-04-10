@@ -50,6 +50,7 @@ typedef enum {
 typedef struct xLinkDeviceHandle_t {
     XLinkProtocol_t protocol;
     void* xLinkFD;
+    XLinkSession_t* session;
 } xLinkDeviceHandle_t;
 
 /**
@@ -75,7 +76,7 @@ typedef struct xLinkDesc_t {
 
 } xLinkDesc_t;
 
-streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,
+streamId_t XLinkAddOrUpdateStream(xLinkDeviceHandle_t* deviceHandle, const char *name,
                                   uint32_t writeSize, uint32_t readSize, streamId_t forcedId);
 
 //events which are coming from remote

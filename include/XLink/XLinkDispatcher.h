@@ -24,7 +24,7 @@ typedef struct {
     int (*eventReceive) (xLinkEvent_t*);
     getRespFunction localGetResponse;
     getRespFunction remoteGetResponse;
-    void (*closeLink) (void* fd, int fullClose);
+    void (*closeLink) (xLinkDeviceHandle_t* deviceHandle, int fullClose);
     void (*closeDeviceFd) (xLinkDeviceHandle_t* deviceHandle);
 } DispatcherControlFunctions;
 
@@ -44,11 +44,11 @@ char* TypeToStr(int type);
 int DispatcherUnblockEvent(eventId_t id,
                              xLinkEventType_t type,
                              streamId_t stream,
-                             void *xlinkFD);
+                             xLinkDeviceHandle_t* deviceHandle);
 int DispatcherServeEvent(eventId_t id,
                              xLinkEventType_t type,
                              streamId_t stream,
-                             void *xlinkFD);
+                             xLinkDeviceHandle_t* deviceHandle);
 #ifdef __cplusplus
 }
 #endif

@@ -31,34 +31,21 @@
 
 #include "tcpip_host.h"
 
-// ------------------------------------
-// Global fields. Begin.
-// ------------------------------------
-
-XLinkGlobalHandler_t* glHandler; //TODO need to either protect this with semaphor
-                                 //or make profiling data per device
-
-xLinkDesc_t availableXLinks[MAX_LINKS];
-pthread_mutex_t availableXLinksMutex = PTHREAD_MUTEX_INITIALIZER;
 sem_t  pingSem; //to b used by myriad
 DispatcherControlFunctions controlFunctionTbl;
-linkId_t nextUniqueLinkId = 0; //incremental number, doesn't get decremented.
-
-// ------------------------------------
-// Global fields. End.
-// ------------------------------------
 
 
 static pthread_mutex_t init_mutex = PTHREAD_MUTEX_INITIALIZER;
 static uint32_t init_once = 0;
+static pthread_mutex_t link_id_mutex = PTHREAD_MUTEX_INITIALIZER;
+static linkId_t nextLinkId = 0;
 
 // ------------------------------------
 // Helpers declaration. Begin.
 // ------------------------------------
 
-static linkId_t getNextAvailableLinkUniqueId();
-static xLinkDesc_t* getNextAvailableLink();
-static void freeGivenLink(xLinkDesc_t* link);
+static xLinkDesc_t* allocateSession(XLinkHandler_t* handler);
+static void deallocateSession(XLinkHandler_t* handler);
 static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc);
 
 // ------------------------------------
@@ -81,7 +68,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     }
 
     ASSERT_XLINK(XLINK_MAX_STREAMS <= MAX_POOLS_ALLOC);
-    glHandler = globalHandler;
+    XLinkGlobalHandlerAssign(globalHandler);
     if (sem_init(&pingSem,0,0)) {
         mvLog(MVLOG_ERROR, "Can't create semaphore\n");
     }
@@ -116,21 +103,6 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
         mvLog(MVLOG_ERROR, "Condition failed: DispatcherInitialize(&controlFunctionTbl)");
         pthread_mutex_unlock(&init_mutex);
         return X_LINK_ERROR;
-    }
-
-    //initialize availableStreams
-    memset(availableXLinks, 0, sizeof(availableXLinks));
-
-    xLinkDesc_t* link;
-    for (i = 0; i < MAX_LINKS; i++) {
-        link = &availableXLinks[i];
-
-        link->id = INVALID_LINK_ID;
-        link->deviceHandle.xLinkFD = NULL;
-        link->peerState = XLINK_NOT_INIT;
-        int stream;
-        for (stream = 0; stream < XLINK_MAX_STREAMS; stream++)
-            link->availableStreams[stream].id = INVALID_STREAM_ID;
     }
 
     init_once = 1;
@@ -182,9 +154,9 @@ XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
         return X_LINK_ERROR;
     }
 
-    xLinkDesc_t* link = getNextAvailableLink();
+    xLinkDesc_t* link = allocateSession(handler);
     XLINK_RET_IF(link == NULL);
-    mvLog(MVLOG_DEBUG,"%s() device name %s glHandler %p protocol %d\n", __func__, handler->devicePath, glHandler, handler->protocol);
+    mvLog(MVLOG_DEBUG,"%s() device name %s link %p protocol %d\n", __func__, handler->devicePath, link, handler->protocol);
 
     link->deviceHandle.protocol = handler->protocol;
     int connectStatus = XLinkPlatformServer(handler->devicePath2, handler->devicePath,
@@ -197,14 +169,16 @@ XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
          */
 
         // Free used link
-        freeGivenLink(link);
+        deallocateSession(handler);
 
         // Return an informative error
         return parsePlatformError(connectStatus);
     }
 
-    XLINK_RET_ERR_IF(
-        DispatcherStartServer(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
+    if (DispatcherStartServer(link) != X_LINK_SUCCESS) {
+        deallocateSession(handler);
+        return X_LINK_TIMEOUT;
+    }
 
     // Wait till client pings
     while(((sem_wait(&pingSem) == -1) && errno == EINTR))
@@ -272,9 +246,9 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
         return X_LINK_ERROR;
     }
 
-    xLinkDesc_t* link = getNextAvailableLink();
+    xLinkDesc_t* link = allocateSession(handler);
     XLINK_RET_IF(link == NULL);
-    mvLog(MVLOG_DEBUG,"%s() device name %s glHandler %p protocol %d\n", __func__, handler->devicePath, glHandler, handler->protocol);
+    mvLog(MVLOG_DEBUG,"%s() device name %s link %p protocol %d\n", __func__, handler->devicePath, link, handler->protocol);
 
     link->deviceHandle.protocol = handler->protocol;
     int connectStatus = XLinkPlatformConnect(handler->devicePath2, handler->devicePath,
@@ -287,14 +261,16 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
          */
 
         // Free used link
-        freeGivenLink(link);
+        deallocateSession(handler);
 
         // Return an informative error
         return parsePlatformError(connectStatus);
     }
     
-    XLINK_RET_ERR_IF(
-        DispatcherStart(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
+    if (DispatcherStart(link) != X_LINK_SUCCESS) {
+        deallocateSession(handler);
+        return X_LINK_TIMEOUT;
+    }
 
     xLinkEvent_t event = {0};
 
@@ -304,6 +280,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 
     if (DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT)) {
         DispatcherClean(&link->deviceHandle);
+        deallocateSession(handler);
         return X_LINK_TIMEOUT;
     }
 
@@ -346,14 +323,15 @@ XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmw
     return X_LINK_COMMUNICATION_FAIL;
 }
 
-XLinkError_t XLinkResetRemote(linkId_t id)
+XLinkError_t XLinkResetRemote(XLinkHandler_t* handler)
 {
-    xLinkDesc_t* link = getLinkById(id);
+    xLinkDesc_t* link = getLink(handler);
     XLINK_RET_IF(link == NULL);
 
     if (getXLinkState(link) != XLINK_UP) {
         mvLog(MVLOG_WARN, "Link is down, close connection to device without reset");
         XLinkPlatformCloseRemote(&link->deviceHandle);
+        deallocateSession(handler);
         return X_LINK_COMMUNICATION_NOT_OPEN;
     }
 
@@ -374,17 +352,19 @@ XLinkError_t XLinkResetRemote(linkId_t id)
         return X_LINK_ERROR;
     }
 
+    deallocateSession(handler);
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
+XLinkError_t XLinkResetRemoteTimeout(XLinkHandler_t* handler, int timeoutMs)
 {
-    xLinkDesc_t* link = getLinkById(id);
+    xLinkDesc_t* link = getLink(handler);
     XLINK_RET_IF(link == NULL);
 
     if (getXLinkState(link) != XLINK_UP) {
         mvLog(MVLOG_WARN, "Link is down, close connection to device without reset");
         XLinkPlatformCloseRemote(&link->deviceHandle);
+        deallocateSession(handler);
         return X_LINK_COMMUNICATION_NOT_OPEN;
     }
 
@@ -426,99 +406,43 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
         return X_LINK_ERROR;
     }
 
+    deallocateSession(handler);
     return ret;
 
 }
 
-XLinkError_t XLinkResetAll()
-{
-    int i;
-    for (i = 0; i < MAX_LINKS; i++) {
-        if (availableXLinks[i].id != INVALID_LINK_ID) {
-            xLinkDesc_t* link = &availableXLinks[i];
-            int stream;
-            for (stream = 0; stream < XLINK_MAX_STREAMS; stream++) {
-                if (link->availableStreams[stream].id != INVALID_STREAM_ID) {
-                    streamId_t streamId = link->availableStreams[stream].id;
-                    mvLog(MVLOG_DEBUG,"%s() Closing stream (stream = %d) %d on link %d\n",
-                          __func__, stream, (int) streamId, (int) link->id);
-                    COMBINE_IDS(streamId, link->id);
-                    if (XLinkCloseStream(streamId) != X_LINK_SUCCESS) {
-                        mvLog(MVLOG_WARN,"Failed to close stream");
-                    }
-                }
-            }
-            if (XLinkResetRemote(link->id) != X_LINK_SUCCESS) {
-                mvLog(MVLOG_WARN,"Failed to reset");
-            }
-        }
-    }
-    return X_LINK_SUCCESS;
-}
-
 XLinkError_t XLinkProfStart()
 {
-    XLINK_RET_IF(glHandler == NULL);
-    glHandler->profEnable = 1;
-    glHandler->profilingData.totalReadBytes = 0;
-    glHandler->profilingData.totalWriteBytes = 0;
-    glHandler->profilingData.totalWriteTime = 0;
-    glHandler->profilingData.totalReadTime = 0;
-    glHandler->profilingData.totalBootCount = 0;
-    glHandler->profilingData.totalBootTime = 0;
-
+    XLINK_RET_IF(!XLinkGlobalHandlerIsValid());
+    XLinkGlobalHandlerStartProfiling();
     return X_LINK_SUCCESS;
 }
 
 XLinkError_t XLinkProfStop()
 {
-    XLINK_RET_IF(glHandler == NULL);
-    glHandler->profEnable = 0;
+    XLINK_RET_IF(!XLinkGlobalHandlerIsValid());
+    XLinkGlobalHandlerStopProfiling();
     return X_LINK_SUCCESS;
 }
 
 XLinkError_t XLinkProfPrint()
 {
-    XLINK_RET_IF(glHandler == NULL);
-    printf("XLink profiling results:\n");
-    if (glHandler->profilingData.totalWriteTime)
-    {
-        printf("Average write speed: %f MB/Sec\n",
-               glHandler->profilingData.totalWriteBytes /
-               glHandler->profilingData.totalWriteTime /
-               1024.0 /
-               1024.0 );
-    }
-    if (glHandler->profilingData.totalReadTime)
-    {
-        printf("Average read speed: %f MB/Sec\n",
-               glHandler->profilingData.totalReadBytes /
-               glHandler->profilingData.totalReadTime /
-               1024.0 /
-               1024.0);
-    }
-    if (glHandler->profilingData.totalBootCount)
-    {
-        printf("Average boot speed: %f sec\n",
-               glHandler->profilingData.totalBootTime /
-               glHandler->profilingData.totalBootCount);
-    }
+    XLINK_RET_IF(!XLinkGlobalHandlerIsValid());
+    XLinkGlobalHandlerPrintProfilingData();
     return X_LINK_SUCCESS;
 }
 
 XLinkError_t XLinkGetGlobalProfilingData(XLinkProf_t* prof)
 {
     XLINK_RET_IF(prof == NULL);
-    XLINK_RET_IF(glHandler == NULL);
-    // TODO(themarpe) - thread safe readout
-    *prof = glHandler->profilingData;
+    XLINK_RET_IF(XLinkGlobalHandlerCopyProfilingData(prof));
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkGetProfilingData(linkId_t id, XLinkProf_t* prof)
+XLinkError_t XLinkGetProfilingData(XLinkHandler_t* handler, XLinkProf_t* prof)
 {
     XLINK_RET_IF(prof == NULL);
-    xLinkDesc_t* link = getLinkById(id);
+    xLinkDesc_t* link = getLink(handler);
     XLINK_RET_IF(link == NULL);
 
     // TODO(themarpe) - thread safe readout
@@ -526,13 +450,13 @@ XLinkError_t XLinkGetProfilingData(linkId_t id, XLinkProf_t* prof)
     return X_LINK_SUCCESS;
 }
 
-UsbSpeed_t XLinkGetUSBSpeed(linkId_t id){
-    xLinkDesc_t* link = getLinkById(id);
+UsbSpeed_t XLinkGetUSBSpeed(XLinkHandler_t* handler){
+    xLinkDesc_t* link = getLink(handler);
     return link->usbConnSpeed;
 }
 
-const char* XLinkGetMxSerial(linkId_t id){
-    xLinkDesc_t* link = getLinkById(id);
+const char* XLinkGetMxSerial(XLinkHandler_t* handler){
+    xLinkDesc_t* link = getLink(handler);
     return link->mxSerialId;
 }
 
@@ -545,90 +469,59 @@ const char* XLinkGetMxSerial(linkId_t id){
 // Helpers implementation. Begin.
 // ------------------------------------
 
-// Used only by getNextAvailableLink
-linkId_t getNextAvailableLinkUniqueId()
-{
-    linkId_t start = nextUniqueLinkId;
-    do
-    {
-        int i;
-        for (i = 0; i < MAX_LINKS; i++)
-        {
-            if (availableXLinks[i].id != INVALID_LINK_ID &&
-                availableXLinks[i].id == nextUniqueLinkId)
-                break;
-        }
-        if (i >= MAX_LINKS)
-        {
-            linkId_t id = nextUniqueLinkId;
-            nextUniqueLinkId++;
-            if (nextUniqueLinkId == INVALID_LINK_ID)
-            {
-                nextUniqueLinkId = 0;
-            }
-            return id;
-        }
-        nextUniqueLinkId++;
-        if (nextUniqueLinkId == INVALID_LINK_ID)
-        {
-            nextUniqueLinkId = 0;
-        }
-    } while (start != nextUniqueLinkId);
-    mvLog(MVLOG_ERROR, "%s():- no next available unique link id!\n", __func__);
-    return INVALID_LINK_ID;
-}
+xLinkDesc_t* allocateSession(XLinkHandler_t* handler) {
+    XLINK_RET_ERR_IF(handler == NULL, NULL);
+    XLinkSession_t* session = calloc(1, sizeof(XLinkSession_t));
+    XLINK_RET_ERR_IF(session == NULL, NULL);
 
-xLinkDesc_t* getNextAvailableLink() {
-
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, NULL);
-
-    linkId_t id = getNextAvailableLinkUniqueId();
-    if(id == INVALID_LINK_ID){
-        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
-        return NULL;
-    }
-
-    int i;
-    for (i = 0; i < MAX_LINKS; i++) {
-        if (availableXLinks[i].id == INVALID_LINK_ID) {
-            break;
-        }
-    }
-
-    if(i >= MAX_LINKS) {
-        mvLog(MVLOG_ERROR,"%s():- no next available link!\n", __func__);
-        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
-        return NULL;
-    }
-
-    xLinkDesc_t* link = &availableXLinks[i];
+    xLinkDesc_t* link = &session->link;
 
     if (XLink_sem_init(&link->dispatcherClosedSem, 0 ,0)) {
         mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
-        XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
+        free(session);
         return NULL;
     }
 
-    link->id = id;
-    XLINK_RET_ERR_IF(pthread_mutex_unlock(&availableXLinksMutex) != 0, NULL);
+    if (pthread_mutex_lock(&link_id_mutex) != 0) {
+        XLink_sem_destroy(&link->dispatcherClosedSem);
+        free(session);
+        return NULL;
+    }
+    link->id = nextLinkId;
+    nextLinkId = (linkId_t)((nextLinkId + 1u) % INVALID_LINK_ID);
+    if (pthread_mutex_unlock(&link_id_mutex) != 0) {
+        XLink_sem_destroy(&link->dispatcherClosedSem);
+        free(session);
+        return NULL;
+    }
+
+    link->peerState = XLINK_NOT_INIT;
+    link->deviceHandle.session = session;
+    for (int stream = 0; stream < XLINK_MAX_STREAMS; stream++) {
+        link->availableStreams[stream].id = INVALID_STREAM_ID;
+    }
+    handler->session = session;
+    handler->linkId = link->id;
 
     return link;
 }
 
-void freeGivenLink(xLinkDesc_t* link) {
-
-    if(pthread_mutex_lock(&availableXLinksMutex) != 0){
-        mvLog(MVLOG_ERROR, "Cannot lock mutex\n");
+void deallocateSession(XLinkHandler_t* handler) {
+    XLinkSession_t* session = getSession(handler);
+    if (session == NULL) {
         return;
     }
+    xLinkDesc_t* link = &session->link;
 
-    link->id = INVALID_LINK_ID;
     if (XLink_sem_destroy(&link->dispatcherClosedSem)) {
         mvLog(MVLOG_ERROR, "Cannot destroy semaphore\n");
     }
 
-    pthread_mutex_unlock(&availableXLinksMutex);
-
+    if (handler != NULL) {
+        handler->session = NULL;
+        handler->linkId = INVALID_LINK_ID;
+    }
+    free(session);
 }
 
 XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {

@@ -34,7 +34,7 @@ static streamId_t getNextStreamUniqueId(xLinkDesc_t *link);
 // XLinkPrivateDefines API implementation. Begin.
 // ------------------------------------
 
-streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,
+streamId_t XLinkAddOrUpdateStream(xLinkDeviceHandle_t* deviceHandle, const char *name,
     uint32_t writeSize, uint32_t readSize, streamId_t forcedId)
 {
     mvLog(MVLOG_DEBUG, "name: %s, writeSize: %ld, readSize: %ld, forcedId: %ld\n",
@@ -42,7 +42,7 @@ streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,
 
     streamId_t retStreamId = INVALID_STREAM_ID;
     streamDesc_t* stream = NULL;
-    xLinkDesc_t* link = getLink(fd);
+    xLinkDesc_t* link = getLinkFromDeviceHandle(deviceHandle);
     XLINK_OUT_IF(link == NULL);
 
     stream = getStreamByName(link, name);

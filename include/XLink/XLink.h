@@ -198,7 +198,7 @@ XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmw
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 
-XLinkError_t XLinkResetRemote(linkId_t id);
+XLinkError_t XLinkResetRemote(XLinkHandler_t* handler);
 
 /**
  * @brief Resets the remote device and close all open local handles for this device
@@ -207,19 +207,19 @@ XLinkError_t XLinkResetRemote(linkId_t id);
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 
-XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs);
+XLinkError_t XLinkResetRemoteTimeout(XLinkHandler_t* handler, int timeoutMs);
 
 /**
  * @brief Retrieves USB speed of certain connected device
  * @return UsbSpeed_t enum describing the usb connection speed
  */
-UsbSpeed_t XLinkGetUSBSpeed(linkId_t id);
+UsbSpeed_t XLinkGetUSBSpeed(XLinkHandler_t* handler);
 
 /**
  * @brief Returns mx serial of current connected device
  * @return pointer to mx serial string
  */
-const char* XLinkGetMxSerial(linkId_t id);
+const char* XLinkGetMxSerial(XLinkHandler_t* handler);
 
 /**
  * @brief Returns enum string value
@@ -262,7 +262,7 @@ XLinkError_t XLinkProfStart();
 XLinkError_t XLinkProfStop();
 XLinkError_t XLinkProfPrint();
 XLinkError_t XLinkGetGlobalProfilingData(XLinkProf_t* prof);
-XLinkError_t XLinkGetProfilingData(linkId_t id, XLinkProf_t* prof);
+XLinkError_t XLinkGetProfilingData(XLinkHandler_t* handler, XLinkProf_t* prof);
 
 
 // ------------------------------------
@@ -284,7 +284,7 @@ XLinkError_t XLinkGetProfilingData(linkId_t id, XLinkProf_t* prof);
  * @param[in] stream_write_size - stream buffer size
  * @return Link Id: INVALID_STREAM_ID for failure
  */
-streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size);
+streamId_t XLinkOpenStream(XLinkHandler_t* handler, const char* name, int stream_write_size);
 
 /**
  * @brief Closes stream for any further data transfer
@@ -292,7 +292,7 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
  * @param[in] streamId - link Id obtained from XLinkOpenStream call
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkCloseStream(streamId_t const streamId);
+XLinkError_t XLinkCloseStream(XLinkHandler_t* handler, streamId_t const streamId);
 
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream
@@ -302,9 +302,9 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId);
  * @param[in] size - size of the data to be transmitted
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer, int size);
+XLinkError_t XLinkWriteData(XLinkHandler_t* handler, streamId_t const streamId, const uint8_t* buffer, int size);
 
-XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int size, XLinkTimespec* outTSend);
+XLinkError_t XLinkWriteData_(XLinkHandler_t* handler, streamId_t streamId, const uint8_t* buffer, int size, XLinkTimespec* outTSend);
 
 /**
  * @brief Sends/Receives a message to Gate via USB
@@ -324,9 +324,9 @@ XLinkError_t XLinkGateRead(const char *name, void *data, int size, int timeout);
  * @param[in] buffer - FD to be transmitted
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkWriteFd(streamId_t const streamId, const long fd);
-XLinkError_t XLinkWriteFd_(streamId_t streamId, const long fd, XLinkTimespec* outTSend);
-XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, const uint8_t* dataBuffer, int dataSize);
+XLinkError_t XLinkWriteFd(XLinkHandler_t* handler, streamId_t const streamId, const long fd);
+XLinkError_t XLinkWriteFd_(XLinkHandler_t* handler, streamId_t streamId, const long fd, XLinkTimespec* outTSend);
+XLinkError_t XLinkWriteFdData(XLinkHandler_t* handler, streamId_t streamId, const long fd, const uint8_t* dataBuffer, int dataSize);
 
 
 /**
@@ -339,7 +339,7 @@ XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, const uint8_t*
  * @param[in] buffer2Size – size of the data to be transmitted
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, int buffer1Size, const uint8_t* buffer2, int buffer2Size);
+XLinkError_t XLinkWriteData2(XLinkHandler_t* handler, streamId_t streamId, const uint8_t* buffer1, int buffer1Size, const uint8_t* buffer2, int buffer2Size);
 
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream
@@ -350,7 +350,7 @@ XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, int bu
  * @param[in] msTimeout – time in milliseconds after which operation times out
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success,  X_LINK_TIMEOUT when msTimeout time passes
  */
-XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t* buffer, int size, unsigned int msTimeout);
+XLinkError_t XLinkWriteDataWithTimeout(XLinkHandler_t* handler, streamId_t const streamId, const uint8_t* buffer, int size, unsigned int msTimeout);
 
 /**
  * @brief Reads data from local stream. Will only have something if it was written to by the remote
@@ -358,7 +358,7 @@ XLinkError_t XLinkWriteDataWithTimeout(streamId_t const streamId, const uint8_t*
  * @param[out]  packet - structure containing output data buffer and received size
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packet);
+XLinkError_t XLinkReadData(XLinkHandler_t* handler, streamId_t const streamId, streamPacketDesc_t** packet);
 
 /**
  * @brief Reads data from local stream. Will only have something if it was written to by the remote
@@ -367,7 +367,7 @@ XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packe
  * @param[in]   msTimeout – time in milliseconds after which operation times out
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT when msTimeout time passes
  */
-XLinkError_t XLinkReadDataWithTimeout(streamId_t const streamId, streamPacketDesc_t** packet, unsigned int msTimeout);
+XLinkError_t XLinkReadDataWithTimeout(XLinkHandler_t* handler, streamId_t const streamId, streamPacketDesc_t** packet, unsigned int msTimeout);
 
 /**
  * @brief Releases specific data from stream
@@ -375,7 +375,7 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t const streamId, streamPacketDes
  * @param[in] packetId – ID of the package to be released from the stream
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkReleaseSpecificData(streamId_t streamId, streamPacketDesc_t* packetDesc);
+XLinkError_t XLinkReleaseSpecificData(XLinkHandler_t* handler, streamId_t streamId, streamPacketDesc_t* packetDesc);
 
 /**
  * @brief Reads data from local stream and moves ownership. Will only have something if it was written to by the remote
@@ -384,7 +384,7 @@ XLinkError_t XLinkReleaseSpecificData(streamId_t streamId, streamPacketDesc_t* p
  * @param[out]  packet - structure containing output data buffer and received size
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* const packet);
+XLinkError_t XLinkReadMoveData(XLinkHandler_t* handler, streamId_t const streamId, streamPacketDesc_t* const packet);
 
 /**
  * @brief Reads data from local stream and moves ownership. Will only have something if it was written to by the remote
@@ -394,7 +394,7 @@ XLinkError_t XLinkReadMoveData(streamId_t const streamId, streamPacketDesc_t* co
  * @param[in]   msTimeout – time in milliseconds after which operation times out
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success, X_LINK_TIMEOUT when msTimeout time passes
  */
-XLinkError_t XLinkReadMoveDataWithTimeout(streamId_t const streamId, streamPacketDesc_t *const packet, const unsigned int msTimeout);
+XLinkError_t XLinkReadMoveDataWithTimeout(XLinkHandler_t* handler, streamId_t const streamId, streamPacketDesc_t *const packet, const unsigned int msTimeout);
 
 /**
  * @brief Deallocate memory within streamPacketDesc_t received from a previous call to XLinkReadMoveData() or XLinkReadMoveDataWithTimeout()
@@ -409,7 +409,7 @@ void XLinkDeallocateMoveData(void* const data, const uint32_t length);
  * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkReleaseData(streamId_t const streamId);
+XLinkError_t XLinkReleaseData(XLinkHandler_t* handler, streamId_t const streamId);
 
 /**
  * @brief Reads data from local stream with timeout in ms. Will only have something if it was written to by the remote.
@@ -424,7 +424,7 @@ XLinkError_t XLinkReleaseData(streamId_t const streamId);
  * @param[in]   timeoutMs – timeout for a read operation in milliseconds
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** packet, unsigned int timeoutMs);
+XLinkError_t XLinkReadDataWithTimeout(XLinkHandler_t* handler, streamId_t streamId, streamPacketDesc_t** packet, unsigned int timeoutMs);
 
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream with timeout in ms
@@ -436,7 +436,7 @@ XLinkError_t XLinkReadDataWithTimeout(streamId_t streamId, streamPacketDesc_t** 
  * @param[in] timeoutMs – timeout for a write operation in milliseconds
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
-XLinkError_t XLinkWriteDataWithTimeout(streamId_t streamId, const uint8_t* buffer, int size, unsigned int timeoutMs);
+XLinkError_t XLinkWriteDataWithTimeout(XLinkHandler_t* handler, streamId_t streamId, const uint8_t* buffer, int size, unsigned int timeoutMs);
 
 // ------------------------------------
 // Device streams management. End.
@@ -463,13 +463,6 @@ XLinkError_t XLinkAsyncWriteData();
 
 XLinkError_t XLinkSetDeviceOpenTimeOutMsec(unsigned int msec);
 XLinkError_t XLinkSetCommonTimeOutMsec(unsigned int msec);
-
-/**
- * Deprecated - issues
- * @brief Closes all and release all memory
- * @return Status code of the operation: X_LINK_SUCCESS (0) for success
- */
-XLinkError_t XLinkResetAll();
 
 #endif // __DEVICE__
 

@@ -25,15 +25,24 @@ int main(int argc, const char** argv){
         throw std::runtime_error("Couldn't initialize XLink");
     }
 
+    XLinkHandler_t handler;
+    std::string serverIp{"127.0.0.1"};
+    handler.devicePath = &serverIp[0];
+    handler.protocol = X_LINK_TCP_IP;
+    status = XLinkServer(&handler, "xlinkserver", X_LINK_BOOTED, X_LINK_MYRIAD_X);
+    if(X_LINK_SUCCESS != status) {
+        throw std::runtime_error("Couldn't start XLink server");
+    }
+
     // loop through streams
     constexpr static auto NUM_STREAMS = 16;
     std::array<std::thread, NUM_STREAMS> threads;
     for(int i = 0; i < NUM_STREAMS; i++){
-        threads[i] = std::thread([i](){
+        threads[i] = std::thread([i, &handler](){
             std::string name = "test_";
-            auto s = XLinkOpenStream(0, (name + std::to_string(i)).c_str(), 1024);
+            auto s = XLinkOpenStream(&handler, (name + std::to_string(i)).c_str(), 1024);
             assert(s != INVALID_STREAM_ID);
-            auto w = XLinkWriteData(s, (uint8_t*) &s, sizeof(s));
+            auto w = XLinkWriteData(&handler, s, (uint8_t*) &s, sizeof(s));
             assert(w == X_LINK_SUCCESS);
         });
     }

@@ -43,88 +43,15 @@
 #include "XLinkLog.h"
 
 // ------------------------------------
-// Data structures declaration. Begin.
-// ------------------------------------
-
-typedef enum {
-    EVENT_ALLOCATED,
-    EVENT_PENDING,
-    EVENT_BLOCKED,
-    EVENT_READY,
-    EVENT_SERVED,
-} xLinkEventState_t;
-
-typedef struct xLinkEventPriv_t {
-    xLinkEvent_t packet;
-    xLinkEvent_t *retEv;
-    xLinkEventState_t isServed;
-    xLinkEventOrigin_t origin;
-    XLinkTimespec* sendTime;
-    XLink_sem_t* sem;
-    void* data;
-} xLinkEventPriv_t;
-
-typedef struct {
-    XLink_sem_t sem;
-    pthread_t threadId;
-} localSem_t;
-
-typedef struct{
-    xLinkEventPriv_t* end;
-    xLinkEventPriv_t* base;
-
-    xLinkEventPriv_t* curProc;
-    xLinkEventPriv_t* cur;
-    XLINK_ALIGN_TO_BOUNDARY(64) xLinkEventPriv_t q[MAX_EVENTS];
-
-}eventQueueHandler_t;
-/**
- * @brief Scheduler for each device
- */
-typedef struct {
-    xLinkDeviceHandle_t deviceHandle; //will be device handler
-    int schedulerId;
-
-    int queueProcPriority;
-
-    pthread_mutex_t queueMutex;
-
-    XLink_sem_t addEventSem;
-    XLink_sem_t notifyDispatcherSem;
-    volatile uint32_t resetXLink;
-    uint32_t semaphores;
-    pthread_t xLinkThreadId;
-
-    eventQueueHandler_t lQueue; //local queue
-    eventQueueHandler_t rQueue; //remote queue
-    localSem_t eventSemaphores[MAXIMUM_SEMAPHORES];
-
-    uint32_t dispatcherLinkDown;
-    uint32_t dispatcherDeviceFdDown;
-    uint32_t server;
-} xLinkSchedulerState_t;
-
-
-// ------------------------------------
-// Data structures declaration. Begin.
-// ------------------------------------
-
-
-
-// ------------------------------------
 // Global fields declaration. Begin.
 // ------------------------------------
 
 //These will be common for all, Initialized only once
 DispatcherControlFunctions* glControlFunc;
-int numSchedulers;
-xLinkSchedulerState_t schedulerState[MAX_SCHEDULERS];
-sem_t addSchedulerSem;
 
 static pthread_mutex_t unique_id_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t clean_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t reset_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t num_schedulers_mutex = PTHREAD_MUTEX_INITIALIZER;
 // ------------------------------------
 // Global fields declaration. End.
 // ------------------------------------
@@ -152,8 +79,6 @@ static void* eventSchedulerRun(void* ctx);
 static int isEventTypeRequest(xLinkEventPriv_t* event);
 static void postAndMarkEventServed(xLinkEventPriv_t *event);
 static int createUniqueID();
-static int findAvailableScheduler();
-static xLinkSchedulerState_t* findCorrespondingScheduler(void* xLinkFD);
 
 static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr);
 static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr);
@@ -204,16 +129,6 @@ XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc) {
     }
 
     glControlFunc = controlFunc;
-    numSchedulers = 0;
-
-    if (sem_init(&addSchedulerSem, 0, 1)) {
-        mvLog(MVLOG_ERROR, "Can't create semaphore\n");
-        return X_LINK_ERROR;
-    }
-
-    for (int i = 0; i < MAX_SCHEDULERS; i++){
-        schedulerState[i].schedulerId = -1;
-    }
 
     return X_LINK_SUCCESS;
 }
@@ -225,71 +140,58 @@ XLinkError_t DispatcherStartServer(xLinkDesc_t *link) {
     return DispatcherStartImpl(link, true);
 }
 
-typedef struct {
-    int schedulerId;
-    linkId_t linkId;
-} eventSchedulerContext;
-
 XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
 {
     ASSERT_XLINK(link);
     ASSERT_XLINK(link->deviceHandle.xLinkFD != NULL);
 
     pthread_attr_t attr;
+    xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(&link->deviceHandle);
+    ASSERT_XLINK(curr);
     int eventIdx;
-    if (numSchedulers >= MAX_SCHEDULERS)
-    {
-        mvLog(MVLOG_ERROR,"Max number Schedulers reached!\n");
-        return -1;
-    }
-    int idx = findAvailableScheduler();
-    if (idx == -1) {
-        mvLog(MVLOG_ERROR,"Max number Schedulers reached!\n");
-        return -1;
-    }
+    memset(curr, 0, sizeof(*curr));
 
-    memset(&schedulerState[idx], 0, sizeof(xLinkSchedulerState_t));
+    curr->semaphores = 0;
+    curr->queueProcPriority = 0;
 
-    schedulerState[idx].semaphores = 0;
-    schedulerState[idx].queueProcPriority = 0;
+    curr->resetXLink = 0;
+    curr->dispatcherLinkDown = 0;
+    curr->dispatcherDeviceFdDown = 0;
+    curr->server = server;
 
-    schedulerState[idx].resetXLink = 0;
-    schedulerState[idx].dispatcherLinkDown = 0;
-    schedulerState[idx].dispatcherDeviceFdDown = 0;
-    schedulerState[idx].server = server;
+    curr->deviceHandle = link->deviceHandle;
+    curr->link = link;
+    curr->schedulerId = link->id;
 
-    schedulerState[idx].deviceHandle = link->deviceHandle;
-    schedulerState[idx].schedulerId = idx;
+    curr->lQueue.cur = curr->lQueue.q;
+    curr->lQueue.curProc = curr->lQueue.q;
+    curr->lQueue.base = curr->lQueue.q;
+    curr->lQueue.end = &curr->lQueue.q[MAX_EVENTS];
 
-    schedulerState[idx].lQueue.cur = schedulerState[idx].lQueue.q;
-    schedulerState[idx].lQueue.curProc = schedulerState[idx].lQueue.q;
-    schedulerState[idx].lQueue.base = schedulerState[idx].lQueue.q;
-    schedulerState[idx].lQueue.end = &schedulerState[idx].lQueue.q[MAX_EVENTS];
-
-    schedulerState[idx].rQueue.cur = schedulerState[idx].rQueue.q;
-    schedulerState[idx].rQueue.curProc = schedulerState[idx].rQueue.q;
-    schedulerState[idx].rQueue.base = schedulerState[idx].rQueue.q;
-    schedulerState[idx].rQueue.end = &schedulerState[idx].rQueue.q[MAX_EVENTS];
+    curr->rQueue.cur = curr->rQueue.q;
+    curr->rQueue.curProc = curr->rQueue.q;
+    curr->rQueue.base = curr->rQueue.q;
+    curr->rQueue.end = &curr->rQueue.q[MAX_EVENTS];
 
     for (eventIdx = 0 ; eventIdx < MAX_EVENTS; eventIdx++)
     {
-        schedulerState[idx].rQueue.q[eventIdx].isServed = EVENT_SERVED;
-        schedulerState[idx].lQueue.q[eventIdx].isServed = EVENT_SERVED;
+        curr->rQueue.q[eventIdx].isServed = EVENT_SERVED;
+        curr->lQueue.q[eventIdx].isServed = EVENT_SERVED;
     }
 
-    if (XLink_sem_init(&schedulerState[idx].addEventSem, 0, 1)) {
+    if (XLink_sem_init(&curr->addEventSem, 0, 1)) {
         perror("Can't create semaphore\n");
         return -1;
     }
-    if (pthread_mutex_init(&(schedulerState[idx].queueMutex), NULL) != 0) {
+    if (pthread_mutex_init(&(curr->queueMutex), NULL) != 0) {
         perror("pthread_mutex_init error");
         return -1;
     }
-    if (XLink_sem_init(&schedulerState[idx].notifyDispatcherSem, 0, 0)) {
+    if (XLink_sem_init(&curr->notifyDispatcherSem, 0, 0)) {
         perror("Can't create semaphore\n");
     }
-    localSem_t* temp = schedulerState[idx].eventSemaphores;
-    while (temp < schedulerState[idx].eventSemaphores + MAXIMUM_SEMAPHORES) {
+    localSem_t* temp = curr->eventSemaphores;
+    while (temp < curr->eventSemaphores + MAXIMUM_SEMAPHORES) {
         XLink_sem_set_refs(&temp->sem, -1);
         temp++;
     }
@@ -298,44 +200,33 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
         return X_LINK_ERROR;
     }
 
-    while(((sem_wait(&addSchedulerSem) == -1) && errno == EINTR))
-        continue;
-    mvLog(MVLOG_DEBUG,"%s() starting a new thread - schedulerId %d \n", __func__, idx);
+    mvLog(MVLOG_DEBUG,"%s() starting a new thread - schedulerId %d \n", __func__, curr->schedulerId);
 
-    eventSchedulerContext* ctx = malloc(sizeof(eventSchedulerContext));
-    ASSERT_XLINK(ctx);
-    ctx->schedulerId = idx;
-    ctx->linkId = link->id;
-    int sc = pthread_create(&schedulerState[idx].xLinkThreadId,
+    int sc = pthread_create(&curr->xLinkThreadId,
                             &attr,
                             eventSchedulerRun,
-                            (void*)ctx);
+                            (void*)curr);
     if (sc) {
         mvLog(MVLOG_ERROR,"Thread creation failed with error: %d", sc);
         if (pthread_attr_destroy(&attr) != 0) {
             perror("Thread attr destroy failed\n");
         }
-        free(ctx);
         return X_LINK_ERROR;
     }
 
 #ifndef __APPLE__
     char schedulerThreadName[MVLOG_MAXIMUM_THREAD_NAME_SIZE];
-    snprintf(schedulerThreadName, sizeof(schedulerThreadName), "Scheduler%.2dThr", schedulerState[idx].schedulerId);
-    sc = pthread_setname_np(schedulerState[idx].xLinkThreadId, schedulerThreadName);
+    snprintf(schedulerThreadName, sizeof(schedulerThreadName), "Scheduler%.2dThr", curr->schedulerId);
+    sc = pthread_setname_np(curr->xLinkThreadId, schedulerThreadName);
     if (sc != 0) {
         perror("Setting name for indexed scheduler thread failed");
     }
 #endif
 
-    pthread_detach(schedulerState[idx].xLinkThreadId);
-
-    numSchedulers++;
+    pthread_detach(curr->xLinkThreadId);
     if (pthread_attr_destroy(&attr) != 0) {
         mvLog(MVLOG_ERROR,"pthread_attr_destroy error");
     }
-
-    sem_post(&addSchedulerSem);
 
     return 0;
 }
@@ -343,7 +234,7 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
 int DispatcherClean(xLinkDeviceHandle_t *deviceHandle) {
     XLINK_RET_IF(deviceHandle == NULL);
 
-    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+    xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(deviceHandle);
     XLINK_RET_IF(curr == NULL);
 
     return dispatcherClean(curr);
@@ -352,7 +243,7 @@ int DispatcherClean(xLinkDeviceHandle_t *deviceHandle) {
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle){
     XLINK_RET_IF(deviceHandle == NULL);
 
-    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+    xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(deviceHandle);
     XLINK_RET_IF(curr == NULL);
 
     return dispatcherDeviceFdDown(curr);
@@ -360,7 +251,7 @@ int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle){
 
 xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event, XLinkTimespec* outTime)
 {
-    xLinkSchedulerState_t* curr = findCorrespondingScheduler(event->deviceHandle.xLinkFD);
+    xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(&event->deviceHandle);
     XLINK_RET_ERR_IF(curr == NULL, NULL);
 
     if(curr->resetXLink) {
@@ -414,7 +305,7 @@ xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event)
 
 int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int timeoutMs)
 {
-    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+    xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(deviceHandle);
     ASSERT_XLINK(curr != NULL);
 
     XLink_sem_t* id = getSem(pthread_self(), curr);
@@ -465,7 +356,7 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
 
 int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct timespec abstime)
 {
-    xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+    xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(deviceHandle);
     ASSERT_XLINK(curr != NULL);
 
     XLink_sem_t* id = getSem(pthread_self(), curr);
@@ -531,9 +422,9 @@ char* TypeToStr(int type)
     return "";
 }
 
-int DispatcherUnblockEvent(eventId_t id, xLinkEventType_t type, streamId_t stream, void *xlinkFD)
+int DispatcherUnblockEvent(eventId_t id, xLinkEventType_t type, streamId_t stream, xLinkDeviceHandle_t* deviceHandle)
 {
-    xLinkSchedulerState_t* curr = findCorrespondingScheduler(xlinkFD);
+    xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(deviceHandle);
     ASSERT_XLINK(curr != NULL);
 
     mvLog(MVLOG_DEBUG,"unblock\n");
@@ -568,9 +459,9 @@ int DispatcherUnblockEvent(eventId_t id, xLinkEventType_t type, streamId_t strea
     return 0;
 }
 
-int DispatcherServeEvent(eventId_t id, xLinkEventType_t type, streamId_t stream, void *xlinkFD)
+int DispatcherServeEvent(eventId_t id, xLinkEventType_t type, streamId_t stream, xLinkDeviceHandle_t* deviceHandle)
 {
-    xLinkSchedulerState_t* curr = findCorrespondingScheduler(xlinkFD);
+    xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(deviceHandle);
     ASSERT_XLINK(curr != NULL);
 
     xLinkEventPriv_t* event;
@@ -733,14 +624,11 @@ static void* __cdecl eventSchedulerRun(void* ctx)
 static void* eventSchedulerRun(void* ctx)
 #endif
 {
-    eventSchedulerContext context = *((eventSchedulerContext*)ctx);
-    free(ctx);
+    xLinkSchedulerState_t* curr = (xLinkSchedulerState_t*)ctx;
+    XLINK_RET_ERR_IF(curr == NULL, NULL);
 
-    int schedulerId = context.schedulerId;
+    int schedulerId = curr->schedulerId;
     mvLog(MVLOG_DEBUG,"%s() schedulerId %d\n", __func__, schedulerId);
-    XLINK_RET_ERR_IF(schedulerId >= MAX_SCHEDULERS, NULL);
-
-    xLinkSchedulerState_t* curr = &schedulerState[schedulerId];
     pthread_t readerThreadId;        /* Create thread for reader.
                         This thread will notify the dispatcher of any incoming packets*/
     pthread_attr_t attr;
@@ -780,7 +668,7 @@ static void* eventSchedulerRun(void* ctx)
 
     // Notify that the link went down
     void XLinkPlatformLinkDownNotify(linkId_t linkId);
-    XLinkPlatformLinkDownNotify(context.linkId);
+    XLinkPlatformLinkDownNotify(curr->link->id);
 
     sc = pthread_attr_destroy(&attr);
     if (sc) {
@@ -837,39 +725,6 @@ static int createUniqueID()
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&unique_id_mutex) != 0, -1);
 
     return idCopy;
-}
-
-int findAvailableScheduler()
-{
-    int i;
-    for (i = 0; i < MAX_SCHEDULERS; i++)
-        if (schedulerState[i].schedulerId == -1)
-            return i;
-    return -1;
-}
-
-static xLinkSchedulerState_t* findCorrespondingScheduler(void* xLinkFD)
-{
-    int i;
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&num_schedulers_mutex) != 0, NULL);
-    if (xLinkFD == NULL) { //in case of myriad there should be one scheduler
-        if (numSchedulers == 1) {
-            XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, NULL);
-            return &schedulerState[0];
-        } else {
-            XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, NULL);
-            return NULL;
-        }
-    }
-    for (i=0; i < MAX_SCHEDULERS; i++)
-        if (schedulerState[i].schedulerId != -1 &&
-            schedulerState[i].deviceHandle.xLinkFD == xLinkFD) {
-            XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, NULL);
-                return &schedulerState[i];
-        }
-
-    XLINK_RET_ERR_IF(pthread_mutex_unlock(&num_schedulers_mutex) != 0, NULL);
-    return NULL;
 }
 
 static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr){
@@ -1096,8 +951,6 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
         XLink_sem_destroy(&temp->sem);
         temp++;
     }
-    numSchedulers--;
-
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
 
     mvLog(MVLOG_INFO, "Clean Dispatcher Successfully...");
@@ -1155,15 +1008,15 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
         mvLog(MVLOG_INFO, "Failed to clean dispatcher");
     }
 
-    xLinkDesc_t* link = getLink(curr->deviceHandle.xLinkFD);
-    if(link == NULL || XLink_sem_post(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_DEBUG,"can't post dispatcherClosedSem\n");
-    }
-
-    glControlFunc->closeLink(curr->deviceHandle.xLinkFD, 1);
+    glControlFunc->closeLink(&curr->deviceHandle, 1);
 
     // Set dispatcher link state "down", to disallow resetting again
     curr->dispatcherLinkDown = 1;
+
+    xLinkDesc_t* link = curr->link;
+    if(link == NULL || XLink_sem_post(&link->dispatcherClosedSem)) {
+        mvLog(MVLOG_DEBUG,"can't post dispatcherClosedSem\n");
+    }
     mvLog(MVLOG_DEBUG,"Reset Successfully\n");
 
     if(pthread_mutex_unlock(&reset_mutex) != 0) {

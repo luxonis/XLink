@@ -12,7 +12,7 @@ int dispatcherEventSend (xLinkEvent_t*, XLinkTimespec* sendTime);
 int dispatcherEventReceive (xLinkEvent_t*);
 int dispatcherLocalEventGetResponse (xLinkEvent_t*, xLinkEvent_t*, bool);
 int dispatcherRemoteEventGetResponse (xLinkEvent_t*, xLinkEvent_t*, bool);
-void dispatcherCloseLink (void* fd, int fullClose);
+void dispatcherCloseLink (xLinkDeviceHandle_t* deviceHandle, int fullClose);
 void dispatcherCloseDeviceFd (xLinkDeviceHandle_t* deviceHandle);
 
 #endif //_XLINKDISPATCHERIMPL_H

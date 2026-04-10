@@ -37,7 +37,7 @@ int main(int argc, const char** argv){
         return 1;
     }
 
-    auto s = XLinkOpenStream(0, "test", 1024 * 1024);
+    auto s = XLinkOpenStream(&handler, "test", 1024 * 1024);
     assert(s != INVALID_STREAM_ID);
 
     const char *shmName = SHARED_MEMORY_NAME;
@@ -62,17 +62,17 @@ int main(int argc, const char** argv){
     memcpy(addr, message, strlen(message) + 1);
 
     // Send the FD through the XLinkWriteFd function
-    auto w = XLinkWriteFd(s, shmFd); 
+    auto w = XLinkWriteFd(&handler, s, shmFd); 
     assert(w == X_LINK_SUCCESS);
     
     streamPacketDesc_t *packet;
-    auto r = XLinkReadData(s, &packet);
+    auto r = XLinkReadData(&handler, s, &packet);
     assert(r == X_LINK_SUCCESS);
 
     printf("Message from Process B: %s\n", (char *)(packet->data));
 
     // Read the data packet containing the FD
-    r = XLinkReadData(s, &packet);
+    r = XLinkReadData(&handler, s, &packet);
     assert(r == X_LINK_SUCCESS);
 
     void *sharedMemAddr;
@@ -93,7 +93,7 @@ int main(int argc, const char** argv){
     printf("Message from Process B: %s\n", static_cast<char *>(sharedMemAddr));
 
     const char *normalMessage = "Normal message from Process A";
-    w = XLinkWriteData(s, (uint8_t*)normalMessage, strlen(normalMessage) + 1);
+    w = XLinkWriteData(&handler, s, (uint8_t*)normalMessage, strlen(normalMessage) + 1);
     assert(w == X_LINK_SUCCESS);
 
     if (receivedFd >= 0) {

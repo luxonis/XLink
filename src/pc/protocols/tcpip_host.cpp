@@ -158,6 +158,7 @@ static tcpipHostDeviceState_t tcpip_convert_device_state(XLinkDeviceState_t stat
         case XLinkDeviceState_t::X_LINK_BOOTED_NON_EXCLUSIVE: return TCPIP_HOST_STATE_BOOTED_NON_EXCLUSIVE;
         case XLinkDeviceState_t::X_LINK_GATE: return TCPIP_HOST_STATE_GATE;
         case XLinkDeviceState_t::X_LINK_GATE_BOOTED: return TCPIP_HOST_STATE_GATE_BOOTED;
+        case XLinkDeviceState_t::X_LINK_GATE_SETUP: return TCPIP_HOST_STATE_GATE_SETUP;
         case XLinkDeviceState_t::X_LINK_ANY_STATE: return TCPIP_HOST_STATE_INVALID;
     }
     return TCPIP_HOST_STATE_INVALID;
@@ -1095,11 +1096,15 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     const size_t maxlen = 255;
     size_t len = strnlen(devPathWrite, maxlen + 1);
-    if (len == 0 || len >= maxlen + 1)
+    if (len == 0 || len >= maxlen + 1) {
+        tcpip_close_socket(sock);
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
     char *const serv_ip = (char *)malloc(len + 1);
-    if (!serv_ip)
+    if (!serv_ip) {
+        tcpip_close_socket(sock);
         return X_LINK_PLATFORM_ERROR;
+    }
     serv_ip[0] = 0;
     // Parse port if specified, or use default
     int port = TCPIP_LINK_SOCKET_PORT;
@@ -1188,13 +1193,17 @@ int tcpipPlatformClose(void *fdKey)
     TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
 
 #ifdef _WIN32
-    status = shutdown(sock, SD_BOTH);
-    if (status == 0) { status = closesocket(sock); }
+    if(shutdown(sock, SD_BOTH)) {
+        mvLog(MVLOG_DEBUG, "Error shutting down socket: %d", tcpip_errno);
+    }
+    status = closesocket(sock);
 #else
     if(sock != -1)
     {
-        status = shutdown(sock, SHUT_RDWR);
-        if (status == 0) { status = close(sock); }
+        if(shutdown(sock, SHUT_RDWR)) {
+            mvLog(MVLOG_DEBUG, "Error shutting down socket: %d", tcpip_errno);
+        }
+        status = close(sock);
     }
 #endif
 

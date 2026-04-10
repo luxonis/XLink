@@ -71,7 +71,7 @@ int main() {
     for(auto i : randomized){
         threads[i] = std::thread([&, i](){
             std::string name = "test_" + std::to_string(i);
-            auto s = XLinkOpenStream(handler.linkId, name.c_str(), 1024);
+            auto s = XLinkOpenStream(&handler, name.c_str(), 1024);
             if(s == INVALID_STREAM_ID){
                 printf("Open stream failed...\n");
             } else {
@@ -93,7 +93,7 @@ int main() {
             auto s = streams[i];
 
             streamPacketDesc_t* p;
-            XLinkError_t err = XLinkReadData(s, &p);
+            XLinkError_t err = XLinkReadData(&handler, s, &p);
 
             if(err == X_LINK_SUCCESS && p && p->data && s == *((streamId_t*) p->data)) {
                 // OK
@@ -110,7 +110,7 @@ int main() {
         threads[i].join();
     }
 
-    XLinkResetRemote(handler.linkId);
+    XLinkResetRemote(&handler);
 
     if(success){
         printf("Success!\n");

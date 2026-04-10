@@ -40,14 +40,14 @@ int main(int argc, char** argv) {
 	return -1;
     }
 
-    auto s = XLinkOpenStream(handler.linkId, "test_0", sizeof(DUMMY_DATA) * 2);
+    auto s = XLinkOpenStream(&handler, "test_0", sizeof(DUMMY_DATA) * 2);
     if(s == INVALID_STREAM_ID){
 	printf("Open stream failed...\n");
     } else {
 	printf("Open stream OK - id: 0x%08X\n",  s);
     }
 
-    auto w = XLinkWriteData(s, (uint8_t*) &s, sizeof(s));
+    auto w = XLinkWriteData(&handler, s, (uint8_t*) &s, sizeof(s));
     assert(w == X_LINK_SUCCESS);
 
     return 0;

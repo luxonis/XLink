@@ -175,12 +175,15 @@ typedef struct XLinkGlobalHandler_t
     //Deprecated fields. End.
 } XLinkGlobalHandler_t;
 
+typedef struct XLinkSession_t XLinkSession_t;
+
 typedef struct
 {
     char* devicePath;
     char* devicePath2;
     int linkId;
     XLinkProtocol_t protocol;
+    XLinkSession_t* session;
 } XLinkHandler_t;
 
 //Deprecated defines. Begin.

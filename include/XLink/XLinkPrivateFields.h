@@ -21,11 +21,6 @@
 // Global fields declaration. Begin.
 // ------------------------------------
 
-extern XLinkGlobalHandler_t* glHandler; //TODO need to either protect this with semaphor
-                                        //or make profiling data per device
-
-extern xLinkDesc_t availableXLinks[MAX_LINKS];
-extern pthread_mutex_t availableXLinksMutex;
 extern DispatcherControlFunctions controlFunctionTbl;
 extern sem_t  pingSem; //to b used by myriad
 
@@ -33,22 +28,94 @@ extern sem_t  pingSem; //to b used by myriad
 // Global fields declaration. End.
 // ------------------------------------
 
+typedef enum {
+    EVENT_ALLOCATED,
+    EVENT_PENDING,
+    EVENT_BLOCKED,
+    EVENT_READY,
+    EVENT_SERVED,
+} xLinkEventState_t;
+
+typedef struct xLinkEventPriv_t {
+    xLinkEvent_t packet;
+    xLinkEvent_t *retEv;
+    xLinkEventState_t isServed;
+    xLinkEventOrigin_t origin;
+    XLinkTimespec* sendTime;
+    XLink_sem_t* sem;
+    void* data;
+} xLinkEventPriv_t;
+
+typedef struct {
+    XLink_sem_t sem;
+    pthread_t threadId;
+} localSem_t;
+
+typedef struct {
+    xLinkEventPriv_t* end;
+    xLinkEventPriv_t* base;
+    xLinkEventPriv_t* curProc;
+    xLinkEventPriv_t* cur;
+    XLINK_ALIGN_TO_BOUNDARY(64) xLinkEventPriv_t q[MAX_EVENTS];
+} eventQueueHandler_t;
+
+typedef struct xLinkSchedulerState_t {
+    xLinkDeviceHandle_t deviceHandle;
+    xLinkDesc_t* link;
+    int schedulerId;
+    int queueProcPriority;
+    pthread_mutex_t queueMutex;
+    XLink_sem_t addEventSem;
+    XLink_sem_t notifyDispatcherSem;
+    volatile uint32_t resetXLink;
+    uint32_t semaphores;
+    pthread_t xLinkThreadId;
+    eventQueueHandler_t lQueue;
+    eventQueueHandler_t rQueue;
+    localSem_t eventSemaphores[MAXIMUM_SEMAPHORES];
+    uint32_t dispatcherLinkDown;
+    uint32_t dispatcherDeviceFdDown;
+    uint32_t server;
+} xLinkSchedulerState_t;
+
+struct XLinkSession_t {
+    xLinkDesc_t link;
+    xLinkSchedulerState_t scheduler;
+};
 
 // ------------------------------------
 // Helpers declaration. Begin.
 // ------------------------------------
 
-xLinkDesc_t* getLinkById(linkId_t id);
-xLinkDesc_t* getLink(void* fd);
+xLinkDesc_t* getLink(const XLinkHandler_t* handler);
+XLinkSession_t* getSession(const XLinkHandler_t* handler);
+xLinkDesc_t* getLinkFromDeviceHandle(const xLinkDeviceHandle_t* deviceHandle);
+XLinkSession_t* getSessionFromDeviceHandle(const xLinkDeviceHandle_t* deviceHandle);
+xLinkSchedulerState_t* getSchedulerFromDeviceHandle(const xLinkDeviceHandle_t* deviceHandle);
 xLinkState_t getXLinkState(xLinkDesc_t* link);
 
 
 streamId_t getStreamIdByName(xLinkDesc_t* link, const char* name);
 
-streamDesc_t* getStreamById(void* fd, streamId_t id);
+streamDesc_t* getStreamById(xLinkDesc_t* link, streamId_t id);
 streamDesc_t* getStreamByName(xLinkDesc_t* link, const char* name);
 
 void releaseStream(streamDesc_t* stream);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+void XLinkGlobalHandlerAssign(XLinkGlobalHandler_t* globalHandler);
+int XLinkGlobalHandlerIsValid(void);
+void XLinkGlobalHandlerStartProfiling(void);
+void XLinkGlobalHandlerStopProfiling(void);
+void XLinkGlobalHandlerAccumulateRead(uint32_t bytes, float timeSeconds);
+void XLinkGlobalHandlerAccumulateWrite(uint32_t bytes, float timeSeconds);
+int XLinkGlobalHandlerCopyProfilingData(XLinkProf_t* prof);
+void XLinkGlobalHandlerPrintProfilingData(void);
+#ifdef __cplusplus
+}
+#endif
 
 // ------------------------------------
 // Helpers declaration. End.
