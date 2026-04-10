@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
 
             printf("Device name: %s\n", deviceDesc.name);
 
-            XLinkHandler_t handler;
+            XLinkHandler_t handler = {};
             handler.devicePath = deviceDesc.name;
             handler.protocol = deviceDesc.protocol;
             auto connRet = XLinkConnect(&handler);
@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
             for(auto i : randomized){
                 threads[i] = std::thread([&, i](){
                     std::string name = "test_" + std::to_string(i);
-                    auto s = XLinkOpenStream(handler.linkId, name.c_str(), sizeof(DUMMY_DATA) * 2);
+                    auto s = XLinkOpenStream(&handler, name.c_str(), sizeof(DUMMY_DATA) * 2);
                     if(s == INVALID_STREAM_ID){
                         printf("Open stream failed...\n");
                     } else {
@@ -86,20 +86,20 @@ int main(int argc, char** argv) {
             // Optionally, print stream names and ids here
             std::atomic<bool> success{true};
             for(auto i : randomized){
-                threads[i] = std::thread([connection, i, &streams, &success](){
+                threads[i] = std::thread([connection, i, &handler, &streams, &success](){
                     std::string name = "test_" + std::to_string(i);
                     auto s = streams[i];
 
                     // Perform writes first
                     for(int packet = 0; packet < NUM_PACKETS; packet++){
                         // assert(XLinkWriteData(s, (uint8_t*) &s, sizeof(s)) == X_LINK_SUCCESS);
-                        assert(XLinkWriteData(s, DUMMY_DATA, sizeof(DUMMY_DATA)) == X_LINK_SUCCESS);
+                        assert(XLinkWriteData(&handler, s, DUMMY_DATA, sizeof(DUMMY_DATA)) == X_LINK_SUCCESS);
                     }
 
                     for(int packet = 0; packet < NUM_PACKETS; packet++){
                         streamPacketDesc_t p;
                         // XLinkError_t err = XLinkReadData(s, &p);
-                        XLinkError_t err = XLinkReadMoveData(s, &p);
+                        XLinkError_t err = XLinkReadMoveData(&handler, s, &p);
 
 
                         if(err == X_LINK_SUCCESS && p.data && ((s & 0xFFFFFF) == *((streamId_t*) p.data))) {
@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
                         // assert(XLinkReleaseData(s) == X_LINK_SUCCESS);
                     }
 
-                    assert(XLinkCloseStream(streams[i]) == X_LINK_SUCCESS);
+                    assert(XLinkCloseStream(&handler, streams[i]) == X_LINK_SUCCESS);
 
                     if(success) {
                         printf("All %d packets arrived\n", NUM_PACKETS);
@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
                 threads[i].join();
             }
 
-            success = XLinkResetRemote(handler.linkId) == X_LINK_SUCCESS;
+            success = XLinkResetRemote(&handler) == X_LINK_SUCCESS;
 
             if(!success){
                 allSuccess = false;
@@ -179,7 +179,7 @@ int main(int argc, const char** argv){
         throw std::runtime_error("Couldn't initialize XLink");
     }
 
-    XLinkHandler_t handler;
+    XLinkHandler_t handler = {};
     std::string serverIp{"127.0.0.1"};
     if(argc > 1) {
         serverIp = std::string(argv[1]);
@@ -194,20 +194,20 @@ int main(int argc, const char** argv){
     std::array<streamId_t, NUM_STREAMS> streams;
     for(int i = 0; i < NUM_STREAMS; i++){
         std::string name = "test_";
-        auto s = XLinkOpenStream(0, (name + std::to_string(i)).c_str(), sizeof(DUMMY_DATA) * 2);
+        auto s = XLinkOpenStream(&handler, (name + std::to_string(i)).c_str(), sizeof(DUMMY_DATA) * 2);
         assert(s != INVALID_STREAM_ID);
         streams[i] = s;
 
-        threadsWrite[i] = std::thread([i, s](){
+        threadsWrite[i] = std::thread([i, &handler, s](){
             for(int packet = 0; packet < NUM_PACKETS; packet++){
-                auto w = XLinkWriteData2(s, (uint8_t*) &s, sizeof(s/2), ((uint8_t*) &s) + sizeof(s/2), sizeof(s) - sizeof(s/2));
+                auto w = XLinkWriteData2(&handler, s, (uint8_t*) &s, sizeof(s/2), ((uint8_t*) &s) + sizeof(s/2), sizeof(s) - sizeof(s/2));
                 assert(w == X_LINK_SUCCESS);
             }
         });
-        threadsRead[i] = std::thread([i, s](){
+        threadsRead[i] = std::thread([i, &handler, s](){
             for(int packet = 0; packet < NUM_PACKETS; packet++){
                 streamPacketDesc_t p;
-                auto w = XLinkReadMoveData(s, &p);
+                auto w = XLinkReadMoveData(&handler, s, &p);
                 assert(w == X_LINK_SUCCESS);
                 XLinkDeallocateMoveData(p.data, p.length);
             }

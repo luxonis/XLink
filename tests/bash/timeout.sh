@@ -72,10 +72,25 @@ cleanup() {
         kill -s SIGKILL -- "-$commandPid" 2>/dev/null || kill -s SIGKILL "$commandPid" 2>/dev/null || true
     fi
 }
-trap cleanup EXIT TERM INT
+
+teardown() {
+    cleanup
+    if [[ -n "${watchdogPid:-}" ]]; then
+        kill "$watchdogPid" 2>/dev/null || true
+    fi
+}
+
+handleTermination() {
+    trap - EXIT TERM INT
+    teardown
+    exit 124
+}
+trap teardown EXIT
+trap handleTermination TERM INT
 
 # kill -0 pid   Exit code indicates if a signal may be sent to $pid process.
 (
+    trap 'exit 0' TERM INT
     ((t = timeout))
 
     while ((t > 0)); do
@@ -85,12 +100,21 @@ trap cleanup EXIT TERM INT
     done
 
     cleanup
+    exit 124
 ) 2> /dev/null &
 watchdogPid=$!
 
 wait "$commandPid"
 commandStatus=$?
 trap - EXIT TERM INT
+
+if ((commandStatus >= 128)); then
+    wait "$watchdogPid" 2>/dev/null
+    watchdogStatus=$?
+    if [[ "$watchdogStatus" -eq 124 ]]; then
+        exit 124
+    fi
+fi
+
 kill "$watchdogPid" 2>/dev/null || true
-wait "$watchdogPid" 2>/dev/null || true
 exit "$commandStatus"

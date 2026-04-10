@@ -256,7 +256,7 @@ int main(int argc, char** argv) {
                 progress[connection].fetch_add(1);
                 fuzzSleep(rngState, cfg.maxJitterMs);
 
-                XLinkHandler_t handler = {};
+                XLinkHandler_t handler;
                 handler.devicePath = &devicePaths[connection][0];
                 handler.protocol = X_LINK_TCP_IP;
 
@@ -281,7 +281,7 @@ int main(int argc, char** argv) {
                 fuzzSleep(rngState, cfg.maxJitterMs);
 
                 phases[connection].store(static_cast<int>(ClientPhase::OpenStart));
-                auto stream = XLinkOpenStream(handler.linkId, kStreamName, cfg.streamSize);
+                auto stream = XLinkOpenStream(&handler, kStreamName, cfg.streamSize);
                 if (stream == INVALID_STREAM_ID) {
                     phases[connection].store(static_cast<int>(ClientPhase::Failed));
                     fail(success, abortFlag, "open stream failed", connection, round);
@@ -292,7 +292,7 @@ int main(int argc, char** argv) {
                 progress[connection].fetch_add(1);
                 phases[connection].store(static_cast<int>(ClientPhase::WriteStart));
                 for (int writeIdx = 0; writeIdx < cfg.writeRepeatCount; ++writeIdx) {
-                    const auto writeStatus = XLinkWriteData(stream, payload.data(), payload.size());
+                    const auto writeStatus = XLinkWriteData(&handler, stream, payload.data(), payload.size());
                     if (writeStatus != X_LINK_SUCCESS) {
                         phases[connection].store(static_cast<int>(ClientPhase::Failed));
                         fail(success, abortFlag, "write failed", connection, round, writeStatus);
@@ -305,7 +305,7 @@ int main(int argc, char** argv) {
                 fuzzSleep(rngState, cfg.maxJitterMs);
 
                 phases[connection].store(static_cast<int>(ClientPhase::ResetStart));
-                const auto resetStatus = XLinkResetRemote(handler.linkId);
+                const auto resetStatus = XLinkResetRemote(&handler);
                 if (resetStatus != X_LINK_SUCCESS) {
                     phases[connection].store(static_cast<int>(ClientPhase::Failed));
                     fail(success, abortFlag, "reset failed", connection, round, resetStatus);
@@ -413,7 +413,7 @@ int main(int argc, const char** argv) {
 
     serverPhase.store(static_cast<int>(ServerPhase::ServerOnlyOk));
     serverPhase.store(static_cast<int>(ServerPhase::OpenStart));
-    auto stream = XLinkOpenStream(handler.linkId, kStreamName, cfg.streamSize);
+    auto stream = XLinkOpenStream(&handler, kStreamName, cfg.streamSize);
     if (stream == INVALID_STREAM_ID) {
         serverPhase.store(static_cast<int>(ServerPhase::Failed));
         std::printf("Server failed to open stream\n");
@@ -427,7 +427,7 @@ int main(int argc, const char** argv) {
     serverPhase.store(static_cast<int>(ServerPhase::ReadStart));
     for (int readIdx = 0; readIdx < cfg.writeRepeatCount; ++readIdx) {
         streamPacketDesc_t packet = {};
-        const auto readStatus = XLinkReadMoveData(stream, &packet);
+        const auto readStatus = XLinkReadMoveData(&handler, stream, &packet);
         if (readStatus != X_LINK_SUCCESS) {
             // On slower builds, the client reset can legitimately win the race against the
             // server-side read request. Treat that as teardown progress rather than a test failure.

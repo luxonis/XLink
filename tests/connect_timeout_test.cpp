@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
 
             printf("Device name: %s\n", deviceDesc.name);
 
-            XLinkHandler_t handler;
+            XLinkHandler_t handler = {};
             handler.devicePath = deviceDesc.name;
             handler.protocol = deviceDesc.protocol;
             auto connRet = XLinkConnectWithTimeout(&handler, 500);

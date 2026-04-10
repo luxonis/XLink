@@ -194,19 +194,19 @@ int main(int argc, char** argv) {
             return -1;
         }
 
-        const streamId_t stream = XLinkOpenStream(handler.linkId, kStreamName, static_cast<int>(payload.size() * 2));
+        const streamId_t stream = XLinkOpenStream(&handler, kStreamName, static_cast<int>(payload.size() * 2));
         if (stream == INVALID_STREAM_ID) {
             std::printf("FAIL: round=%d open stream failed\n", round);
             return -1;
         }
 
-        const XLinkError_t writeStatus = XLinkWriteData(stream, payload.data(), static_cast<int>(payload.size()));
+        const XLinkError_t writeStatus = XLinkWriteData(&handler, stream, payload.data(), static_cast<int>(payload.size()));
         if (writeStatus != X_LINK_SUCCESS) {
             std::printf("FAIL: round=%d write failed (%s)\n", round, XLinkErrorToStr(writeStatus));
             return -1;
         }
 
-        const XLinkError_t resetStatus = XLinkResetRemote(handler.linkId);
+        const XLinkError_t resetStatus = XLinkResetRemote(&handler);
         if (resetStatus != X_LINK_SUCCESS) {
             std::printf("FAIL: round=%d reset failed (%s)\n", round, XLinkErrorToStr(resetStatus));
             return -1;

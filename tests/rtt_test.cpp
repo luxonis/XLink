@@ -65,13 +65,13 @@ int client() {
 
     printf("Device name: %s\n", deviceDesc.name);
 
-    XLinkHandler_t handler;
+    XLinkHandler_t handler = {};
     handler.devicePath = deviceDesc.name;
     handler.protocol = deviceDesc.protocol;
     XLinkConnect(&handler);
 
     std::this_thread::sleep_for(milliseconds(100));
-    auto s = XLinkOpenStream(handler.linkId, "rtt", 1024);
+    auto s = XLinkOpenStream(&handler, "rtt", 1024);
 
     if(s != INVALID_STREAM_ID) {
         Timestamp ts = {};
@@ -85,13 +85,13 @@ int client() {
             ts.sec = i;
             ts.nsec = 0;
             auto t1 = steady_clock::now();
-            assert(XLinkWriteData(s, reinterpret_cast<uint8_t*>(&ts), sizeof(ts)) == X_LINK_SUCCESS);
+            assert(XLinkWriteData(&handler, s, reinterpret_cast<uint8_t*>(&ts), sizeof(ts)) == X_LINK_SUCCESS);
             auto t1point5 = steady_clock::now();
-            assert(XLinkReadData(s, &packet) == X_LINK_SUCCESS);
+            assert(XLinkReadData(&handler, s, &packet) == X_LINK_SUCCESS);
             auto t2 = steady_clock::now();
             assert(packet->length == sizeof(ts));
             memcpy(&ts, packet->data, packet->length);
-            XLinkReleaseData(s);
+            XLinkReleaseData(&handler, s);
 
             if(PRINT_DEBUG) printf("client received - sec: %lld, nsec: %lld\n", ts.sec, ts.nsec);
             assert((ts.sec + 100)*2 == ts.nsec);
@@ -137,13 +137,13 @@ int server(){
         throw std::runtime_error("Couldn't initialize XLink");
     }
 
-    XLinkHandler_t handler;
+    XLinkHandler_t handler = {};
     std::string serverIp{"127.0.0.1"};
 
     handler.devicePath = &serverIp[0];
     handler.protocol = X_LINK_TCP_IP;
     XLinkServer(&handler, "test", X_LINK_BOOTED, X_LINK_MYRIAD_X);
-    auto s = XLinkOpenStream(handler.linkId, "rtt", 1024);
+    auto s = XLinkOpenStream(&handler, "rtt", 1024);
     std::this_thread::sleep_for(milliseconds(100));
 
     if(s != INVALID_STREAM_ID) {
@@ -151,17 +151,17 @@ int server(){
             Timestamp timestamp = {};
             streamPacketDesc_t* packet;
             auto t1 = steady_clock::now();
-            if(XLinkReadData(s, &packet) != X_LINK_SUCCESS) {
+            if(XLinkReadData(&handler, s, &packet) != X_LINK_SUCCESS) {
                 printf("failed.\n");
                 return -1;
             }
             assert(packet->length == sizeof(timestamp));
             memcpy(&timestamp, packet->data, packet->length);
-            XLinkReleaseData(s);
+            XLinkReleaseData(&handler, s);
             timestamp.nsec = (timestamp.sec + 100LL) * 2LL;
             auto t1point5 = steady_clock::now();
             if(PRINT_DEBUG) printf("server sent - sec: %lld, nsec: %lld\n", timestamp.sec, timestamp.nsec);
-            if(XLinkWriteData(s, reinterpret_cast<uint8_t*>(&timestamp), sizeof(timestamp)) != X_LINK_SUCCESS) {
+            if(XLinkWriteData(&handler, s, reinterpret_cast<uint8_t*>(&timestamp), sizeof(timestamp)) != X_LINK_SUCCESS) {
                 printf("failed.\n");
                 return -1;
             }

@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
 
             printf("Device name: %s\n", deviceDesc.name);
 
-            XLinkHandler_t handler;
+            XLinkHandler_t handler = {};
             handler.devicePath = deviceDesc.name;
             handler.protocol = deviceDesc.protocol;
             auto connRet = XLinkConnect(&handler);
@@ -53,13 +53,13 @@ int main(int argc, char** argv) {
                 allSuccess = false;
                 return;
             }
-            auto s = XLinkOpenStream(handler.linkId, "tmp", 1024);
+            auto s = XLinkOpenStream(&handler, "tmp", 1024);
             if(s == INVALID_STREAM_ID){
                 printf("Open stream failed...\n");
             } else {
                 printf("Open stream OK - conn: %d, name: %s, id: 0x%08X\n", connection, "tmp", s);
                 streamPacketDesc_t* p;
-                XLinkError_t err = XLinkReadData(s, &p);
+                XLinkError_t err = XLinkReadData(&handler, s, &p);
 
 
                 if(err != X_LINK_SUCCESS) {
@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
                 }
             }
 
-            if(XLinkResetRemote(handler.linkId) != X_LINK_SUCCESS) {
+            if(XLinkResetRemote(&handler) != X_LINK_SUCCESS) {
                 allSuccess = false;
             }
 
@@ -119,7 +119,7 @@ int main(int argc, const char** argv){
         shutdownBoolCv.notify_all();
     });
 
-    XLinkHandler_t handler;
+    XLinkHandler_t handler = {};
     std::string serverIp{"127.0.0.1"};
     if(argc > 1) {
         serverIp = std::string(argv[1]);
@@ -128,10 +128,10 @@ int main(int argc, const char** argv){
     handler.protocol = X_LINK_TCP_IP;
     XLinkServer(&handler, "test", X_LINK_BOOTED, X_LINK_MYRIAD_X);
 
-    auto s = XLinkOpenStream(handler.linkId, "tmp", 1024);
+    auto s = XLinkOpenStream(&handler, "tmp", 1024);
     if(s != INVALID_STREAM_ID) {
         uint8_t data[1024] = {};
-        if(XLinkWriteData(s, data, sizeof(data)) != X_LINK_SUCCESS) {
+        if(XLinkWriteData(&handler, s, data, sizeof(data)) != X_LINK_SUCCESS) {
             printf("failed.\n");
             return -1;
         }
