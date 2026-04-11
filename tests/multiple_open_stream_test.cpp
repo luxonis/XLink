@@ -1,156 +1,138 @@
-#include <cstdio>
-#include <string>
-#include <vector>
-#include <array>
-#include <thread>
-#include <stdexcept>
-#include <iostream>
+#include <atomic>
 #include <cassert>
 #include <chrono>
-#include <thread>
-#include <algorithm>
+#include <cstdio>
 #include <cstring>
-#include <atomic>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include "XLink/XLink.h"
-#include "XLink/XLinkPublicDefines.h"
 #include "XLink/XLinkLog.h"
+#include "XLink/XLinkPublicDefines.h"
 
+#include "TestUtils.hpp"
 
-#ifdef XLINK_TEST_CLIENT
-// Client
-int main() {
+namespace {
 
-    XLinkGlobalHandler_t gHandler;
-    XLinkInitialize(&gHandler);
+constexpr int kDefaultNumStreams = 16;
+constexpr int kDefaultPort = 11480;
 
-    deviceDesc_t deviceDesc;
-    /*
-    // Search for booted device
-    deviceDesc_t deviceDesc, inDeviceDesc;
-    inDeviceDesc.protocol = X_LINK_ANY_PROTOCOL;
-    inDeviceDesc.state = X_LINK_BOOTED;
-    if(X_LINK_SUCCESS != XLinkFindFirstSuitableDevice(inDeviceDesc, &deviceDesc)){
-        printf("Didn't find a device\n");
+int runServer(const std::string& endpoint, int numStreams) {
+    std::string serverEndpoint = endpoint;
+    XLinkHandler_t handler = testutils::makeTcpHandler(serverEndpoint);
+    if (XLinkServer(&handler, "multiple_open_stream_test", X_LINK_BOOTED, X_LINK_MYRIAD_X) != X_LINK_SUCCESS) {
+        std::printf("Server failed to start\n");
         return -1;
     }
-    */
 
-    strcpy(deviceDesc.name, "127.0.0.1");
-    deviceDesc.protocol = X_LINK_TCP_IP;
-
-    printf("Device name: %s\n", deviceDesc.name);
-
-    XLinkHandler_t handler = {};
-    handler.devicePath = deviceDesc.name;
-    handler.protocol = deviceDesc.protocol;
-    XLinkConnect(&handler);
-
-    // loop randomly over streams
-    constexpr static auto NUM_STREAMS = 16;
-    std::vector<int> randomized;
-    for(int i = 0; i < NUM_STREAMS; i++){
-        randomized.push_back(i);
-    }
-    std::random_shuffle(std::begin(randomized), std::end(randomized));
-
-    std::thread threads[NUM_STREAMS];
-    streamId_t streams[NUM_STREAMS];
-    for(auto i : randomized){
-        threads[i] = std::thread([&, i](){
-            std::string name = "test_" + std::to_string(i);
-            auto s = XLinkOpenStream(&handler, name.c_str(), 1024);
-            if(s == INVALID_STREAM_ID){
-                printf("Open stream failed...\n");
-            } else {
-                printf("Open stream OK - name %s, id: 0x%08X\n", name.c_str(), s);
-            }
-            streams[i] = s;
-        });
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    for(auto i : randomized){
-        threads[i].join();
-    }
-
-    // Optionally, print stream names and ids here
-    std::atomic<bool> success{true};
-    for(auto i : randomized){
-        threads[i] = std::thread([i, &handler, &streams, &success](){
-            std::string name = "test_" + std::to_string(i);
-            auto s = streams[i];
-
-            streamPacketDesc_t* p;
-            XLinkError_t err = XLinkReadData(&handler, s, &p);
-
-            if(err == X_LINK_SUCCESS && p && p->data && s == *((streamId_t*) p->data)) {
-                // OK
-            } else {
-                streamId_t id;
-                // memcpy(&id, p->data, sizeof(id));
-                printf("DESYNC error - name %s, id: 0x%08X, response id: 0x%08X\n", name.c_str(), s, id);
-                success = false;
-            }
-
+    std::vector<std::thread> threads;
+    threads.reserve(numStreams);
+    for (int i = 0; i < numStreams; ++i) {
+        threads.emplace_back([&, i]() {
+            const std::string name = "test_" + std::to_string(i);
+            const auto stream = XLinkOpenStream(&handler, name.c_str(), 1024);
+            assert(stream != INVALID_STREAM_ID);
+            const uint32_t payload = static_cast<uint32_t>(i);
+            const auto status = XLinkWriteData2(&handler, stream,
+                reinterpret_cast<const uint8_t*>(&payload), sizeof(payload) / 2,
+                reinterpret_cast<const uint8_t*>(&payload) + sizeof(payload) / 2, sizeof(payload) - sizeof(payload) / 2);
+            assert(status == X_LINK_SUCCESS);
         });
     }
-    for(auto i : randomized){
-        threads[i].join();
-    }
 
-    XLinkResetRemote(&handler);
-
-    if(success){
-        printf("Success!\n");
-        return 0;
-    } else {
-        printf("Error!\n");
-        return -1;
+    for (auto& thread : threads) {
+        thread.join();
     }
+    return 0;
 }
 
-#endif
-
-
-#ifdef XLINK_TEST_SERVER
-// Server
-XLinkGlobalHandler_t xlinkGlobalHandler = {};
-int main(int argc, const char** argv){
-
-    xlinkGlobalHandler.protocol = X_LINK_TCP_IP;
-
-    // Initialize and suppress XLink logs
-    mvLogDefaultLevelSet(MVLOG_ERROR);
-    auto status = XLinkInitialize(&xlinkGlobalHandler);
-    if(X_LINK_SUCCESS != status) {
-        throw std::runtime_error("Couldn't initialize XLink");
+int runClient(const std::string& endpoint, int numStreams) {
+    std::string clientEndpoint = endpoint;
+    XLinkHandler_t handler = testutils::makeTcpHandler(clientEndpoint);
+    if (!testutils::connectWithRetry(&handler, 5000)) {
+        std::printf("Client failed to connect\n");
+        return -1;
     }
 
-    XLinkHandler_t handler = {};
-    std::string serverIp{"127.0.0.1"};
-    handler.devicePath = &serverIp[0];
-    handler.protocol = X_LINK_TCP_IP;
-    XLinkServer(&handler, "test", X_LINK_BOOTED, X_LINK_MYRIAD_X);
+    const auto order = testutils::shuffledIndices(numStreams, 0x1234u);
+    std::vector<streamId_t> streams(numStreams, INVALID_STREAM_ID);
+    std::vector<std::thread> threads;
+    threads.reserve(numStreams);
 
-    // loop through streams
-    constexpr static auto NUM_STREAMS = 16;
-    std::array<std::thread, NUM_STREAMS> threads;
-    for(int i = 0; i < NUM_STREAMS; i++){
-        threads[i] = std::thread([i, &handler](){
-            std::string name = "test_";
-            auto s = XLinkOpenStream(&handler, (name + std::to_string(i)).c_str(), 1024);
-            assert(s != INVALID_STREAM_ID);
-            auto w = XLinkWriteData2(&handler, s, (uint8_t*) &s, sizeof(s/2), ((uint8_t*) &s) + sizeof(s/2), sizeof(s) - sizeof(s/2));
-            assert(w == X_LINK_SUCCESS);
+    for (int index : order) {
+        threads.emplace_back([&, index]() {
+            const std::string name = "test_" + std::to_string(index);
+            streams[index] = XLinkOpenStream(&handler, name.c_str(), 1024);
         });
     }
-    for(auto& thread : threads){
+    for (auto& thread : threads) {
         thread.join();
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    std::cout << "All threads joined\n";
+    for (const auto stream : streams) {
+        if (stream == INVALID_STREAM_ID) {
+            std::printf("Client failed to open one or more streams\n");
+            return -1;
+        }
+    }
 
-    return 0;
+    threads.clear();
+    std::atomic<bool> success{true};
+    for (int index : order) {
+        threads.emplace_back([&, index]() {
+            streamPacketDesc_t* packet = nullptr;
+            const auto stream = streams[index];
+            const auto status = XLinkReadData(&handler, stream, &packet);
+            if (status != X_LINK_SUCCESS || packet == nullptr || packet->length != sizeof(uint32_t)) {
+                success.store(false);
+                return;
+            }
+
+            uint32_t echoed = UINT32_MAX;
+            std::memcpy(&echoed, packet->data, sizeof(echoed));
+            if (echoed != static_cast<uint32_t>(index)) {
+                success.store(false);
+            }
+            XLinkReleaseData(&handler, stream);
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    if (XLinkResetRemote(&handler) != X_LINK_SUCCESS) {
+        return -1;
+    }
+    return success.load() ? 0 : -1;
 }
-#endif
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    const int numStreams = testutils::parseIntArg(argc, argv, 1, kDefaultNumStreams);
+    const int port = testutils::parseIntArg(argc, argv, 2, kDefaultPort);
+
+    XLinkGlobalHandler_t globalHandler = {};
+    mvLogDefaultLevelSet(MVLOG_ERROR);
+    if (XLinkInitialize(&globalHandler) != X_LINK_SUCCESS) {
+        std::printf("Failed to initialize XLink\n");
+        return -1;
+    }
+
+    const std::string endpoint = testutils::makeEndpoint(port);
+    int serverResult = -1;
+    int clientResult = -1;
+
+    std::thread server([&]() { serverResult = runServer(endpoint, numStreams); });
+    testutils::sleepBriefly();
+    std::thread client([&]() { clientResult = runClient(endpoint, numStreams); });
+
+    client.join();
+    server.join();
+
+    if (serverResult != 0 || clientResult != 0) {
+        std::printf("serverResult=%d clientResult=%d\n", serverResult, clientResult);
+    }
+    return (serverResult == 0 && clientResult == 0) ? 0 : -1;
+}

@@ -1,93 +1,70 @@
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <string>
+#include <thread>
 #include <vector>
-#include <array>
-#include <thread>
-#include <stdexcept>
-#include <iostream>
-#include <cassert>
-#include <chrono>
-#include <thread>
-#include <algorithm>
-#include <cstring>
-#include <atomic>
-#include <condition_variable>
 
 #include "XLink/XLink.h"
-#include "XLink/XLinkPublicDefines.h"
 #include "XLink/XLinkLog.h"
+#include "XLink/XLinkPublicDefines.h"
 
-#ifdef XLINK_TEST_CLIENT
+#include "TestUtils.hpp"
 
-// Client
+extern "C" int tcpipPlatformServer(const char* devPathRead, const char* devPathWrite, void** fd);
+
+namespace {
+
+constexpr int kDefaultNumConnections = 4;
+constexpr int kDefaultBasePort = 11880;
+constexpr int kDefaultConnectTimeoutMs = 500;
+constexpr int kDefaultServerHoldMs = 5000;
+
+}  // namespace
+
 int main(int argc, char** argv) {
+    const int numConnections = testutils::parseIntArg(argc, argv, 1, kDefaultNumConnections);
+    const int basePort = testutils::parseIntArg(argc, argv, 2, kDefaultBasePort);
+    const int connectTimeoutMs = testutils::parseIntArg(argc, argv, 3, kDefaultConnectTimeoutMs);
+    const int serverHoldMs = testutils::parseIntArg(argc, argv, 4, kDefaultServerHoldMs);
 
-    XLinkGlobalHandler_t gHandler;
-    XLinkInitialize(&gHandler);
-
-    int numConnections = 1;
-    std::string localhost = "127.0.0.1";
-    char* tmp[] = {nullptr, &localhost[0], nullptr};
-    if(argc > 1) {
-        numConnections = argc - 1;
-    } else {
-        argv = tmp;
-    }
-    std::vector<std::thread> connections;
-    std::atomic<bool> allSuccess{true};
-    for(int connection = 0; connection < numConnections; connection++) {
-        connections.push_back(std::thread([connection, &allSuccess, argv](){
-
-            deviceDesc_t deviceDesc;
-            strcpy(deviceDesc.name, argv[connection+1]);
-            deviceDesc.protocol = X_LINK_TCP_IP;
-
-            printf("Device name: %s\n", deviceDesc.name);
-
-            XLinkHandler_t handler = {};
-            handler.devicePath = deviceDesc.name;
-            handler.protocol = deviceDesc.protocol;
-            auto connRet = XLinkConnectWithTimeout(&handler, 500);
-            assert(connRet == X_LINK_TIMEOUT);
-        }));
-
-    }
-
-    for(auto& conn : connections){
-        conn.join();
-    }
-
-    if(allSuccess) {
-        std::cout << "Success!\n";
-        return 0;
-    } else {
-        std::cout << "RIP!\n";
+    XLinkGlobalHandler_t globalHandler = {};
+    mvLogDefaultLevelSet(MVLOG_ERROR);
+    if (XLinkInitialize(&globalHandler) != X_LINK_SUCCESS) {
         return -1;
     }
-}
 
-#endif
+    std::vector<std::thread> serverThreads;
+    std::vector<std::thread> clientThreads;
+    std::atomic<bool> success{true};
+    serverThreads.reserve(numConnections);
+    clientThreads.reserve(numConnections);
 
-
-#ifdef XLINK_TEST_SERVER
-
-
-extern "C" int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd);
-// Client
-int main(int argc, char** argv) {
-
-    std::string serverIp{"127.0.0.1"};
-    if(argc > 1) {
-        serverIp = std::string(argv[1]);
+    for (int i = 0; i < numConnections; ++i) {
+        const std::string endpoint = testutils::makeEndpoint(basePort + i);
+        serverThreads.emplace_back([endpoint, serverHoldMs]() {
+            void* fd = nullptr;
+            tcpipPlatformServer(endpoint.c_str(), endpoint.c_str(), &fd);
+            std::this_thread::sleep_for(std::chrono::milliseconds(serverHoldMs));
+        });
     }
 
-    // Call server open internal function, but don't communicate over it
-    void* fd;
-    tcpipPlatformServer(serverIp.c_str(), serverIp.c_str(), &fd);
+    testutils::sleepBriefly();
+    for (int i = 0; i < numConnections; ++i) {
+        clientThreads.emplace_back([&, i]() {
+            std::string endpoint = testutils::makeEndpoint(basePort + i);
+            XLinkHandler_t handler = testutils::makeTcpHandler(endpoint);
+            if (XLinkConnectWithTimeout(&handler, connectTimeoutMs) != X_LINK_TIMEOUT) {
+                success.store(false);
+            }
+        });
+    }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-
-    return 0;
+    for (auto& thread : clientThreads) {
+        thread.join();
+    }
+    for (auto& thread : serverThreads) {
+        thread.join();
+    }
+    return success.load() ? 0 : -1;
 }
-
-#endif

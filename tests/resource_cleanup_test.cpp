@@ -1,16 +1,22 @@
 #include <atomic>
-#include <cerrno>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <dirent.h>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <psapi.h>
+#pragma comment(lib, "Psapi.lib")
+#else
+#include <dirent.h>
+#endif
 
 #ifdef __APPLE__
 #include <mach/mach.h>
@@ -20,25 +26,33 @@
 #include "XLink/XLinkLog.h"
 #include "XLink/XLinkPublicDefines.h"
 
+#include "TestUtils.hpp"
+
 namespace {
 
 constexpr std::size_t kPayloadSize = 4096;
 constexpr int kConnectRetryMs = 5;
+constexpr int kDefaultRounds = 500;
 constexpr int kDefaultConnectTimeoutMs = 5000;
-constexpr int kDefaultWarmupRounds = 200;
-constexpr int kDefaultSampleEveryRounds = 100;
+constexpr int kDefaultWarmupRounds = 50;
+constexpr int kDefaultSampleEveryRounds = 50;
 constexpr std::size_t kDefaultRssGrowthLimitKiB = 24 * 1024;
 constexpr int kDefaultFdGrowthLimit = 16;
 constexpr int kDefaultServerGraceMs = 250;
+constexpr int kDefaultTimeoutMs = 30000;
+constexpr int kDefaultPort = 11780;
 constexpr char kStreamName[] = "resource_cleanup";
 
 struct LeakTestConfig {
+    int rounds = kDefaultRounds;
     int connectTimeoutMs = kDefaultConnectTimeoutMs;
     int warmupRounds = kDefaultWarmupRounds;
     int sampleEveryRounds = kDefaultSampleEveryRounds;
     std::size_t rssGrowthLimitKiB = kDefaultRssGrowthLimitKiB;
     int fdGrowthLimit = kDefaultFdGrowthLimit;
     int serverGraceMs = kDefaultServerGraceMs;
+    int timeoutMs = kDefaultTimeoutMs;
+    int port = kDefaultPort;
 };
 
 struct ResourceSnapshot {
@@ -46,30 +60,30 @@ struct ResourceSnapshot {
     int openFds = -1;
 };
 
-int readEnvInt(const char* name, int fallback) {
-    const char* value = std::getenv(name);
-    if (value == nullptr || value[0] == '\0') {
-        return fallback;
+std::mutex* gLinkDownMutex = nullptr;
+std::condition_variable* gLinkDownCv = nullptr;
+bool* gLinkDown = nullptr;
+
+void onLinkDown(linkId_t) {
+    if (gLinkDownMutex == nullptr || gLinkDownCv == nullptr || gLinkDown == nullptr) {
+        return;
     }
 
-    const int parsed = std::atoi(value);
-    return parsed > 0 ? parsed : fallback;
-}
-
-LeakTestConfig readConfig() {
-    LeakTestConfig cfg;
-    cfg.connectTimeoutMs = readEnvInt("XLINK_LEAK_TEST_CONNECT_TIMEOUT_MS", kDefaultConnectTimeoutMs);
-    cfg.warmupRounds = readEnvInt("XLINK_LEAK_TEST_WARMUP_ROUNDS", kDefaultWarmupRounds);
-    cfg.sampleEveryRounds = readEnvInt("XLINK_LEAK_TEST_SAMPLE_EVERY_ROUNDS", kDefaultSampleEveryRounds);
-    cfg.rssGrowthLimitKiB = static_cast<std::size_t>(readEnvInt("XLINK_LEAK_TEST_RSS_GROWTH_LIMIT_KIB",
-        static_cast<int>(kDefaultRssGrowthLimitKiB)));
-    cfg.fdGrowthLimit = readEnvInt("XLINK_LEAK_TEST_FD_GROWTH_LIMIT", kDefaultFdGrowthLimit);
-    cfg.serverGraceMs = readEnvInt("XLINK_LEAK_TEST_SERVER_GRACE_MS", kDefaultServerGraceMs);
-    return cfg;
+    {
+        std::lock_guard<std::mutex> lock(*gLinkDownMutex);
+        *gLinkDown = true;
+    }
+    gLinkDownCv->notify_all();
 }
 
 std::size_t getCurrentRssKiB() {
-#ifdef __APPLE__
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS_EX info = {};
+    if (!GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&info), sizeof(info))) {
+        return 0;
+    }
+    return static_cast<std::size_t>(info.WorkingSetSize / 1024);
+#elif defined(__APPLE__)
     mach_task_basic_info_data_t info = {};
     mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
     if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS) {
@@ -97,12 +111,19 @@ std::size_t getCurrentRssKiB() {
 }
 
 int getOpenFdCount() {
-#ifdef __APPLE__
+#ifdef _WIN32
+    DWORD handleCount = 0;
+    if (!GetProcessHandleCount(GetCurrentProcess(), &handleCount)) {
+        return -1;
+    }
+    return static_cast<int>(handleCount);
+#elif defined(__APPLE__)
     const char* fdDir = "/dev/fd";
 #else
     const char* fdDir = "/proc/self/fd";
 #endif
 
+#ifndef _WIN32
     DIR* dir = opendir(fdDir);
     if (dir == nullptr) {
         return -1;
@@ -113,8 +134,8 @@ int getOpenFdCount() {
         ++count;
     }
     closedir(dir);
-
     return count >= 2 ? count - 2 : count;
+#endif
 }
 
 ResourceSnapshot captureResources() {
@@ -139,45 +160,90 @@ void printSnapshot(const char* label, int round, const ResourceSnapshot& snapsho
         label, round, snapshot.rssKiB, snapshot.openFds, rssDeltaKiB, fdDelta);
 }
 
+LeakTestConfig parseConfig(int argc, char** argv) {
+    LeakTestConfig cfg;
+    cfg.rounds = testutils::parseIntArg(argc, argv, 1, kDefaultRounds);
+    cfg.port = testutils::parseIntArg(argc, argv, 2, kDefaultPort);
+    cfg.connectTimeoutMs = testutils::parseIntArg(argc, argv, 3, kDefaultConnectTimeoutMs);
+    cfg.warmupRounds = testutils::parseIntArg(argc, argv, 4, kDefaultWarmupRounds);
+    cfg.sampleEveryRounds = testutils::parseIntArg(argc, argv, 5, kDefaultSampleEveryRounds);
+    cfg.rssGrowthLimitKiB = testutils::parseSizeArg(argc, argv, 6, kDefaultRssGrowthLimitKiB);
+    cfg.fdGrowthLimit = testutils::parseIntArg(argc, argv, 7, kDefaultFdGrowthLimit);
+    cfg.serverGraceMs = testutils::parseIntArg(argc, argv, 8, kDefaultServerGraceMs);
+    cfg.timeoutMs = testutils::parseIntArg(argc, argv, 9, kDefaultTimeoutMs);
+    return cfg;
+}
+
 }  // namespace
 
-#ifdef XLINK_TEST_CLIENT
-
 int main(int argc, char** argv) {
-    const LeakTestConfig cfg = readConfig();
+    const LeakTestConfig cfg = parseConfig(argc, argv);
 
-    if (argc != 3) {
-        std::printf("Usage: %s [num_rounds] [ip:port]\n", argv[0]);
+    XLinkGlobalHandler_t globalHandler = {};
+    mvLogDefaultLevelSet(MVLOG_ERROR);
+    if (XLinkInitialize(&globalHandler) != X_LINK_SUCCESS) {
         return -1;
     }
 
-    const int numRounds = std::atoi(argv[1]);
-    if (numRounds <= 0) {
-        std::printf("Invalid num_rounds: %s\n", argv[1]);
-        return -1;
-    }
+    std::atomic<bool> done{false};
+    std::mutex doneMutex;
+    std::condition_variable doneCv;
+    std::thread watchdog([&]() {
+        std::unique_lock<std::mutex> lock(doneMutex);
+        const bool completed = doneCv.wait_for(lock, std::chrono::milliseconds(cfg.timeoutMs), [&]() {
+            return done.load();
+        });
+        if (!completed) {
+            std::_Exit(2);
+        }
+    });
 
-    XLinkGlobalHandler_t gHandler = {};
-    if (XLinkInitialize(&gHandler) != X_LINK_SUCCESS) {
-        std::printf("Failed to initialize XLink\n");
-        return -1;
-    }
-
-    std::string devicePath{argv[2]};
     std::vector<std::uint8_t> payload(kPayloadSize);
     for (std::size_t i = 0; i < payload.size(); ++i) {
         payload[i] = static_cast<std::uint8_t>(i & 0xFF);
     }
 
-    const int baselineRound = numRounds > cfg.warmupRounds ? cfg.warmupRounds : 1;
+    const std::string endpoint = testutils::makeEndpoint(cfg.port);
+
+    const int baselineRound = cfg.rounds > cfg.warmupRounds ? cfg.warmupRounds : 1;
     ResourceSnapshot baseline = {};
     ResourceSnapshot maxObserved = {};
     bool baselineSet = false;
 
-    for (int round = 0; round < numRounds; ++round) {
-        XLinkHandler_t handler = {};
-        handler.devicePath = &devicePath[0];
-        handler.protocol = X_LINK_TCP_IP;
+    for (int round = 0; round < cfg.rounds; ++round) {
+        std::mutex linkDownMutex;
+        std::condition_variable linkDownCv;
+        bool linkDown = false;
+        gLinkDownMutex = &linkDownMutex;
+        gLinkDownCv = &linkDownCv;
+        gLinkDown = &linkDown;
+        const int callbackId = XLinkAddLinkDownCb(onLinkDown);
+        if (callbackId < 0) {
+            done.store(true);
+            doneCv.notify_one();
+            watchdog.join();
+            return -1;
+        }
+
+        int serverResult = -1;
+        std::thread server([&]() {
+            std::string serverEndpoint = endpoint;
+            XLinkHandler_t handler = testutils::makeTcpHandler(serverEndpoint);
+            if (XLinkServerOnly(&handler) != X_LINK_SUCCESS) {
+                serverResult = -1;
+                return;
+            }
+
+            std::unique_lock<std::mutex> lock(linkDownMutex);
+            if (!linkDown) {
+                linkDownCv.wait_for(lock, std::chrono::milliseconds(cfg.serverGraceMs), [&]() { return linkDown; });
+            }
+            serverResult = 0;
+        });
+
+        testutils::sleepBriefly();
+        std::string clientEndpoint = endpoint;
+        XLinkHandler_t handler = testutils::makeTcpHandler(clientEndpoint);
 
         XLinkError_t connectStatus = X_LINK_ERROR;
         const auto connectDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(cfg.connectTimeoutMs);
@@ -190,31 +256,57 @@ int main(int argc, char** argv) {
         } while (std::chrono::steady_clock::now() < connectDeadline);
 
         if (connectStatus != X_LINK_SUCCESS) {
-            std::printf("FAIL: round=%d connect failed (%s)\n", round, XLinkErrorToStr(connectStatus));
+            server.join();
+            XLinkRemoveLinkDownCb(callbackId);
+            done.store(true);
+            doneCv.notify_one();
+            watchdog.join();
             return -1;
         }
 
-        const streamId_t stream = XLinkOpenStream(&handler, kStreamName, static_cast<int>(payload.size() * 2));
+        const auto stream = XLinkOpenStream(&handler, kStreamName, static_cast<int>(payload.size() * 2));
         if (stream == INVALID_STREAM_ID) {
-            std::printf("FAIL: round=%d open stream failed\n", round);
+            server.join();
+            XLinkRemoveLinkDownCb(callbackId);
+            done.store(true);
+            doneCv.notify_one();
+            watchdog.join();
             return -1;
         }
 
-        const XLinkError_t writeStatus = XLinkWriteData(&handler, stream, payload.data(), static_cast<int>(payload.size()));
-        if (writeStatus != X_LINK_SUCCESS) {
-            std::printf("FAIL: round=%d write failed (%s)\n", round, XLinkErrorToStr(writeStatus));
+        if (XLinkWriteData(&handler, stream, payload.data(), static_cast<int>(payload.size())) != X_LINK_SUCCESS) {
+            server.join();
+            XLinkRemoveLinkDownCb(callbackId);
+            done.store(true);
+            doneCv.notify_one();
+            watchdog.join();
             return -1;
         }
 
-        const XLinkError_t resetStatus = XLinkResetRemote(&handler);
-        if (resetStatus != X_LINK_SUCCESS) {
-            std::printf("FAIL: round=%d reset failed (%s)\n", round, XLinkErrorToStr(resetStatus));
+        if (XLinkResetRemote(&handler) != X_LINK_SUCCESS) {
+            server.join();
+            XLinkRemoveLinkDownCb(callbackId);
+            done.store(true);
+            doneCv.notify_one();
+            watchdog.join();
+            return -1;
+        }
+
+        server.join();
+        XLinkRemoveLinkDownCb(callbackId);
+        gLinkDownMutex = nullptr;
+        gLinkDownCv = nullptr;
+        gLinkDown = nullptr;
+        if (serverResult != 0) {
+            done.store(true);
+            doneCv.notify_one();
+            watchdog.join();
             return -1;
         }
 
         const bool shouldSample = (round + 1) == baselineRound ||
             ((round + 1) > baselineRound && ((round + 1 - baselineRound) % cfg.sampleEveryRounds == 0)) ||
-            round + 1 == numRounds;
+            round + 1 == cfg.rounds;
         if (!shouldSample) {
             continue;
         }
@@ -240,7 +332,6 @@ int main(int argc, char** argv) {
     if (!baselineSet) {
         baseline = captureResources();
         maxObserved = baseline;
-        baselineSet = true;
     }
 
     const long long rssGrowthKiB = static_cast<long long>(maxObserved.rssKiB) -
@@ -249,101 +340,22 @@ int main(int argc, char** argv) {
         (maxObserved.openFds - baseline.openFds) : 0;
 
     printSnapshot("SUMMARY_BASELINE", baselineRound, baseline);
-    printSnapshot("SUMMARY_MAX", numRounds, maxObserved, &baseline);
+    printSnapshot("SUMMARY_MAX", cfg.rounds, maxObserved, &baseline);
 
     if (rssGrowthKiB > static_cast<long long>(cfg.rssGrowthLimitKiB)) {
-        std::printf("FAIL: rss growth exceeded limit: growth_kib=%lld limit_kib=%zu\n",
-            rssGrowthKiB, cfg.rssGrowthLimitKiB);
+        done.store(true);
+        doneCv.notify_one();
+        watchdog.join();
         return -1;
     }
-
     if (fdGrowth > cfg.fdGrowthLimit) {
-        std::printf("FAIL: open fd growth exceeded limit: growth=%d limit=%d\n",
-            fdGrowth, cfg.fdGrowthLimit);
+        done.store(true);
+        doneCv.notify_one();
+        watchdog.join();
         return -1;
     }
-
-    std::printf("Success! rounds=%d rss_growth_kib=%lld fd_growth=%d\n",
-        numRounds, rssGrowthKiB, fdGrowth);
+    done.store(true);
+    doneCv.notify_one();
+    watchdog.join();
     return 0;
 }
-
-#endif
-
-#ifdef XLINK_TEST_SERVER
-
-namespace {
-
-struct LinkDownState {
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool linkDown = false;
-};
-
-LinkDownState& getLinkDownState() {
-    static auto* state = new LinkDownState();
-    return *state;
-}
-
-}  // namespace
-
-int main(int argc, const char** argv) {
-    if (argc != 2) {
-        std::printf("Usage: %s [ip:port]\n", argv[0]);
-        return -1;
-    }
-
-    const LeakTestConfig cfg = readConfig();
-
-    XLinkGlobalHandler_t gHandler = {};
-    gHandler.protocol = X_LINK_TCP_IP;
-    mvLogDefaultLevelSet(MVLOG_ERROR);
-    if (XLinkInitialize(&gHandler) != X_LINK_SUCCESS) {
-        std::printf("Failed to initialize XLink\n");
-        return -1;
-    }
-
-    auto& linkDownState = getLinkDownState();
-    {
-        std::lock_guard<std::mutex> lock(linkDownState.mutex);
-        linkDownState.linkDown = false;
-    }
-
-    const int cbId = XLinkAddLinkDownCb([](linkId_t) {
-        auto& state = getLinkDownState();
-        {
-            std::lock_guard<std::mutex> lock(state.mutex);
-            state.linkDown = true;
-        }
-        state.cv.notify_all();
-    });
-    if (cbId < 0) {
-        std::printf("Failed to register link-down callback\n");
-        return -1;
-    }
-
-    XLinkHandler_t handler = {};
-    std::string serverIp{argv[1]};
-    handler.devicePath = &serverIp[0];
-    handler.protocol = X_LINK_TCP_IP;
-
-    if (XLinkServerOnly(&handler) != X_LINK_SUCCESS) {
-        std::printf("Server failed to start\n");
-        return -1;
-    }
-
-    {
-        std::unique_lock<std::mutex> lock(linkDownState.mutex);
-        if (!linkDownState.linkDown) {
-            linkDownState.cv.wait_for(lock, std::chrono::milliseconds(cfg.serverGraceMs), []() {
-                return getLinkDownState().linkDown;
-            });
-        }
-    }
-
-    XLinkRemoveLinkDownCb(cbId);
-
-    return 0;
-}
-
-#endif
