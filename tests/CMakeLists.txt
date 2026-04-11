@@ -1,82 +1,73 @@
-# Add CMake testing infrastructure
 include(CTest)
 enable_testing()
 
-# Search for Bash executable
-find_program(BASH_EXECUTABLE name "bash"
-    HINTS "C:/Program Files/Git/bin" # Windows hint
-)
+function(xlink_add_test test_name test_src)
+    get_filename_component(test_target ${test_src} NAME_WE)
 
-# Helper 'xlink_add_test'
-macro(xlink_add_test test_name test_src)
-    add_executable(${test_name} ${test_src})
-    target_link_libraries(${test_name} ${TARGET_NAME})
-    set_property(TARGET ${test_name} PROPERTY CXX_STANDARD 11)
-    set_property(TARGET ${test_name} PROPERTY CXX_STANDARD_REQUIRED ON)
-    set_property(TARGET ${test_name} PROPERTY CXX_EXTENSIONS OFF)
+    if(NOT TARGET ${test_target})
+        add_executable(${test_target} ${test_src})
+        target_link_libraries(${test_target} ${TARGET_NAME})
+        target_include_directories(${test_target} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+        set_property(TARGET ${test_target} PROPERTY CXX_STANDARD 11)
+        set_property(TARGET ${test_target} PROPERTY CXX_STANDARD_REQUIRED ON)
+        set_property(TARGET ${test_target} PROPERTY CXX_EXTENSIONS OFF)
 
-    # Copy over required DLLs (Windows)
-    if(WIN32)
-        # Copy dlls to target directory - Windows only
-        # TARGET_RUNTIME_DLLS generator expression available since CMake 3.21
-        if(CMAKE_VERSION VERSION_LESS "3.21")
-            message(WARNING "Automatic DLL copying not available")
-        else()
-            set(depthai_dll_libraries "$<TARGET_RUNTIME_DLLS:${test_name}>")
-            add_custom_command(TARGET ${test_name} POST_BUILD COMMAND
-                "$<$<BOOL:${depthai_dll_libraries}>:${CMAKE_COMMAND};-E;copy_if_different;${depthai_dll_libraries};$<TARGET_FILE_DIR:${test_name}>>"
-                COMMAND_EXPAND_LISTS
-                VERBATIM
-            )
+        if(WIN32)
+            if(CMAKE_VERSION VERSION_LESS "3.21")
+                message(WARNING "Automatic DLL copying not available")
+            else()
+                set(depthai_dll_libraries "$<TARGET_RUNTIME_DLLS:${test_target}>")
+                add_custom_command(TARGET ${test_target} POST_BUILD COMMAND
+                    "$<$<BOOL:${depthai_dll_libraries}>:${CMAKE_COMMAND};-E;copy_if_different;${depthai_dll_libraries};$<TARGET_FILE_DIR:${test_target}>>"
+                    COMMAND_EXPAND_LISTS
+                    VERBATIM
+                )
+            endif()
         endif()
     endif()
 
-    # Add to test suite
-    add_test(NAME ${test_name} COMMAND
-        "$<TARGET_FILE:${test_name}>"
-        COMMAND_EXPAND_LISTS
-    )
+    add_test(NAME ${test_name} COMMAND "$<TARGET_FILE:${test_target}>" ${ARGN})
+endfunction()
 
-endmacro()
+# multiple_open_stream_test.cpp:
+# [num_streams] [port] [timeout_ms]
+xlink_add_test(multiple_open_stream_test multiple_open_stream_test.cpp 16 11480 10000)
 
-# Helper 'xlink_add_client_server_test'
-macro(xlink_add_client_server_test test_name num_iterations timeout)
-    # Add client
-    add_executable(${test_name}_client ${test_name}.cpp)
-    target_compile_definitions(${test_name}_client PRIVATE XLINK_TEST_CLIENT)
-    target_link_libraries(${test_name}_client ${TARGET_NAME})
+# multithreading_search_test.cpp:
+# [timeout_ms]
+xlink_add_test(multithreading_search_test multithreading_search_test.cpp 10000)
 
-    # Add server
-    add_executable(${test_name}_server ${test_name}.cpp)
-    target_compile_definitions(${test_name}_server PRIVATE XLINK_TEST_SERVER)
-    target_link_libraries(${test_name}_server ${TARGET_NAME})
+# multiple_connection_test.cpp:
+# [num_connections] [base_port] [num_streams] [num_packets] [timeout_ms]
+xlink_add_test(multiple_connection_test_single multiple_connection_test.cpp 1 12490 1 1 5000)
+xlink_add_test(multiple_connection_test_small multiple_connection_test.cpp 2 12510 4 8 10000)
+xlink_add_test(multiple_connection_test_medium multiple_connection_test.cpp 4 12530 8 32 15000)
+xlink_add_test(multiple_connection_test_stress multiple_connection_test.cpp 16 12550 16 120 30000)
 
-    # Specify test script
-    if("${ARGV3}" STREQUAL "")
-        set(test_script "${CMAKE_CURRENT_LIST_DIR}/bash/test_client_server.sh")
-    else()
-        set(test_script "${CMAKE_CURRENT_LIST_DIR}/bash/${ARGV3}")
-    endif()
+# connection_shutdown_test.cpp:
+# [num_connections] [base_port] [timeout_ms]
+xlink_add_test(connection_shutdown_test connection_shutdown_test.cpp 8 11520 5000)
 
-    # Add to test suite
-    add_test(NAME ${test_name} COMMAND
-        ${BASH_EXECUTABLE} "${test_script}"
-        "$<TARGET_FILE:${test_name}_server>"
-        "$<TARGET_FILE:${test_name}_client>"
-        "${num_iterations}"
-        "${timeout}"
-        COMMAND_EXPAND_LISTS
-    )
-endmacro()
+# reset_reconnect_stress_test.cpp:
+# [rounds] [base_port] [payload_mib] [max_jitter_ms] [write_repeat_count] [connect_timeout_ms] [client_hang_timeout_ms] [server_hang_timeout_ms] [timeout_ms]
+xlink_add_test(reset_reconnect_stress_test reset_reconnect_stress_test.cpp 64 11690 20 25 1 15000 5000 5000 20000)
+xlink_add_test(reset_reconnect_stress_test_no_jitter reset_reconnect_stress_test.cpp 32 11710 20 0 1 15000 5000 5000 10000)
+xlink_add_test(reset_reconnect_stress_test_low_jitter reset_reconnect_stress_test.cpp 32 11730 20 5 1 15000 5000 5000 10000)
+xlink_add_test(reset_reconnect_stress_test_default_jitter reset_reconnect_stress_test.cpp 64 11750 20 25 1 15000 5000 5000 20000)
+xlink_add_test(reset_reconnect_stress_test_high_jitter reset_reconnect_stress_test.cpp 64 11770 20 75 1 15000 5000 5000 25000)
+xlink_add_test(reset_reconnect_stress_test_payload_1m reset_reconnect_stress_test.cpp 24 11790 1 25 1 15000 5000 5000 10000)
+xlink_add_test(reset_reconnect_stress_test_payload_8m reset_reconnect_stress_test.cpp 24 11810 8 25 1 15000 5000 5000 10000)
+xlink_add_test(reset_reconnect_stress_test_payload_32m reset_reconnect_stress_test.cpp 32 11830 32 25 1 15000 15000 15000 20000)
+xlink_add_test(reset_reconnect_stress_test_repeat_2x reset_reconnect_stress_test.cpp 24 11850 8 25 2 15000 5000 5000 10000)
+xlink_add_test(reset_reconnect_stress_test_repeat_4x reset_reconnect_stress_test.cpp 16 11870 4 25 4 15000 5000 5000 10000)
+xlink_add_test(reset_reconnect_stress_test_connect_5s reset_reconnect_stress_test.cpp 64 11890 20 25 1 5000 18000 18000 25000)
 
-# Tests
+# resource_cleanup_test.cpp:
+# [rounds] [port] [connect_timeout_ms] [warmup_rounds] [sample_every_rounds] [rss_growth_limit_kib] [fd_growth_limit] [server_grace_ms] [timeout_ms]
+xlink_add_test(resource_cleanup_test_smoke resource_cleanup_test.cpp 50 11910 5000 10 10 24576 16 250 30000)
 
-# Multithreading search
-xlink_add_test(multithreading_search_test multithreading_search_test.cpp)
-
-# RTT test
-xlink_add_test(rtt_test rtt_test.cpp)
-
-# WIP
-# Throughput test
+# rtt_test.cpp:
+# [timeout_ms]
+xlink_add_test(rtt_test rtt_test.cpp 15000)
 # xlink_add_test(throughput_test throughput_test.cpp)
+# xlink_add_test(connect_timeout_test connect_timeout_test.cpp 4 11930 500 5000)

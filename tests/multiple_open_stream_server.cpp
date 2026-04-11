@@ -26,7 +26,7 @@ int main(int argc, const char** argv){
     }
 
     // Start server
-    XLinkHandler_t handler;
+    XLinkHandler_t handler = {};
     std::string serverIp{"127.0.0.1"};
     handler.devicePath = &serverIp[0];
     handler.protocol = X_LINK_TCP_IP;

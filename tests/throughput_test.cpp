@@ -40,6 +40,7 @@ int main(int argc, char** argv) {
 
     XLinkGlobalHandler_t gHandler;
     XLinkInitialize(&gHandler);
+    XLinkProfStart();
     bool successServer{true};
     bool successClient{true};
 
@@ -69,6 +70,14 @@ int main(int argc, char** argv) {
         }
     }
 
+    // // Verify that total global amount of data is correctly profiled
+    // XLinkProf_t prof;
+    // assert(XLinkGetGlobalProfilingData(&prof) == X_LINK_SUCCESS);
+    // printf("num bytes written: %ld, supposed: %ld\n", prof.totalWriteBytes, 2 * NUM_ITERATIONS*BUFFER_SIZE);
+    // printf("num bytes read: %ld, supposed: %ld\n", prof.totalReadBytes, 2 * NUM_ITERATIONS*BUFFER_SIZE);
+    // assert(prof.totalReadBytes == 2 * NUM_ITERATIONS*BUFFER_SIZE);
+    // assert(prof.totalWriteBytes == 2* NUM_ITERATIONS*BUFFER_SIZE);
+
     return 0;
 }
 
@@ -80,12 +89,10 @@ int client(bool split) {
 
     printf("Device name: %s\n", deviceDesc.name);
 
-    XLinkHandler_t handler;
+    XLinkHandler_t handler = {};
     handler.devicePath = deviceDesc.name;
     handler.protocol = deviceDesc.protocol;
     assert(XLinkConnect(&handler) == X_LINK_SUCCESS);
-
-    std::this_thread::sleep_for(milliseconds(100));
     auto s = XLinkOpenStream(handler.linkId, "rtt", 2*BUFFER_SIZE);
     assert(s != INVALID_STREAM_ID);
 
@@ -115,6 +122,12 @@ int client(bool split) {
         return -1;
     }
 
+    // Verify that amount of data is correctly profiled
+    XLinkProf_t prof;
+    assert(XLinkGetProfilingData(handler.linkId, &prof) == X_LINK_SUCCESS);
+    printf("num bytes written: %llu, supposed: %zu\n", prof.totalWriteBytes, NUM_ITERATIONS*BUFFER_SIZE);
+    assert(prof.totalWriteBytes == NUM_ITERATIONS*BUFFER_SIZE);
+
     assert(XLinkCloseStream(s) == X_LINK_SUCCESS);
     assert(XLinkResetRemote(handler.linkId) == X_LINK_SUCCESS);
 
@@ -125,7 +138,7 @@ int client(bool split) {
 // Server
 XLinkGlobalHandler_t xlinkGlobalHandler = {};
 int server(bool split){
-    XLinkHandler_t handler;
+    XLinkHandler_t handler = {};
     std::string serverIp{"127.0.0.1"};
 
     handler.devicePath = &serverIp[0];
@@ -152,6 +165,12 @@ int server(bool split){
         printf("failed.\n");
         return -1;
     }
+
+    // Verify that amount of data is correctly profiled
+    XLinkProf_t prof;
+    assert(XLinkGetProfilingData(handler.linkId, &prof) == X_LINK_SUCCESS);
+    printf("num bytes read: %llu, supposed: %zu\n", prof.totalReadBytes, NUM_ITERATIONS*BUFFER_SIZE);
+    assert(prof.totalReadBytes == NUM_ITERATIONS*BUFFER_SIZE);
 
     assert(XLinkCloseStream(s) == X_LINK_SUCCESS);
     assert(XLinkResetRemote(handler.linkId) == X_LINK_SUCCESS);
