@@ -13,6 +13,8 @@
 #include <mutex>
 #include <condition_variable>
 
+#include "TestUtils.hpp"
+
 std::mutex coutMtx;
 
 std::mutex startMtx;
@@ -20,8 +22,11 @@ std::condition_variable startCv;
 bool startBool;
 
 std::atomic<int> errorRet{0};
+constexpr int kDefaultTimeoutMs = 30000;
 
-int main() {
+int main(int argc, char** argv) {
+    const int timeoutMs = testutils::parseIntArg(argc, argv, 1, kDefaultTimeoutMs);
+    testutils::ProcessWatchdog watchdog(timeoutMs, "multithreading_search_test");
 
     XLinkGlobalHandler_t gHandler;
     XLinkInitialize(&gHandler);

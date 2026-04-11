@@ -18,6 +18,8 @@
 #include "XLink/XLinkPublicDefines.h"
 #include "XLink/XLinkLog.h"
 
+#include "TestUtils.hpp"
+
 using namespace std::chrono;
 
 constexpr static int NUM_ITERATIONS = 10000;
@@ -26,6 +28,7 @@ constexpr static microseconds RTT_THRESHOLD{5000};
 constexpr static int WARMUP_ITERATIONS = 100;
 constexpr static int MAX_ALLOWED_OUTLIERS = 25;
 constexpr static microseconds WORST_CASE_THRESHOLD{50000};
+constexpr static int DEFAULT_TIMEOUT_MS = 60000;
 
 struct Timestamp {
     int64_t sec;
@@ -40,6 +43,8 @@ bool successClient{true};
 
 int main(int argc, char** argv) {
     // mvLogDefaultLevelSet(MVLOG_DEBUG);
+    const int timeoutMs = testutils::parseIntArg(argc, argv, 1, DEFAULT_TIMEOUT_MS);
+    testutils::ProcessWatchdog watchdog(timeoutMs, "rtt_test");
 
     XLinkGlobalHandler_t gHandler;
     XLinkInitialize(&gHandler);

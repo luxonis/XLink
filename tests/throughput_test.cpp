@@ -93,9 +93,7 @@ int client(bool split) {
     handler.devicePath = deviceDesc.name;
     handler.protocol = deviceDesc.protocol;
     assert(XLinkConnect(&handler) == X_LINK_SUCCESS);
-
-    std::this_thread::sleep_for(milliseconds(100));
-    auto s = XLinkOpenStream(&handler, "rtt", 2*BUFFER_SIZE);
+    auto s = XLinkOpenStream(handler.linkId, "rtt", 2*BUFFER_SIZE);
     assert(s != INVALID_STREAM_ID);
 
     Timestamp ts = {};
@@ -104,16 +102,16 @@ int client(bool split) {
     auto t1 = steady_clock::now();
     for(int i = 1; i <= NUM_ITERATIONS; i++){
         if(split) {
-            assert(XLinkWriteData2(&handler, s, buffer, BUFFER_SIZE, reinterpret_cast<uint8_t*>(&ts), sizeof(ts)) == X_LINK_SUCCESS);
+            assert(XLinkWriteData2(s, buffer, BUFFER_SIZE, reinterpret_cast<uint8_t*>(&ts), sizeof(ts)) == X_LINK_SUCCESS);
         } else {
-            assert(XLinkWriteData(&handler, s, buffer, BUFFER_SIZE) == X_LINK_SUCCESS);
+            assert(XLinkWriteData(s, buffer, BUFFER_SIZE) == X_LINK_SUCCESS);
         }
     }
 
     streamPacketDesc_t* packet;
-    assert(XLinkReadData(&handler, s, &packet) == X_LINK_SUCCESS);
+    assert(XLinkReadData(s, &packet) == X_LINK_SUCCESS);
     auto t2 = steady_clock::now();
-    assert(XLinkReleaseData(&handler, s) == X_LINK_SUCCESS);
+    assert(XLinkReleaseData(s) == X_LINK_SUCCESS);
 
     size_t throughput = (BUFFER_SIZE*NUM_ITERATIONS) / duration_cast<duration<double>>(t2-t1).count();
 
@@ -126,12 +124,12 @@ int client(bool split) {
 
     // Verify that amount of data is correctly profiled
     XLinkProf_t prof;
-    assert(XLinkGetProfilingData(&handler, &prof) == X_LINK_SUCCESS);
-    printf("num bytes written: %ld, supposed: %ld\n", prof.totalWriteBytes, NUM_ITERATIONS*BUFFER_SIZE);
+    assert(XLinkGetProfilingData(handler.linkId, &prof) == X_LINK_SUCCESS);
+    printf("num bytes written: %llu, supposed: %zu\n", prof.totalWriteBytes, NUM_ITERATIONS*BUFFER_SIZE);
     assert(prof.totalWriteBytes == NUM_ITERATIONS*BUFFER_SIZE);
 
-    assert(XLinkCloseStream(&handler, s) == X_LINK_SUCCESS);
-    assert(XLinkResetRemote(&handler) == X_LINK_SUCCESS);
+    assert(XLinkCloseStream(s) == X_LINK_SUCCESS);
+    assert(XLinkResetRemote(handler.linkId) == X_LINK_SUCCESS);
 
     return 0;
 
@@ -146,7 +144,7 @@ int server(bool split){
     handler.devicePath = &serverIp[0];
     handler.protocol = X_LINK_TCP_IP;
     XLinkServerOnly(&handler);
-    auto s = XLinkOpenStream(&handler, "rtt", 2*BUFFER_SIZE);
+    auto s = XLinkOpenStream(handler.linkId, "rtt", 2*BUFFER_SIZE);
     std::this_thread::sleep_for(milliseconds(100));
 
     if(s != INVALID_STREAM_ID) {
@@ -154,14 +152,14 @@ int server(bool split){
             Timestamp timestamp = {};
             streamPacketDesc_t* packet;
             auto t1 = steady_clock::now();
-            if(XLinkReadData(&handler, s, &packet) != X_LINK_SUCCESS) {
+            if(XLinkReadData(s, &packet) != X_LINK_SUCCESS) {
                 printf("failed.\n");
                 return -1;
             }
-            XLinkReleaseData(&handler, s);
+            XLinkReleaseData(s);
         }
         uint8_t tmp[4];
-        assert(XLinkWriteData(&handler, s, reinterpret_cast<uint8_t*>(&tmp), sizeof(tmp)) == X_LINK_SUCCESS);
+        assert(XLinkWriteData(s, reinterpret_cast<uint8_t*>(&tmp), sizeof(tmp)) == X_LINK_SUCCESS);
 
     } else {
         printf("failed.\n");
@@ -170,12 +168,12 @@ int server(bool split){
 
     // Verify that amount of data is correctly profiled
     XLinkProf_t prof;
-    assert(XLinkGetProfilingData(&handler, &prof) == X_LINK_SUCCESS);
-    printf("num bytes read: %ld, supposed: %ld\n", prof.totalReadBytes, NUM_ITERATIONS*BUFFER_SIZE);
+    assert(XLinkGetProfilingData(handler.linkId, &prof) == X_LINK_SUCCESS);
+    printf("num bytes read: %llu, supposed: %zu\n", prof.totalReadBytes, NUM_ITERATIONS*BUFFER_SIZE);
     assert(prof.totalReadBytes == NUM_ITERATIONS*BUFFER_SIZE);
 
-    assert(XLinkCloseStream(&handler, s) == X_LINK_SUCCESS);
-    assert(XLinkResetRemote(&handler) == X_LINK_SUCCESS);
+    assert(XLinkCloseStream(s) == X_LINK_SUCCESS);
+    assert(XLinkResetRemote(handler.linkId) == X_LINK_SUCCESS);
 
 
     return 0;

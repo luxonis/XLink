@@ -1,9 +1,12 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
+#include <mutex>
 #include <random>
 #include <string>
 #include <thread>
@@ -70,5 +73,43 @@ inline void printUsageAndExit(const char* argv0, const char* usage) {
     std::fprintf(stderr, "Usage: %s %s\n", argv0, usage);
     std::exit(1);
 }
+
+class ProcessWatchdog {
+public:
+    explicit ProcessWatchdog(int timeoutMs, const char* testName = "test")
+        : testName_(testName), worker_([this, timeoutMs]() {
+            std::unique_lock<std::mutex> lock(mutex_);
+            const bool completed = cv_.wait_for(lock, std::chrono::milliseconds(timeoutMs), [&]() {
+                return done_.load();
+            });
+            if (!completed) {
+                std::fprintf(stderr, "%s timed out after %d ms\n", testName_, timeoutMs);
+                std::_Exit(2);
+            }
+        }) {}
+
+    ~ProcessWatchdog() {
+        finish();
+    }
+
+    ProcessWatchdog(const ProcessWatchdog&) = delete;
+    ProcessWatchdog& operator=(const ProcessWatchdog&) = delete;
+
+    void finish() {
+        if (!worker_.joinable()) {
+            return;
+        }
+        done_.store(true);
+        cv_.notify_one();
+        worker_.join();
+    }
+
+private:
+    const char* testName_;
+    std::atomic<bool> done_{false};
+    std::mutex mutex_;
+    std::condition_variable cv_;
+    std::thread worker_;
+};
 
 }  // namespace testutils

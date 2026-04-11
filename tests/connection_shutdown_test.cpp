@@ -75,6 +75,8 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+    testutils::ProcessWatchdog watchdog(timeoutMs, "connection_shutdown_test");
+
     std::atomic<int> linkDownCount{0};
     gLinkDownCount = &linkDownCount;
     const int callbackId = XLinkAddLinkDownCb(onLinkDown);

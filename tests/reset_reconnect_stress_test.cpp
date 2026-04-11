@@ -28,6 +28,7 @@ constexpr int kDefaultMaxJitterMs = 25;
 constexpr int kDefaultClientHangTimeoutMs = 5000;
 constexpr int kDefaultServerHangTimeoutMs = 5000;
 constexpr int kDefaultWriteRepeatCount = 1;
+constexpr int kDefaultTimeoutMs = 60000;
 constexpr char kStreamName[] = "payload";
 
 struct StressConfig {
@@ -40,6 +41,7 @@ struct StressConfig {
     int clientHangTimeoutMs = kDefaultClientHangTimeoutMs;
     int serverHangTimeoutMs = kDefaultServerHangTimeoutMs;
     int writeRepeatCount = kDefaultWriteRepeatCount;
+    int timeoutMs = kDefaultTimeoutMs;
 };
 
 struct ServerState {
@@ -82,6 +84,7 @@ StressConfig parseConfig(int argc, char** argv) {
     cfg.connectTimeoutMs = testutils::parseIntArg(argc, argv, 6, kDefaultConnectTimeoutMs);
     cfg.clientHangTimeoutMs = testutils::parseIntArg(argc, argv, 7, kDefaultClientHangTimeoutMs);
     cfg.serverHangTimeoutMs = testutils::parseIntArg(argc, argv, 8, kDefaultServerHangTimeoutMs);
+    cfg.timeoutMs = testutils::parseIntArg(argc, argv, 9, kDefaultTimeoutMs);
     return cfg;
 }
 
@@ -121,6 +124,8 @@ int main(int argc, char** argv) {
     if (XLinkInitialize(&globalHandler) != X_LINK_SUCCESS) {
         return -1;
     }
+
+    testutils::ProcessWatchdog watchdog(cfg.timeoutMs, "reset_reconnect_stress_test");
 
     std::vector<std::string> endpoints;
     endpoints.reserve(kNumConnections);

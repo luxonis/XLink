@@ -17,6 +17,7 @@ namespace {
 
 constexpr int kDefaultNumStreams = 16;
 constexpr int kDefaultPort = 11480;
+constexpr int kDefaultTimeoutMs = 10000;
 
 int runServer(const std::string& endpoint, int numStreams) {
     std::string serverEndpoint = endpoint;
@@ -112,6 +113,7 @@ int runClient(const std::string& endpoint, int numStreams) {
 int main(int argc, char** argv) {
     const int numStreams = testutils::parseIntArg(argc, argv, 1, kDefaultNumStreams);
     const int port = testutils::parseIntArg(argc, argv, 2, kDefaultPort);
+    const int timeoutMs = testutils::parseIntArg(argc, argv, 3, kDefaultTimeoutMs);
 
     XLinkGlobalHandler_t globalHandler = {};
     mvLogDefaultLevelSet(MVLOG_ERROR);
@@ -119,6 +121,8 @@ int main(int argc, char** argv) {
         std::printf("Failed to initialize XLink\n");
         return -1;
     }
+
+    testutils::ProcessWatchdog watchdog(timeoutMs, "multiple_open_stream_test");
 
     const std::string endpoint = testutils::makeEndpoint(port);
     int serverResult = -1;

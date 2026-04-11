@@ -185,18 +185,7 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    std::atomic<bool> done{false};
-    std::mutex doneMutex;
-    std::condition_variable doneCv;
-    std::thread watchdog([&]() {
-        std::unique_lock<std::mutex> lock(doneMutex);
-        const bool completed = doneCv.wait_for(lock, std::chrono::milliseconds(cfg.timeoutMs), [&]() {
-            return done.load();
-        });
-        if (!completed) {
-            std::_Exit(2);
-        }
-    });
+    testutils::ProcessWatchdog watchdog(cfg.timeoutMs, "resource_cleanup_test");
 
     std::vector<std::uint8_t> payload(kPayloadSize);
     for (std::size_t i = 0; i < payload.size(); ++i) {
@@ -219,9 +208,6 @@ int main(int argc, char** argv) {
         gLinkDown = &linkDown;
         const int callbackId = XLinkAddLinkDownCb(onLinkDown);
         if (callbackId < 0) {
-            done.store(true);
-            doneCv.notify_one();
-            watchdog.join();
             return -1;
         }
 
@@ -258,9 +244,6 @@ int main(int argc, char** argv) {
         if (connectStatus != X_LINK_SUCCESS) {
             server.join();
             XLinkRemoveLinkDownCb(callbackId);
-            done.store(true);
-            doneCv.notify_one();
-            watchdog.join();
             return -1;
         }
 
@@ -268,27 +251,18 @@ int main(int argc, char** argv) {
         if (stream == INVALID_STREAM_ID) {
             server.join();
             XLinkRemoveLinkDownCb(callbackId);
-            done.store(true);
-            doneCv.notify_one();
-            watchdog.join();
             return -1;
         }
 
         if (XLinkWriteData(&handler, stream, payload.data(), static_cast<int>(payload.size())) != X_LINK_SUCCESS) {
             server.join();
             XLinkRemoveLinkDownCb(callbackId);
-            done.store(true);
-            doneCv.notify_one();
-            watchdog.join();
             return -1;
         }
 
         if (XLinkResetRemote(&handler) != X_LINK_SUCCESS) {
             server.join();
             XLinkRemoveLinkDownCb(callbackId);
-            done.store(true);
-            doneCv.notify_one();
-            watchdog.join();
             return -1;
         }
 
@@ -298,9 +272,6 @@ int main(int argc, char** argv) {
         gLinkDownCv = nullptr;
         gLinkDown = nullptr;
         if (serverResult != 0) {
-            done.store(true);
-            doneCv.notify_one();
-            watchdog.join();
             return -1;
         }
 
@@ -343,19 +314,10 @@ int main(int argc, char** argv) {
     printSnapshot("SUMMARY_MAX", cfg.rounds, maxObserved, &baseline);
 
     if (rssGrowthKiB > static_cast<long long>(cfg.rssGrowthLimitKiB)) {
-        done.store(true);
-        doneCv.notify_one();
-        watchdog.join();
         return -1;
     }
     if (fdGrowth > cfg.fdGrowthLimit) {
-        done.store(true);
-        doneCv.notify_one();
-        watchdog.join();
         return -1;
     }
-    done.store(true);
-    doneCv.notify_one();
-    watchdog.join();
     return 0;
 }
