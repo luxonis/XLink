@@ -74,21 +74,6 @@ void XLinkDiscoveryServiceStop();
  */
 void XLinkDiscoveryServiceDetach();
 
-/**
- * @brief Adds a callback for link down events
- * @param cb[in] Callback function to be called
- * @return Callback id, -1 for error
- */
-int XLinkAddLinkDownCb(void (*cb)(linkId_t));
-
-/**
- * @brief Removes callback with given id
- *
- * @param cbId callback id retrieved by XLinkAddLinkDownCb function
- * @return status, 0 ok else error
- */
-int XLinkRemoveLinkDownCb(int cbId);
-
 #ifndef __DEVICE__
 
 /**

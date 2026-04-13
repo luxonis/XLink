@@ -17,14 +17,6 @@ constexpr int kDefaultNumConnections = 8;
 constexpr int kDefaultBasePort = 11520;
 constexpr int kDefaultTimeoutMs = 5000;
 
-std::atomic<int>* gLinkDownCount = nullptr;
-
-void onLinkDown(linkId_t) {
-    if (gLinkDownCount != nullptr) {
-        gLinkDownCount->fetch_add(1);
-    }
-}
-
 int runServer(const std::string& endpoint) {
     std::string serverEndpoint = endpoint;
     XLinkHandler_t handler = testutils::makeTcpHandler(serverEndpoint);
@@ -41,9 +33,16 @@ int runServer(const std::string& endpoint) {
     return XLinkWriteData(&handler, stream, data, sizeof(data)) == X_LINK_SUCCESS ? 0 : -1;
 }
 
-int runClient(const std::string& endpoint) {
+int runClient(const std::string& endpoint, std::atomic<int>* linkDownCount) {
     std::string clientEndpoint = endpoint;
     XLinkHandler_t handler = testutils::makeTcpHandler(clientEndpoint);
+    handler.linkDownCallback = [](void* context) {
+        auto* count = static_cast<std::atomic<int>*>(context);
+        if (count != nullptr) {
+            count->fetch_add(1);
+        }
+    };
+    handler.linkDownCallbackContext = linkDownCount;
     if (!testutils::connectWithRetry(&handler, kDefaultTimeoutMs)) {
         return -1;
     }
@@ -78,11 +77,6 @@ int main(int argc, char** argv) {
     testutils::ProcessWatchdog watchdog(timeoutMs, "connection_shutdown_test");
 
     std::atomic<int> linkDownCount{0};
-    gLinkDownCount = &linkDownCount;
-    const int callbackId = XLinkAddLinkDownCb(onLinkDown);
-    if (callbackId < 0) {
-        return -1;
-    }
 
     std::vector<std::string> endpoints;
     endpoints.reserve(numConnections);
@@ -102,7 +96,7 @@ int main(int argc, char** argv) {
     }
     testutils::sleepBriefly();
     for (int i = 0; i < numConnections; ++i) {
-        clientThreads.emplace_back([&, i]() { clientResults[i] = runClient(endpoints[i]); });
+        clientThreads.emplace_back([&, i]() { clientResults[i] = runClient(endpoints[i], &linkDownCount); });
     }
 
     for (auto& thread : clientThreads) {
@@ -117,9 +111,6 @@ int main(int argc, char** argv) {
     for (auto& thread : serverThreads) {
         thread.join();
     }
-
-    XLinkRemoveLinkDownCb(callbackId);
-    gLinkDownCount = nullptr;
 
     if (linkDownCount.load() < numConnections) {
         return -1;

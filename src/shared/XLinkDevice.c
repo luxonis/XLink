@@ -329,8 +329,19 @@ XLinkError_t XLinkResetRemote(XLinkHandler_t* handler)
     XLINK_RET_IF(link == NULL);
 
     if (getXLinkState(link) != XLINK_UP) {
-        mvLog(MVLOG_WARN, "Link is down, close connection to device without reset");
-        XLinkPlatformCloseRemote(&link->deviceHandle);
+        mvLog(MVLOG_WARN, "Link is down, cleaning up local session without reset");
+
+        int rc = XLink_sem_wait(&link->dispatcherClosedSem);
+        if (rc) {
+            mvLog(MVLOG_ERROR, "can't wait dispatcherClosedSem\n");
+            return X_LINK_ERROR;
+        }
+
+        if (pthread_join(getSchedulerFromDeviceHandle(&link->deviceHandle)->xLinkThreadId, NULL) != 0) {
+            mvLog(MVLOG_ERROR, "can't join scheduler thread\n");
+            return X_LINK_ERROR;
+        }
+
         deallocateSession(handler);
         return X_LINK_COMMUNICATION_NOT_OPEN;
     }
@@ -344,11 +355,14 @@ XLinkError_t XLinkResetRemote(XLinkHandler_t* handler)
     XLINK_RET_ERR_IF(DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
         X_LINK_TIMEOUT);
 
-    int rc;
-    while(((rc = XLink_sem_wait(&link->dispatcherClosedSem)) == -1) && errno == EINTR)
-        continue;
+    int rc = XLink_sem_wait(&link->dispatcherClosedSem);
     if(rc) {
         mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
+        return X_LINK_ERROR;
+    }
+
+    if (pthread_join(getSchedulerFromDeviceHandle(&link->deviceHandle)->xLinkThreadId, NULL) != 0) {
+        mvLog(MVLOG_ERROR, "can't join scheduler thread\n");
         return X_LINK_ERROR;
     }
 
@@ -362,8 +376,18 @@ XLinkError_t XLinkResetRemoteTimeout(XLinkHandler_t* handler, int timeoutMs)
     XLINK_RET_IF(link == NULL);
 
     if (getXLinkState(link) != XLINK_UP) {
-        mvLog(MVLOG_WARN, "Link is down, close connection to device without reset");
-        XLinkPlatformCloseRemote(&link->deviceHandle);
+        mvLog(MVLOG_WARN, "Link is down, cleaning up local session without reset");
+
+        if (XLink_sem_wait(&link->dispatcherClosedSem)) {
+            mvLog(MVLOG_ERROR, "can't wait dispatcherClosedSem\n");
+            return X_LINK_ERROR;
+        }
+
+        if (pthread_join(getSchedulerFromDeviceHandle(&link->deviceHandle)->xLinkThreadId, NULL) != 0) {
+            mvLog(MVLOG_ERROR, "can't join scheduler thread\n");
+            return X_LINK_ERROR;
+        }
+
         deallocateSession(handler);
         return X_LINK_COMMUNICATION_NOT_OPEN;
     }
@@ -403,6 +427,11 @@ XLinkError_t XLinkResetRemoteTimeout(XLinkHandler_t* handler, int timeoutMs)
     // Wait for dispatcher to be closed
     if(XLink_sem_wait(&link->dispatcherClosedSem)) {
         mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
+        return X_LINK_ERROR;
+    }
+
+    if (pthread_join(getSchedulerFromDeviceHandle(&link->deviceHandle)->xLinkThreadId, NULL) != 0) {
+        mvLog(MVLOG_ERROR, "can't join scheduler thread\n");
         return X_LINK_ERROR;
     }
 
@@ -475,6 +504,8 @@ xLinkDesc_t* allocateSession(XLinkHandler_t* handler) {
     XLINK_RET_ERR_IF(session == NULL, NULL);
 
     xLinkDesc_t* link = &session->link;
+    session->linkDownCallback = handler->linkDownCallback;
+    session->linkDownCallbackContext = handler->linkDownCallbackContext;
 
     if (XLink_sem_init(&link->dispatcherClosedSem, 0 ,0)) {
         mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");

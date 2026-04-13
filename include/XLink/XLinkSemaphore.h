@@ -42,6 +42,9 @@ extern "C"
 
 typedef struct {
     sem_t psem;
+    pthread_mutex_t ref_mutex;
+    pthread_cond_t ref_cond;
+    int initialized;
     int refs;
 } XLink_sem_t;
 

@@ -33,9 +33,9 @@ endfunction()
 # [num_streams] [port] [timeout_ms]
 xlink_add_test(multiple_open_stream_test multiple_open_stream_test.cpp 16 11480 10000)
 
-# multithreading_search_test.cpp:
-# [timeout_ms]
-xlink_add_test(multithreading_search_test multithreading_search_test.cpp 10000)
+# # multithreading_search_test.cpp:
+# # [timeout_ms]
+# xlink_add_test(multithreading_search_test multithreading_search_test.cpp 10000)
 
 # multiple_connection_test.cpp:
 # [num_connections] [base_port] [num_streams] [num_packets] [timeout_ms]

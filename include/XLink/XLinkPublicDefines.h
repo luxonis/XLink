@@ -176,14 +176,17 @@ typedef struct XLinkGlobalHandler_t
 } XLinkGlobalHandler_t;
 
 typedef struct XLinkSession_t XLinkSession_t;
+typedef void (*XLinkLinkDownCallback_t)(void* context);
 
-typedef struct
+typedef struct XLinkHandler_t
 {
     char* devicePath;
     char* devicePath2;
     int linkId;
     XLinkProtocol_t protocol;
     XLinkSession_t* session;
+    XLinkLinkDownCallback_t linkDownCallback;
+    void* linkDownCallbackContext;
 } XLinkHandler_t;
 
 //Deprecated defines. Begin.

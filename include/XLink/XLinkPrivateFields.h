@@ -79,6 +79,8 @@ typedef struct xLinkSchedulerState_t {
 } xLinkSchedulerState_t;
 
 struct XLinkSession_t {
+    XLinkLinkDownCallback_t linkDownCallback;
+    void* linkDownCallbackContext;
     xLinkDesc_t link;
     xLinkSchedulerState_t scheduler;
 };

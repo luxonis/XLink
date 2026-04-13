@@ -223,7 +223,6 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     }
 #endif
 
-    pthread_detach(curr->xLinkThreadId);
     if (pthread_attr_destroy(&attr) != 0) {
         mvLog(MVLOG_ERROR,"pthread_attr_destroy error");
     }
@@ -259,9 +258,7 @@ xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event
     }
 
     mvLog(MVLOG_DEBUG, "Receiving event %s %d\n", TypeToStr(event->header.type), origin);
-    int rc;
-    while(((rc = XLink_sem_wait(&curr->addEventSem)) == -1) && errno == EINTR)
-        continue;
+    int rc = XLink_sem_wait(&curr->addEventSem);
     if (rc) {
         mvLog(MVLOG_ERROR,"can't wait semaphore\n");
         return NULL;
@@ -330,8 +327,7 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
             }
         }
     } else {
-        while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
-            continue;
+        rc = XLink_sem_wait(id);
     }
 
     if (!curr->server && rc) {
@@ -341,9 +337,7 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
         mvLog(MVLOG_ERROR,"waiting is timeout, sending reset remote event");
         DispatcherAddEvent(EVENT_LOCAL, &event);
         id = getSem(pthread_self(), curr);
-        int rc;
-        while(((rc = XLink_sem_wait(id)) == -1) && errno == EINTR)
-            continue;
+        int rc = XLink_sem_wait(id);
         if (id == NULL || rc) {
         // Calling non-thread safe dispatcherReset from external thread
         // TODO - investigate further and resolve
@@ -666,10 +660,6 @@ static void* eventSchedulerRun(void* ctx)
         mvLog(MVLOG_ERROR, "Waiting for thread failed");
     }
 
-    // Notify that the link went down
-    void XLinkPlatformLinkDownNotify(linkId_t linkId);
-    XLinkPlatformLinkDownNotify(curr->link->id);
-
     sc = pthread_attr_destroy(&attr);
     if (sc) {
         mvLog(MVLOG_WARN, "Thread attr destroy failed");
@@ -683,6 +673,17 @@ static void* eventSchedulerRun(void* ctx)
         mvLog(MVLOG_ERROR,"Scheduler thread stopped");
     } else {
         mvLog(MVLOG_INFO,"Scheduler thread stopped");
+    }
+
+    xLinkDesc_t* link = curr->link;
+    if(link == NULL || XLink_sem_post(&link->dispatcherClosedSem)) {
+        mvLog(MVLOG_DEBUG,"can't post dispatcherClosedSem\n");
+    }
+
+    // Notify per-link callback only after dispatcher reset completed and teardown is safe.
+    XLinkSession_t* session = getSessionFromDeviceHandle(&curr->deviceHandle);
+    if (session != NULL && session->linkDownCallback != NULL) {
+        session->linkDownCallback(session->linkDownCallbackContext);
     }
 
     return NULL;
@@ -877,9 +878,7 @@ static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr)
 {
     XLINK_RET_ERR_IF(curr == NULL, NULL);
 
-    int rc;
-    while(((rc = XLink_sem_wait(&curr->notifyDispatcherSem)) == -1) && errno == EINTR)
-        continue;
+    int rc = XLink_sem_wait(&curr->notifyDispatcherSem);
     if (rc) {
         mvLog(MVLOG_ERROR,"can't post semaphore\n");
     }
@@ -1008,15 +1007,11 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
         mvLog(MVLOG_INFO, "Failed to clean dispatcher");
     }
 
-    glControlFunc->closeLink(&curr->deviceHandle, 1);
+    glControlFunc->closeLink(&curr->deviceHandle);
 
     // Set dispatcher link state "down", to disallow resetting again
     curr->dispatcherLinkDown = 1;
 
-    xLinkDesc_t* link = curr->link;
-    if(link == NULL || XLink_sem_post(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_DEBUG,"can't post dispatcherClosedSem\n");
-    }
     mvLog(MVLOG_DEBUG,"Reset Successfully\n");
 
     if(pthread_mutex_unlock(&reset_mutex) != 0) {

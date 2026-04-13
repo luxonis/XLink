@@ -800,17 +800,12 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
     return 0;
 }
 
-void dispatcherCloseLink(xLinkDeviceHandle_t* deviceHandle, int fullClose)
+void dispatcherCloseLink(xLinkDeviceHandle_t* deviceHandle)
 {
     xLinkDesc_t* link = getLinkFromDeviceHandle(deviceHandle);
 
     if (!link) {
         mvLog(MVLOG_WARN, "Dispatcher link is null");
-        return;
-    }
-
-    if (!fullClose) {
-        link->peerState = XLINK_DOWN;
         return;
     }
 

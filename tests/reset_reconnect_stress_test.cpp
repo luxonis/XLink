@@ -48,29 +48,9 @@ struct ServerState {
     std::mutex mutex;
     std::condition_variable cv;
     bool linkDown = false;
-    std::atomic<int> activeLinkId{INVALID_LINK_ID};
     std::atomic<int> round{-1};
     std::atomic<int> progress{0};
 };
-
-std::array<ServerState, kNumConnections>* gServerStates = nullptr;
-
-void onLinkDown(linkId_t linkId) {
-    if (gServerStates == nullptr) {
-        return;
-    }
-
-    for (int i = 0; i < kNumConnections; ++i) {
-        if ((*gServerStates)[i].activeLinkId.load() == linkId) {
-            {
-                std::lock_guard<std::mutex> lock((*gServerStates)[i].mutex);
-                (*gServerStates)[i].linkDown = true;
-            }
-            (*gServerStates)[i].cv.notify_all();
-            break;
-        }
-    }
-}
 
 StressConfig parseConfig(int argc, char** argv) {
     StressConfig cfg;
@@ -147,12 +127,6 @@ int main(int argc, char** argv) {
         clientProgress[i].store(0);
     }
 
-    gServerStates = &serverStates;
-    const int callbackId = XLinkAddLinkDownCb(onLinkDown);
-    if (callbackId < 0) {
-        return -1;
-    }
-
     std::vector<std::thread> serverThreads;
     serverThreads.reserve(kNumConnections);
     for (int connection = 0; connection < kNumConnections; ++connection) {
@@ -165,15 +139,25 @@ int main(int argc, char** argv) {
                     std::lock_guard<std::mutex> lock(serverStates[connection].mutex);
                     serverStates[connection].linkDown = false;
                 }
-                serverStates[connection].activeLinkId.store(INVALID_LINK_ID);
 
                 XLinkHandler_t handler = testutils::makeTcpHandler(endpoint);
+                handler.linkDownCallback = [](void* context) {
+                    auto* state = static_cast<ServerState*>(context);
+                    if (state == nullptr) {
+                        return;
+                    }
+                    {
+                        std::lock_guard<std::mutex> lock(state->mutex);
+                        state->linkDown = true;
+                    }
+                    state->cv.notify_all();
+                };
+                handler.linkDownCallbackContext = &serverStates[connection];
                 const auto serverStatus = XLinkServerOnly(&handler);
                 if (serverStatus != X_LINK_SUCCESS) {
                     fail(success, "server", connection, round, "server start failed", serverStatus);
                     return;
                 }
-                serverStates[connection].activeLinkId.store(handler.linkId);
                 serverStates[connection].progress.fetch_add(1);
 
                 const auto stream = XLinkOpenStream(&handler, kStreamName, cfg.streamSize);
@@ -305,7 +289,5 @@ int main(int argc, char** argv) {
 
     clientWatchdogDone.store(true);
     clientWatchdog.join();
-    XLinkRemoveLinkDownCb(callbackId);
-    gServerStates = nullptr;
     return success.load() ? 0 : -1;
 }

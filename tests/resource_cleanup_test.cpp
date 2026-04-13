@@ -60,21 +60,11 @@ struct ResourceSnapshot {
     int openFds = -1;
 };
 
-std::mutex* gLinkDownMutex = nullptr;
-std::condition_variable* gLinkDownCv = nullptr;
-bool* gLinkDown = nullptr;
-
-void onLinkDown(linkId_t) {
-    if (gLinkDownMutex == nullptr || gLinkDownCv == nullptr || gLinkDown == nullptr) {
-        return;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(*gLinkDownMutex);
-        *gLinkDown = true;
-    }
-    gLinkDownCv->notify_all();
-}
+struct LinkDownState {
+    std::mutex* mutex = nullptr;
+    std::condition_variable* cv = nullptr;
+    bool* flag = nullptr;
+};
 
 std::size_t getCurrentRssKiB() {
 #ifdef _WIN32
@@ -203,18 +193,27 @@ int main(int argc, char** argv) {
         std::mutex linkDownMutex;
         std::condition_variable linkDownCv;
         bool linkDown = false;
-        gLinkDownMutex = &linkDownMutex;
-        gLinkDownCv = &linkDownCv;
-        gLinkDown = &linkDown;
-        const int callbackId = XLinkAddLinkDownCb(onLinkDown);
-        if (callbackId < 0) {
-            return -1;
-        }
 
         int serverResult = -1;
         std::thread server([&]() {
             std::string serverEndpoint = endpoint;
             XLinkHandler_t handler = testutils::makeTcpHandler(serverEndpoint);
+            handler.linkDownCallback = [](void* context) {
+                auto* state = static_cast<LinkDownState*>(context);
+                if (state == nullptr || state->mutex == nullptr || state->cv == nullptr || state->flag == nullptr) {
+                    return;
+                }
+                {
+                    std::lock_guard<std::mutex> lock(*state->mutex);
+                    *state->flag = true;
+                }
+                state->cv->notify_all();
+            };
+            LinkDownState callbackState;
+            callbackState.mutex = &linkDownMutex;
+            callbackState.cv = &linkDownCv;
+            callbackState.flag = &linkDown;
+            handler.linkDownCallbackContext = &callbackState;
             if (XLinkServerOnly(&handler) != X_LINK_SUCCESS) {
                 serverResult = -1;
                 return;
@@ -224,6 +223,19 @@ int main(int argc, char** argv) {
             if (!linkDown) {
                 linkDownCv.wait_for(lock, std::chrono::milliseconds(cfg.serverGraceMs), [&]() { return linkDown; });
             }
+            lock.unlock();
+
+            if (!linkDown) {
+                serverResult = -1;
+                return;
+            }
+
+            const XLinkError_t cleanupStatus = XLinkResetRemote(&handler);
+            if (cleanupStatus != X_LINK_SUCCESS && cleanupStatus != X_LINK_COMMUNICATION_NOT_OPEN) {
+                serverResult = -1;
+                return;
+            }
+
             serverResult = 0;
         });
 
@@ -243,34 +255,26 @@ int main(int argc, char** argv) {
 
         if (connectStatus != X_LINK_SUCCESS) {
             server.join();
-            XLinkRemoveLinkDownCb(callbackId);
             return -1;
         }
 
         const auto stream = XLinkOpenStream(&handler, kStreamName, static_cast<int>(payload.size() * 2));
         if (stream == INVALID_STREAM_ID) {
             server.join();
-            XLinkRemoveLinkDownCb(callbackId);
             return -1;
         }
 
         if (XLinkWriteData(&handler, stream, payload.data(), static_cast<int>(payload.size())) != X_LINK_SUCCESS) {
             server.join();
-            XLinkRemoveLinkDownCb(callbackId);
             return -1;
         }
 
         if (XLinkResetRemote(&handler) != X_LINK_SUCCESS) {
             server.join();
-            XLinkRemoveLinkDownCb(callbackId);
             return -1;
         }
 
         server.join();
-        XLinkRemoveLinkDownCb(callbackId);
-        gLinkDownMutex = nullptr;
-        gLinkDownCv = nullptr;
-        gLinkDown = nullptr;
         if (serverResult != 0) {
             return -1;
         }
