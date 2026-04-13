@@ -7,6 +7,10 @@
 #include "XLinkErrorUtils.h"
 #include "XLinkLog.h"
 
+#if !defined(_WIN32) && !defined(_WIN64) && !defined(__APPLE__)
+extern int sem_clockwait(sem_t* sem, clockid_t clock, const struct timespec* abstime);
+#endif
+
 static int xlink_sem_is_initialized(const XLink_sem_t* sem)
 {
     return __atomic_load_n(&sem->initialized, __ATOMIC_ACQUIRE);
@@ -148,6 +152,35 @@ int XLink_sem_timedwait(XLink_sem_t* sem, const struct timespec* abstime)
     int ret;
     while(((ret = sem_timedwait(&sem->psem, abstime)) == -1) && errno == EINTR)
         continue;
+    XLINK_RET_IF_FAIL(XLink_sem_dec(sem));
+
+    return ret;
+}
+
+int XLink_sem_timedwait_rel(XLink_sem_t* sem, unsigned int timeoutMs)
+{
+    XLINK_RET_ERR_IF(sem == NULL, -1);
+
+    XLINK_RET_IF_FAIL(XLink_sem_inc(sem));
+    int ret;
+#if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)
+    while (((ret = sem_timedwait_rel(&sem->psem, timeoutMs)) == -1) && errno == EINTR)
+        continue;
+#else
+    struct timespec abstime;
+    if (clock_gettime(CLOCK_MONOTONIC, &abstime) != 0) {
+        XLINK_RET_IF_FAIL(XLink_sem_dec(sem));
+        return -1;
+    }
+    abstime.tv_sec += timeoutMs / 1000;
+    abstime.tv_nsec += (long)(timeoutMs % 1000) * 1000000L;
+    if (abstime.tv_nsec >= 1000000000L) {
+        abstime.tv_sec += abstime.tv_nsec / 1000000000L;
+        abstime.tv_nsec %= 1000000000L;
+    }
+    while (((ret = sem_clockwait(&sem->psem, CLOCK_MONOTONIC, &abstime)) == -1) && errno == EINTR)
+        continue;
+#endif
     XLINK_RET_IF_FAIL(XLink_sem_dec(sem));
 
     return ret;

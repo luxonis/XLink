@@ -312,20 +312,7 @@ int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int 
 
     int rc = 0;
     if (timeoutMs != XLINK_NO_RW_TIMEOUT) {
-        // This is a workaround for sem_timedwait being influenced by the system clock change.
-        // This is a temporary solution. TODO: replace this with something more efficient.
-        while (timeoutMs--) {
-            rc = XLink_sem_trywait(id);
-            if (!rc) {
-                break;
-            } else {
-#if (defined(_WIN32) || defined(_WIN64) )
-                Sleep(1);
-#else
-                usleep(1000);
-#endif
-            }
-        }
+        rc = XLink_sem_timedwait_rel(id, timeoutMs);
     } else {
         rc = XLink_sem_wait(id);
     }

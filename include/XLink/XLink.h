@@ -144,6 +144,14 @@ XLinkError_t XLinkSearchForDevices(const deviceDesc_t in_deviceRequirements,
 XLinkError_t XLinkConnect(XLinkHandler_t* handler);
 
 /**
+ * @brief Connects to specific device, starts dispatcher and waits for ping response with timeout
+ * @param[in,out] handler - XLink communication parameters (file path name for underlying layer)
+ * @param[in] timeoutMs - maximum time to wait for the initial ping response
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkConnectTimeout(XLinkHandler_t* handler, unsigned int timeoutMs);
+
+/**
  * @brief Puts device into bootloader mode
  * @param deviceDesc - device description structure, obtained from XLinkFind* functions call
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success

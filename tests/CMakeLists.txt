@@ -66,6 +66,10 @@ xlink_add_test(reset_reconnect_stress_test_connect_5s reset_reconnect_stress_tes
 # [rounds] [port] [connect_timeout_ms] [warmup_rounds] [sample_every_rounds] [rss_growth_limit_kib] [fd_growth_limit] [server_grace_ms] [timeout_ms]
 xlink_add_test(resource_cleanup_test_smoke resource_cleanup_test.cpp 50 11910 5000 10 10 24576 16 250 30000)
 
+# connect_failure_test.cpp:
+# [rounds] [base_port] [timeout_ms]
+xlink_add_test(connect_failure_test connect_failure_test.cpp 20 11930 30000)
+
 # rtt_test.cpp:
 # [timeout_ms]
 xlink_add_test(rtt_test rtt_test.cpp 15000)

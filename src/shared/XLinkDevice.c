@@ -237,8 +237,7 @@ XLinkError_t XLinkSearchForDevices(const deviceDesc_t in_deviceRequirements,
     return parsePlatformError(rc);
 }
 
-//Called only from app - per device
-XLinkError_t XLinkConnect(XLinkHandler_t* handler)
+XLinkError_t XLinkConnectTimeout(XLinkHandler_t* handler, unsigned int timeoutMs)
 {
     XLINK_RET_IF(handler == NULL);
     if (strnlen(handler->devicePath, MAX_PATH_LENGTH) < 2) {
@@ -278,7 +277,7 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     event.deviceHandle = link->deviceHandle;
     DispatcherAddEvent(EVENT_LOCAL, &event);
 
-    if (DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT)) {
+    if (DispatcherWaitEventComplete(&link->deviceHandle, timeoutMs)) {
         DispatcherClean(&link->deviceHandle);
         deallocateSession(handler);
         return X_LINK_TIMEOUT;
@@ -288,6 +287,12 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     link->hostClosedFD = 0;
     handler->linkId = link->id;
     return X_LINK_SUCCESS;
+}
+
+//Called only from app - per device
+XLinkError_t XLinkConnect(XLinkHandler_t* handler)
+{
+    return XLinkConnectTimeout(handler, XLINK_NO_RW_TIMEOUT);
 }
 
 

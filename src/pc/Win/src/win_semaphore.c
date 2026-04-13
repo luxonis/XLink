@@ -87,6 +87,25 @@ int sem_timedwait(sem_t *sem, const struct timespec *ts) {
     return 0;
 }
 
+int sem_timedwait_rel(sem_t *sem, unsigned int timeoutMs) {
+    if (sem == NULL || *sem == NULL) {
+        return ls_set_errno(EINVAL);
+    }
+
+    sem_t s = *sem;
+
+    DWORD waitMs = timeoutMs;
+    if (timeoutMs == (unsigned int)SEM_VALUE_MAX) {
+        waitMs = INFINITE;
+    }
+
+    if (WaitForSingleObject(s->handle, waitMs) != WAIT_OBJECT_0) {
+        return ls_set_errno(ETIMEDOUT);
+    }
+
+    return 0;
+}
+
 
 //Wait for a semaphore
 int sem_trywait(sem_t *sem){

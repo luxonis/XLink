@@ -243,6 +243,57 @@ int pthread_sem_timedwait(pthread_sem_t *psem, const struct timespec *abstime) {
     return pthread_sem_timed_or_blocked_wait(psem, abstime);
 }
 
+int pthread_sem_timedwait_rel(pthread_sem_t *psem, unsigned int timeoutMs) {
+    struct timespec reltime;
+    reltime.tv_sec = timeoutMs / 1000;
+    reltime.tv_nsec = (long)(timeoutMs % 1000) * 1000000L;
+
+    int result = 0;
+    if (NULL == psem) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (0 == *psem) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    struct pthread_sem_private_t *psem_private = (struct pthread_sem_private_t *)*psem;
+    result = pthread_mutex_lock(&psem_private->access);
+    if (result) {
+        errno = result;
+        return -1;
+    }
+
+    for (; psem_private->counter < 1;) {
+        psem_private->counter = -1;
+        result = pthread_cond_timedwait_relative_np(&psem_private->conditional, &psem_private->access, &reltime);
+        if (result != 0) {
+            break;
+        }
+    }
+
+    if (result) {
+        if (psem_private->counter == -1) {
+            psem_private->counter = 0;
+        }
+        pthread_mutex_unlock(&psem_private->access);
+        errno = result;
+        return -1;
+    }
+
+    psem_private->counter--;
+
+    result = pthread_mutex_unlock(&psem_private->access);
+    if (result) {
+        errno = result;
+        return -1;
+    }
+
+    errno = 0;
+    return 0;
+}
+
 int pthread_sem_trywait(pthread_sem_t *psem) {
     return pthread_sem_timed_or_blocked_wait(psem, NULL);
 }
@@ -266,6 +317,9 @@ int sem_trywait(sem_t *psem) {
 }
 int sem_timedwait(sem_t *psem, const struct timespec *abstime) {
     return pthread_sem_timedwait(psem, abstime);
+}
+int sem_timedwait_rel(sem_t *psem, unsigned int timeoutMs) {
+    return pthread_sem_timedwait_rel(psem, timeoutMs);
 }
 
 #endif

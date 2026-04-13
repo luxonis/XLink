@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
         clientThreads.emplace_back([&, i]() {
             std::string endpoint = testutils::makeEndpoint(basePort + i);
             XLinkHandler_t handler = testutils::makeTcpHandler(endpoint);
-            if (XLinkConnectWithTimeout(&handler, connectTimeoutMs) != X_LINK_TIMEOUT) {
+            if (XLinkConnectTimeout(&handler, connectTimeoutMs) != X_LINK_TIMEOUT) {
                 success.store(false);
             }
         });
