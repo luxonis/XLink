@@ -38,7 +38,6 @@ int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle);
 xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event);
 xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event, XLinkTimespec* outTime);
 int DispatcherWaitEventComplete(xLinkDeviceHandle_t *deviceHandle, unsigned int timeoutMs);
-int DispatcherWaitEventCompleteTimeout(xLinkDeviceHandle_t *deviceHandle, struct timespec abstime);
 
 char* TypeToStr(int type);
 int DispatcherUnblockEvent(eventId_t id,

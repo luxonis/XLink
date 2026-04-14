@@ -200,7 +200,7 @@ XLinkError_t XLinkResetRemote(XLinkHandler_t* handler);
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 
-XLinkError_t XLinkResetRemoteTimeout(XLinkHandler_t* handler, int timeoutMs);
+XLinkError_t XLinkResetRemoteTimeout(XLinkHandler_t* handler, unsigned int timeoutMs);
 
 /**
  * @brief Retrieves USB speed of certain connected device

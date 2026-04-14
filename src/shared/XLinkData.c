@@ -580,28 +580,6 @@ XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int t
     return addEventWithPerf_(event, opTime, timeoutMs, NULL);
 }
 
-XLinkError_t addEventTimeout(xLinkEvent_t *event, struct timespec abstime)
-{
-    ASSERT_XLINK(event);
-
-    xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, event);
-    if(ev == NULL) {
-        mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
-            TypeToStr(event->header.type), event->header.id, event->header.streamName);
-        return X_LINK_ERROR;
-    }
-
-    if (DispatcherWaitEventCompleteTimeout(&event->deviceHandle, abstime)) {
-        return X_LINK_TIMEOUT;
-    }
-
-    XLINK_RET_ERR_IF(
-        event->header.flags.bitField.ack != 1,
-        X_LINK_COMMUNICATION_FAIL);
-
-    return X_LINK_SUCCESS;
-}
-
 XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigned int msTimeout)
 {
     ASSERT_XLINK(opTime);
@@ -609,15 +587,7 @@ XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigne
     struct timespec start, end;
     clock_gettime(CLOCK_REALTIME, &start);
 
-    struct timespec absTimeout = start;
-    int64_t sec = msTimeout / 1000;
-    absTimeout.tv_sec += sec;
-    absTimeout.tv_nsec += (long)((msTimeout - (sec * 1000)) * 1000000);
-    int64_t secOver = absTimeout.tv_nsec / 1000000000;
-    absTimeout.tv_nsec -= (long)(secOver * 1000000000);
-    absTimeout.tv_sec += secOver;
-
-    int rc = addEventTimeout(event, absTimeout);
+    int rc = addEvent(event, msTimeout);
     if(rc != X_LINK_SUCCESS) return rc;
 
     clock_gettime(CLOCK_REALTIME, &end);
