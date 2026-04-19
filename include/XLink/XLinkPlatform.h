@@ -71,9 +71,6 @@ xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const cha
 xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol);
 xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite,
                          XLinkProtocol_t *protocol, void** fd);
-
-UsbSpeed_t get_usb_speed();
-const char* get_mx_serial();
 #endif // __DEVICE__
 
 xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHandle);

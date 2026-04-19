@@ -730,7 +730,12 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             response->header.type = XLINK_PING_RESP;
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->deviceHandle = event->deviceHandle;
-            sem_post(&pingSem);
+            {
+                xLinkDesc_t* link = getLinkFromDeviceHandle(&event->deviceHandle);
+                if (link == NULL || XLink_sem_post(&link->pingSem)) {
+                    mvLog(MVLOG_ERROR, "can't post ping semaphore\n");
+                }
+            }
             break;
         case XLINK_RESET_REQ:
             mvLog(MVLOG_DEBUG,"reset request - received! Sending ACK *****\n");

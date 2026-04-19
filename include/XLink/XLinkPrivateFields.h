@@ -22,7 +22,6 @@
 // ------------------------------------
 
 extern DispatcherControlFunctions controlFunctionTbl;
-extern sem_t  pingSem; //to b used by myriad
 
 // ------------------------------------
 // Global fields declaration. End.
@@ -65,6 +64,8 @@ typedef struct xLinkSchedulerState_t {
     int schedulerId;
     int queueProcPriority;
     pthread_mutex_t queueMutex;
+    pthread_mutex_t cleanMutex;
+    pthread_mutex_t resetMutex;
     XLink_sem_t addEventSem;
     XLink_sem_t notifyDispatcherSem;
     volatile uint32_t resetXLink;

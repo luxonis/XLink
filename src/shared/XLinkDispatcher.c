@@ -50,8 +50,6 @@
 DispatcherControlFunctions* glControlFunc;
 
 static pthread_mutex_t unique_id_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t clean_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_mutex_t reset_mutex = PTHREAD_MUTEX_INITIALIZER;
 // ------------------------------------
 // Global fields declaration. End.
 // ------------------------------------
@@ -185,6 +183,17 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     }
     if (pthread_mutex_init(&(curr->queueMutex), NULL) != 0) {
         perror("pthread_mutex_init error");
+        return -1;
+    }
+    if (pthread_mutex_init(&(curr->cleanMutex), NULL) != 0) {
+        perror("pthread_mutex_init error");
+        pthread_mutex_destroy(&(curr->queueMutex));
+        return -1;
+    }
+    if (pthread_mutex_init(&(curr->resetMutex), NULL) != 0) {
+        perror("pthread_mutex_init error");
+        pthread_mutex_destroy(&(curr->cleanMutex));
+        pthread_mutex_destroy(&(curr->queueMutex));
         return -1;
     }
     if (XLink_sem_init(&curr->notifyDispatcherSem, 0, 0)) {
@@ -845,10 +854,10 @@ static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr)
 
 static int dispatcherClean(xLinkSchedulerState_t* curr)
 {
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&clean_mutex), 1);
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->cleanMutex), 1);
     if (curr->schedulerId == -1) {
         mvLog(MVLOG_WARN,"Scheduler has already been reset or cleaned");
-        if(pthread_mutex_unlock(&clean_mutex) != 0) {
+        if(pthread_mutex_unlock(&curr->cleanMutex) != 0) {
             mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex");
         }
 
@@ -890,7 +899,7 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
 
     mvLog(MVLOG_INFO, "Clean Dispatcher Successfully...");
-    if(pthread_mutex_unlock(&clean_mutex) != 0) {
+    if(pthread_mutex_unlock(&curr->cleanMutex) != 0) {
         mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
     }
     XLINK_RET_ERR_IF(pthread_mutex_destroy(&(curr->queueMutex)) != 0, 1);
@@ -899,7 +908,7 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
 
 static int dispatcherDeviceFdDown(xLinkSchedulerState_t* curr){
     ASSERT_XLINK(curr != NULL);
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&reset_mutex), 1);
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->resetMutex), 1);
     int ret = 0;
 
     if (curr->dispatcherDeviceFdDown == 0) {
@@ -912,7 +921,7 @@ static int dispatcherDeviceFdDown(xLinkSchedulerState_t* curr){
         ret = 1;
     }
 
-    if(pthread_mutex_unlock(&reset_mutex) != 0) {
+    if(pthread_mutex_unlock(&curr->resetMutex) != 0) {
         mvLog(MVLOG_ERROR, "Failed to unlock reset_mutex");
         ret = 1;
     }
@@ -924,10 +933,10 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
 {
     ASSERT_XLINK(curr != NULL);
 
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&reset_mutex), 1);
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->resetMutex), 1);
     if (curr->dispatcherLinkDown == 1) {
         mvLog(MVLOG_WARN,"Scheduler has already been reset");
-        if(pthread_mutex_unlock(&reset_mutex) != 0) {
+        if(pthread_mutex_unlock(&curr->resetMutex) != 0) {
             mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex");
         }
 
@@ -951,11 +960,10 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
 
     mvLog(MVLOG_DEBUG,"Reset Successfully\n");
 
-    if(pthread_mutex_unlock(&reset_mutex) != 0) {
+    if(pthread_mutex_unlock(&curr->resetMutex) != 0) {
         mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
         return 1;
     }
-
     return 0;
 }
 

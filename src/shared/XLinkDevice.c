@@ -31,7 +31,6 @@
 
 #include "tcpip_host.h"
 
-sem_t  pingSem; //to b used by myriad
 DispatcherControlFunctions controlFunctionTbl;
 
 
@@ -69,9 +68,6 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
 
     ASSERT_XLINK(XLINK_MAX_STREAMS <= MAX_POOLS_ALLOC);
     XLinkGlobalHandlerAssign(globalHandler);
-    if (sem_init(&pingSem,0,0)) {
-        mvLog(MVLOG_ERROR, "Can't create semaphore\n");
-    }
     int i;
 
     xLinkPlatformErrorCode_t init_status = XLinkPlatformInit(globalHandler);
@@ -181,8 +177,10 @@ XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
     }
 
     // Wait till client pings
-    while(((sem_wait(&pingSem) == -1) && errno == EINTR))
-        continue;
+    if (XLink_sem_wait(&link->pingSem)) {
+        deallocateSession(handler);
+        return X_LINK_ERROR;
+    }
 
     link->peerState = XLINK_UP;
     link->hostClosedFD = 0;
@@ -440,16 +438,6 @@ XLinkError_t XLinkGetProfilingData(XLinkHandler_t* handler, XLinkProf_t* prof)
     return X_LINK_SUCCESS;
 }
 
-UsbSpeed_t XLinkGetUSBSpeed(XLinkHandler_t* handler){
-    xLinkDesc_t* link = getLink(handler);
-    return link->usbConnSpeed;
-}
-
-const char* XLinkGetMxSerial(XLinkHandler_t* handler){
-    xLinkDesc_t* link = getLink(handler);
-    return link->mxSerialId;
-}
-
 // ------------------------------------
 // API implementation. End.
 // ------------------------------------
@@ -468,13 +456,21 @@ xLinkDesc_t* allocateSession(XLinkHandler_t* handler) {
     session->linkDownCallback = handler->linkDownCallback;
     session->linkDownCallbackContext = handler->linkDownCallbackContext;
 
-    if (XLink_sem_init(&link->dispatcherClosedSem, 0 ,0)) {
+    if (XLink_sem_init(&link->pingSem, 0, 0)) {
         mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
         free(session);
         return NULL;
     }
 
+    if (XLink_sem_init(&link->dispatcherClosedSem, 0 ,0)) {
+        mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
+        XLink_sem_destroy(&link->pingSem);
+        free(session);
+        return NULL;
+    }
+
     if (pthread_mutex_lock(&link_id_mutex) != 0) {
+        XLink_sem_destroy(&link->pingSem);
         XLink_sem_destroy(&link->dispatcherClosedSem);
         free(session);
         return NULL;
@@ -482,6 +478,7 @@ xLinkDesc_t* allocateSession(XLinkHandler_t* handler) {
     link->id = nextLinkId;
     nextLinkId = (linkId_t)((nextLinkId + 1u) % INVALID_LINK_ID);
     if (pthread_mutex_unlock(&link_id_mutex) != 0) {
+        XLink_sem_destroy(&link->pingSem);
         XLink_sem_destroy(&link->dispatcherClosedSem);
         free(session);
         return NULL;
@@ -504,6 +501,10 @@ void deallocateSession(XLinkHandler_t* handler) {
         return;
     }
     xLinkDesc_t* link = &session->link;
+
+    if (XLink_sem_destroy(&link->pingSem)) {
+        mvLog(MVLOG_ERROR, "Cannot destroy semaphore\n");
+    }
 
     if (XLink_sem_destroy(&link->dispatcherClosedSem)) {
         mvLog(MVLOG_ERROR, "Cannot destroy semaphore\n");

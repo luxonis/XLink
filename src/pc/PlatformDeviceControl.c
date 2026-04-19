@@ -37,8 +37,6 @@ int usbGateFdRead = -1;
 #define UNUSED __attribute__((unused))
 
 
-static UsbSpeed_t usb_speed_enum = X_LINK_USB_SPEED_UNKNOWN;
-static char mx_serial[XLINK_MAX_MX_ID_SIZE] = { 0 };
 #ifdef USE_USB_VSC
 static const int statuswaittimeout = 5;
 #endif
@@ -292,32 +290,6 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
 // ------------------------------------
 // XLinkPlatform API implementation. End.
 // ------------------------------------
-
-/**
- * getter to obtain the connected usb speed which was stored by
- * usb_find_device_with_bcd() during XLinkconnect().
- * @note:
- *  getter will return empty or different value
- *  if called before XLinkConnect.
- */
-UsbSpeed_t get_usb_speed(){
-    return usb_speed_enum;
-}
-
-/**
- * getter to obtain the Mx serial id which was received by
- * usb_find_device_with_bcd() during XLinkconnect().
- * @note:
- *  getter will return empty or different value
- *  if called before XLinkConnect.
- */
-const char* get_mx_serial(){
-    #ifdef USE_USB_VSC
-        return mx_serial;
-    #else
-        return "UNKNOWN";
-    #endif
-}
 
 // ------------------------------------
 // Helpers implementation. End.

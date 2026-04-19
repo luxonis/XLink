@@ -203,18 +203,6 @@ XLinkError_t XLinkResetRemote(XLinkHandler_t* handler);
 XLinkError_t XLinkResetRemoteTimeout(XLinkHandler_t* handler, unsigned int timeoutMs);
 
 /**
- * @brief Retrieves USB speed of certain connected device
- * @return UsbSpeed_t enum describing the usb connection speed
- */
-UsbSpeed_t XLinkGetUSBSpeed(XLinkHandler_t* handler);
-
-/**
- * @brief Returns mx serial of current connected device
- * @return pointer to mx serial string
- */
-const char* XLinkGetMxSerial(XLinkHandler_t* handler);
-
-/**
  * @brief Returns enum string value
  * @return Pointer to null terminated string
  */

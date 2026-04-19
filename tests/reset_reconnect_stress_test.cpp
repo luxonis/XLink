@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -44,10 +45,14 @@ struct StressConfig {
     int timeoutMs = kDefaultTimeoutMs;
 };
 
-struct ServerState {
+struct RoundState {
     std::mutex mutex;
     std::condition_variable cv;
     bool linkDown = false;
+    bool readComplete = false;
+};
+
+struct ConnectionState {
     std::atomic<int> round{-1};
     std::atomic<int> progress{0};
 };
@@ -121,10 +126,15 @@ int main(int argc, char** argv) {
     std::atomic<bool> success{true};
     std::array<std::atomic<int>, kNumConnections> clientRounds{};
     std::array<std::atomic<int>, kNumConnections> clientProgress{};
-    std::array<ServerState, kNumConnections> serverStates;
+    std::array<ConnectionState, kNumConnections> connectionStates;
+    std::array<std::vector<std::shared_ptr<RoundState>>, kNumConnections> roundStates;
     for (int i = 0; i < kNumConnections; ++i) {
         clientRounds[i].store(-1);
         clientProgress[i].store(0);
+        roundStates[i].reserve(cfg.rounds);
+        for (int round = 0; round < cfg.rounds; ++round) {
+            roundStates[i].push_back(std::make_shared<RoundState>());
+        }
     }
 
     std::vector<std::thread> serverThreads;
@@ -133,16 +143,13 @@ int main(int argc, char** argv) {
         serverThreads.emplace_back([&, connection]() {
             std::string endpoint = endpoints[connection];
             for (int round = 0; round < cfg.rounds && success.load(); ++round) {
-                serverStates[connection].round.store(round);
-                serverStates[connection].progress.fetch_add(1);
-                {
-                    std::lock_guard<std::mutex> lock(serverStates[connection].mutex);
-                    serverStates[connection].linkDown = false;
-                }
+                connectionStates[connection].round.store(round);
+                connectionStates[connection].progress.fetch_add(1);
+                auto roundState = roundStates[connection][round];
 
                 XLinkHandler_t handler = testutils::makeTcpHandler(endpoint);
                 handler.linkDownCallback = [](void* context) {
-                    auto* state = static_cast<ServerState*>(context);
+                    auto* state = static_cast<RoundState*>(context);
                     if (state == nullptr) {
                         return;
                     }
@@ -152,20 +159,20 @@ int main(int argc, char** argv) {
                     }
                     state->cv.notify_all();
                 };
-                handler.linkDownCallbackContext = &serverStates[connection];
+                handler.linkDownCallbackContext = roundState.get();
                 const auto serverStatus = XLinkServerOnly(&handler);
                 if (serverStatus != X_LINK_SUCCESS) {
                     fail(success, "server", connection, round, "server start failed", serverStatus);
                     return;
                 }
-                serverStates[connection].progress.fetch_add(1);
+                connectionStates[connection].progress.fetch_add(1);
 
                 const auto stream = XLinkOpenStream(&handler, kStreamName, cfg.streamSize);
                 if (stream == INVALID_STREAM_ID) {
                     fail(success, "server", connection, round, "open stream failed");
                     return;
                 }
-                serverStates[connection].progress.fetch_add(1);
+                connectionStates[connection].progress.fetch_add(1);
 
                 for (int writeIdx = 0; writeIdx < cfg.writeRepeatCount; ++writeIdx) {
                     streamPacketDesc_t packet = {};
@@ -176,23 +183,28 @@ int main(int argc, char** argv) {
                     }
 
                     const bool payloadMatches = packet.length == cfg.payloadSize;
-                    XLinkDeallocateMoveData(packet.data, packet.length);
                     if (!payloadMatches) {
                         fail(success, "server", connection, round, "unexpected payload length");
                         return;
                     }
+                    XLinkDeallocateMoveData(packet.data, packet.length);
                 }
-                serverStates[connection].progress.fetch_add(1);
+                connectionStates[connection].progress.fetch_add(1);
+                {
+                    std::lock_guard<std::mutex> lock(roundState->mutex);
+                    roundState->readComplete = true;
+                }
+                roundState->cv.notify_all();
 
-                std::unique_lock<std::mutex> lock(serverStates[connection].mutex);
-                const bool linkDown = serverStates[connection].cv.wait_for(lock,
+                std::unique_lock<std::mutex> lock(roundState->mutex);
+                const bool linkDown = roundState->cv.wait_for(lock,
                     std::chrono::milliseconds(cfg.serverHangTimeoutMs),
-                    [&]() { return serverStates[connection].linkDown; });
+                    [&]() { return roundState->linkDown; });
                 if (!linkDown) {
                     fail(success, "server", connection, round, "timed out waiting for link-down");
                     return;
                 }
-                serverStates[connection].progress.fetch_add(1);
+                connectionStates[connection].progress.fetch_add(1);
             }
         });
     }
@@ -235,6 +247,7 @@ int main(int argc, char** argv) {
                 clientRounds[connection].store(round);
                 clientProgress[connection].fetch_add(1);
                 fuzzSleep(rngState, cfg.maxJitterMs);
+                auto roundState = roundStates[connection][round];
 
                 XLinkHandler_t handler = testutils::makeTcpHandler(endpoint);
                 XLinkError_t connectStatus = X_LINK_ERROR;
@@ -269,6 +282,17 @@ int main(int argc, char** argv) {
                 }
                 clientProgress[connection].fetch_add(1);
                 fuzzSleep(rngState, cfg.maxJitterMs);
+                {
+                    std::unique_lock<std::mutex> lock(roundState->mutex);
+                    const bool readComplete = roundState->cv.wait_for(
+                        lock,
+                        std::chrono::milliseconds(cfg.serverHangTimeoutMs),
+                        [&]() { return roundState->readComplete; });
+                    if (!readComplete) {
+                        fail(success, "client", connection, round, "timed out waiting for server read completion");
+                        return;
+                    }
+                }
 
                 const auto resetStatus = XLinkResetRemote(&handler);
                 if (resetStatus != X_LINK_SUCCESS) {
