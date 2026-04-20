@@ -851,6 +851,11 @@ int usb_boot(const char *addr, const void *mvcmd, unsigned size)
 {
     using namespace std::chrono;
 
+    // Discovery also opens the unbooted device and exchanges bulk packets to
+    // retrieve the MXID. Serialize boot against enumeration to avoid
+    // overlapping transactions on the same interface.
+    std::lock_guard<std::mutex> l(mutex);
+
     int rc = 0;
     uint8_t endpoint;
 
