@@ -40,6 +40,10 @@
 #include <fcntl.h>
 #endif
 
+// libusb exposes the USB topology as "bus + port chain". XLink uses that
+// topology-derived string as the stable-enough device name on desktop hosts.
+// Seven levels is an arbitrary practical cap for libusb_get_port_numbers().
+// If a deeper topology appears, getLibusbDevicePath() returns "<error>".
 constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
 static const int MX_ID_TIMEOUT_MS = 100;
@@ -47,17 +51,26 @@ static const int MX_ID_NOPS_TIMEOUT_MS = 500;
 
 static constexpr auto DEFAULT_OPEN_TIMEOUT = std::chrono::seconds(5);
 static constexpr auto DEFAULT_WRITE_TIMEOUT = 2000;
+// Currently unused in this file. It is kept here as part of the read/write
+// timeout group, but dead constants like this make it harder to tell which
+// timeout is actually in force.
 static constexpr auto DEFAULT_READ_TIMEOUT = 2000;
 static constexpr std::chrono::milliseconds DEFAULT_CONNECT_TIMEOUT{20000};
 static constexpr std::chrono::milliseconds DEFAULT_SEND_FILE_TIMEOUT{10000};
+// FunctionFS server-side transfers use plain read()/write() instead of libusb.
+// The chunk size is intentionally large to reduce syscall count.
 static constexpr size_t SERVER_CHUNKSZ = 15 * 1024 * 1024;
 static constexpr auto USB1_CHUNKSZ = 64;
 
+// Legacy Myriad/VSC path: interface 0 with the classic IN/OUT bulk endpoints.
 static constexpr int USB_VSC_INTERFACE = 0;
 static constexpr int USB_VSC_ENDPOINT_IN = 0x81;
 static constexpr int USB_VSC_ENDPOINT_OUT = 0x01;
 
-// TBD could be taken from the USB descriptor, based on strings
+// RVC USB-EP path: these are currently hard-coded interface and endpoint
+// numbers. That makes the code simple, but also fragile: if firmware changes
+// the descriptor layout, this host code silently stops working. Long term this
+// should be discovered from the active descriptor rather than encoded here.
 static constexpr int USB_EP_INTERFACE_GATE = 2;
 static constexpr int USB_EP_INTERFACE_DEVICE = 3;
 static constexpr int USB_EP_ENDPOINT_GATE_IN = 0x83;
@@ -70,6 +83,15 @@ static constexpr int XLINK_USB_DATA_TIMEOUT = 0;
 static unsigned int bulk_chunklen = DEFAULT_CHUNKSZ;
 static int write_timeout = DEFAULT_WRITE_TIMEOUT;
 static int initialized;
+// This flag chooses between two completely different I/O backends in
+// usbPlatformRead()/usbPlatformWrite():
+// - false: libusb client mode, per-link handle looked up from fdKey
+// - true:  FunctionFS server mode, process-global file descriptors
+//
+// This is convenient for the current examples, but it is also a correctness
+// risk: the flag is global to the whole process, not scoped per link. If one
+// USB server and one USB client coexist, whichever path sets isServer last will
+// affect all USB read/write calls.
 static std::atomic<bool> isServer { false };
 
 struct UsbSetupPacket {
@@ -117,6 +139,12 @@ struct pair_hash {
     }
 };
 
+// First-pass classification from VID/PID alone.
+//
+// For Myriad devices the VID/PID already implies the externally visible XLink
+// state. For RVC devices that is not true; 0x05C6:0x901d only tells us "this is
+// a gate-capable USB device", so later code must query the gate interface to
+// obtain the real state/platform/protocol.
 static std::unordered_map<VidPid, XLinkDeviceState_t, pair_hash> vidPidToDeviceState = {
     {{0x03E7, 0x2485}, X_LINK_UNBOOTED},
     {{0x03E7, 0xf63b}, X_LINK_BOOTED},
@@ -150,7 +178,9 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
                                                      unsigned int *out_amountOfFoundDevices) {
 
-    // Also protects usb_mx_id_cache
+    // One coarse-grained mutex protects libusb enumeration and the MX ID cache.
+    // That keeps the implementation simple, but it also serializes all USB
+    // discovery work in the process.
     std::lock_guard<std::mutex> l(mutex);
 
     // Get list of usb devices
@@ -184,14 +214,21 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
         VidPid vidpid{desc.idVendor, desc.idProduct};
 
         if(vidPidToDeviceState.count(vidpid) > 0){
-            // Device found
+            // We only consider devices whose VID/PID is known to XLink.
+            // Everything else is ignored even if it happens to speak a
+            // compatible protocol.
 
             // Device status
             XLinkError_t status = X_LINK_SUCCESS;
 
-            // Get device state
+            // First-pass state from VID/PID.
+            // For RVC this is only a placeholder ("gate"), not the final state.
             XLinkDeviceState_t state = vidPidToDeviceState.at(vidpid);
-            // Check if compare with state
+            // Early state filtering works for legacy Myriad devices, but it is
+            // subtly wrong for RVC devices because their real state is only
+            // available after getLibusbDeviceGateResponse(). A search for
+            // X_LINK_BOOTED RVC devices will be rejected here while state is
+            // still X_LINK_GATE.
             if(in_deviceRequirements.state != X_LINK_ANY_STATE && state != in_deviceRequirements.state){
                 // Current device doesn't match the "filter"
                 continue;
@@ -213,7 +250,9 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
             XLinkProtocol_t protocol = X_LINK_USB_VSC;
             std::string mxId;
 
-            // Check for RVC3 and RVC4 first
+            // RVC devices expose an extra "gate" channel that reports the real
+            // platform/protocol/state. We use that when the VID/PID says "gate"
+            // or when the caller explicitly asks for an RVC platform.
             if(state == X_LINK_GATE || in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4){
                 if(!libusbDeviceHasInterface(devs[i], USB_EP_INTERFACE_GATE)) {
                     // This may be the case on Windows with WinUSB, separate devices created for each interface
@@ -226,12 +265,17 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                     continue;
                 }
 
+                // Gate protocol currently uses "4" for RVC4 and everything else
+                // is treated as RVC3. That fallback is permissive but unsafe:
+                // an unexpected platform value is silently reclassified as RVC3.
                 if (gateResponse.platform == 4){
                     platform = X_LINK_RVC4;
                 } else {
                     platform = X_LINK_RVC3;
                 }
 
+                // The protocol and state now come from firmware rather than
+                // from the desktop-side VID/PID table.
                 protocol = (XLinkProtocol_t)gateResponse.protocol;
                 state = (XLinkDeviceState_t)gateResponse.state;
 
@@ -299,6 +343,10 @@ extern "C" xLinkPlatformErrorCode_t refLibusbDeviceByName(const char* name, libu
 }
 
 static xLinkPlatformErrorCode_t refLibusbDeviceByNameWithInterface(const char* name, int interfaceNumber, libusb_device** pdev) {
+    // This helper re-enumerates the entire USB bus and matches against the
+    // synthetic XLink device path ("bus.port.port..."). It does not reuse a
+    // discovery snapshot, so callers should expect topology changes between
+    // discovery and open.
     // Get list of usb devices
     static libusb_device **devs = NULL;
     auto numDevices = libusb_get_device_list(context, &devs);
@@ -345,6 +393,12 @@ std::string getLibusbDevicePath(libusb_device *dev) {
 
     std::string devicePath = "";
 
+    // Compose the human-visible XLink USB path as:
+    //   <bus>.<port>[.<port>...]
+    // Example: "1.4.2"
+    //
+    // This is not a USB serial number. It changes if the device is moved to a
+    // different physical port or if hubs are rearranged.
     // Add bus number
     uint8_t bus = libusb_get_bus_number(dev);
     devicePath += std::to_string(bus) + ".";
@@ -371,6 +425,10 @@ std::string getLibusbDevicePath(libusb_device *dev) {
 }
 
 static bool libusbDeviceHasInterface(libusb_device* dev, int interfaceNumber) {
+    // We inspect the active descriptor tree rather than assuming that every
+    // matching VID/PID exposes every interface. That matters for the new gate
+    // path and for Windows setups where interfaces may be split into separate
+    // driver-visible entities.
     if(dev == nullptr) {
         return false;
     }
@@ -409,6 +467,9 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
     bool found = usb_mx_id_cache_get_entry(devicePath.c_str(), mxId);
 
     if(found){
+        // MX ID reads are slow and involve actual device I/O, so we cache them
+        // by topology path. That optimization is helpful, but it also means the
+        // cache is only as stable as the bus/port path itself.
         mvLog(MVLOG_DEBUG, "Found cached MX ID: %s", mxId);
         outMxId = std::string(mxId);
         return LIBUSB_SUCCESS;
@@ -453,7 +514,9 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 }
             }
 
-            // if UNBOOTED state, perform mx_id retrieval procedure using small program and a read command
+            // Unbooted Myriad devices do not yet expose a string descriptor with
+            // the MX ID. The host uploads a small payload, asks the device to
+            // return the value, then parses the response.
             if(state == X_LINK_UNBOOTED){
 
                 // Get configuration first (From OS cache)
@@ -497,9 +560,9 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 const int send_ep = 0x01;
                 int transferred = 0;
 
-                // ///////////////////////
-                // Start
-                // If first attempt was unsuccessful, try sending NOPs to clear out potential bad state
+                // If the previous attempt may have left the device in a partial
+                // command state, blast a large NOP buffer first. This is a
+                // recovery heuristic, not a protocol guarantee.
                 if (tryCount > 1) {
                     int size = 256 * 1024 + 16;
                     uint8_t *nops = (uint8_t *)calloc(size, 1);
@@ -520,7 +583,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 }
 
                 mvLog(MVLOG_DEBUG, "Sending MXID read to %s, try %d\n", devicePath.c_str(), tryCount);
-                // WD Protection & MXID Retrieval Command
+                // Write the MX ID retrieval program / command block.
                 transferred = 0;
                 libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload()), usb_mx_id_get_payload_size(), &transferred, MX_ID_TIMEOUT_MS);
                 if (libusb_rc < 0 || usb_mx_id_get_payload_size() != transferred) {
@@ -532,7 +595,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                     continue;
                 }
 
-                // MXID Read
+                // Read back the raw 9-byte MX ID payload.
                 const int recv_ep = 0x81;
                 const int expectedMxIdReadSize = 9;
                 uint8_t rbuf[128];
@@ -547,7 +610,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                     continue;
                 }
 
-                // WD Protection end
+                // Finish the watchdog-protection exchange.
                 transferred = 0;
                 libusb_rc = libusb_bulk_transfer(handle, send_ep, ((uint8_t*) usb_mx_id_get_payload_end()), usb_mx_id_get_payload_end_size(), &transferred, MX_ID_TIMEOUT_MS);
                 if (libusb_rc < 0 || usb_mx_id_get_payload_end_size() != transferred) {
@@ -565,8 +628,11 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 // ignore error as it doesn't matter
                 libusb_release_interface(handle, 0);
 
-                // Parse mxId into HEX presentation
-                // There's a bug, it should be 0x0F, but setting as in MDK
+                // Convert the returned bytes into ASCII hex.
+                // The nibble mask is intentionally odd to preserve historical
+                // behavior; the comment below documents that the "correct" mask
+                // would be 0x0F. This is a project compatibility quirk, not a
+                // normal parsing rule.
                 rbuf[8] &= 0xF0;
 
                 // Convert to HEX presentation and store into mx_id
@@ -579,6 +645,9 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
             } else {
 
+                // Booted legacy devices expose the identifier directly as a USB
+                // string descriptor, which is much simpler than the unbooted
+                // upload/read sequence above.
                 if( (libusb_rc = libusb_get_string_descriptor_ascii(handle, pDesc->iSerialNumber, ((uint8_t*) mxId), sizeof(mxId))) < 0){
                     mvLog(MVLOG_WARN, "Failed to get string descriptor");
 
@@ -632,6 +701,15 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 }
 
 static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* pDesc, libusb_device *dev, GateResponse& outGateResponse, std::string& outSerial) {
+    // The gate interface is the discovery control plane for RVC USB devices.
+    // We send a small request, read a response header, then read the payload
+    // consisting of:
+    //   [serial bytes][GateResponse struct]
+    //
+    // A few caveats in the current implementation:
+    // - pDesc is unused.
+    // - the function assumes the payload layout is exactly as above.
+    // - RequestSize is trusted without bounds checks before allocating a buffer.
     GateResponse gateResponse = {0};
     std::string serial = "";
 
@@ -643,12 +721,16 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
         return (libusb_error) libusb_rc;
     }
 
+    // We claim only the gate interface here; data traffic goes through a
+    // different interface later if the selected protocol is USB_EP.
     libusb_rc = libusb_claim_interface(handle, USB_EP_INTERFACE_GATE);
     if (libusb_rc != 0){
         libusb_close(handle);
         return (libusb_error) libusb_rc;
     }
 
+    // Request number 12 is a firmware contract, not self-describing protocol.
+    // Without shared documentation this looks like a magic number because it is.
     USBGateRequest usbGateRequest = {12, 0};
 
     int transferred = 0;
@@ -674,7 +756,10 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
         return (libusb_error) libusb_rc;
     }
 
-
+    // The payload is split into a variable-length serial string followed by the
+    // fixed GateResponse struct. No validation is done here to ensure
+    // RequestSize >= sizeof(GateResponse); if firmware returns a smaller value,
+    // the subtraction underflows and the memcpy below reads invalid memory.
     size_t serialStrLen = usbGateResponse.RequestSize - sizeof(GateResponse);
     serial.resize(serialStrLen + 1);
     for (int i = 0; i < serialStrLen; ++i) {
@@ -755,6 +840,9 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
     // Set to auto detach & reattach kernel driver, and ignore result (success or not supported)
     libusb_set_auto_detach_kernel_driver(h, 1);
 
+    // Interface claiming is protocol-specific:
+    // - USB_VSC / USB_CDC use interface 0
+    // - USB_EP uses the dedicated device/data interface
     if(protocol == X_LINK_USB_EP){
         if((res = libusb_claim_interface(h, USB_EP_INTERFACE_DEVICE)) < 0){
             mvLog(MVLOG_DEBUG, "claiming interface %d failed: %s\n", USB_EP_INTERFACE_DEVICE, xlink_libusb_strerror(res));
@@ -775,6 +863,11 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
         libusb_close(h);
         return (libusb_error) res;
     }
+    // Endpoint enumeration below still inspects cdesc->interface[0], i.e. the
+    // first interface descriptor, even when protocol == X_LINK_USB_EP and we
+    // just claimed interface 3 above. Today the returned "endpoint" is only
+    // used by the legacy boot path, so this mismatch is mostly latent, but it
+    // makes the helper misleading and easy to misuse in future changes.
     ifdesc = cdesc->interface->altsetting;
     for(int i=0; i<ifdesc->bNumEndpoints; i++)
     {
@@ -933,6 +1026,9 @@ xLinkPlatformErrorCode_t usbLinkOpen(XLinkProtocol_t protocol, const char *path,
     libusb_device *dev = nullptr;
     bool found = false;
 
+    // Device discovery and open are intentionally separated: the caller passes
+    // the synthetic USB path, and we keep polling until that path reappears.
+    // This helps after firmware reboot / re-enumeration.
     auto t1 = steady_clock::now();
     do {
         auto refRc = X_LINK_PLATFORM_ERROR;
@@ -1013,7 +1109,7 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
 
 void usbLinkClose(XLinkProtocol_t protocol, libusb_device_handle *f)
 {
-
+    // Close the same interface we claimed in usb_open_device().
     if (protocol == X_LINK_USB_EP){
         libusb_release_interface(f, USB_EP_INTERFACE_DEVICE);
     } else {
@@ -1028,6 +1124,10 @@ extern int usbFdRead;
 int usbPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd)
 {
 #if defined(__unix__)
+    // Server mode talks to Linux FunctionFS endpoints directly, not through
+    // libusb. The caller-supplied paths are currently ignored and hard-coded
+    // endpoint files are opened instead. That is functional for one specific
+    // deployment layout, but it makes the API misleading and non-portable.
     // FIXME: get this info from the caller, don't hardcode here
     int outfd = open("/dev/usb-ffs/device/ep1", O_WRONLY);
     int infd = open("/dev/usb-ffs/device/ep2", O_RDONLY);
@@ -1039,6 +1139,8 @@ int usbPlatformServer(const char *devPathRead, const char *devPathWrite, void **
     usbFdRead = infd;
     usbFdWrite = outfd;
 
+    // This flips the whole process into "server I/O mode" for subsequent
+    // usbPlatformRead()/usbPlatformWrite() calls.
     isServer = true;
  
     *fd = createPlatformDeviceFdKey((void*) (uintptr_t) usbFdRead);
@@ -1153,6 +1255,7 @@ int usbPlatformConnect(XLinkProtocol_t protocol, const char *devPathRead, const 
     // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
     *fd = createPlatformDeviceFdKey(usbHandle);
 
+    // Any successful client connect forces the global I/O path back to libusb.
     isServer = false;
 #endif  /*USE_USB_VSC*/
 
@@ -1192,6 +1295,10 @@ int usbPlatformClose(XLinkProtocol_t protocol, void *fdKey)
     }
 
 #endif  /*USE_USB_VSC*/
+    // Historical behavior appears to be "negative means closed / done", but the
+    // surrounding platform layer generally treats 0 as success. Returning -1 on
+    // the success path is surprising and makes this function harder to reason
+    // about than necessary.
     return -1;
 }
 
@@ -1212,6 +1319,8 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 
 int usb_read(libusb_device_handle *f, void *data, size_t size, uint8_t ep)
 {
+    // Simple "read exactly N bytes" helper for bulk endpoints. A timeout of 0
+    // means libusb waits indefinitely, so higher layers must ensure progress.
     const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
     {
@@ -1229,6 +1338,7 @@ int usb_read(libusb_device_handle *f, void *data, size_t size, uint8_t ep)
 
 int usb_write(libusb_device_handle *f, const void *data, size_t size, uint8_t ep)
 {
+    // Mirror of usb_read(): write exactly N bytes in DEFAULT_CHUNKSZ pieces.
     const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
     {
@@ -1246,6 +1356,8 @@ int usb_write(libusb_device_handle *f, const void *data, size_t size, uint8_t ep
 
 #if defined(__unix__)
 static int usb_server_read(int fd, void* data, int size) {
+    // FunctionFS server-side "read exactly N bytes". Unlike the libusb path,
+    // this uses plain POSIX file descriptors that were opened in usbPlatformServer().
     size_t totalRead = 0;
     auto* readPtr = static_cast<char*>(data);
     const size_t readSize = static_cast<size_t>(size);
@@ -1263,6 +1375,7 @@ static int usb_server_read(int fd, void* data, int size) {
 }
 
 static int usb_server_write(int fd, const void* data, int size) {
+    // FunctionFS server-side "write exactly N bytes".
     size_t totalWritten = 0;
     const auto* writePtr = static_cast<const char*>(data);
     const size_t writeSize = static_cast<size_t>(size);
@@ -1321,6 +1434,9 @@ int usbPlatformRead(XLinkProtocol_t protocol, void* fdKey, void* data, int size)
 #endif  /*USE_LINK_JTAG*/
 #else
 
+    // Current design picks the transport backend from the global isServer flag
+    // instead of from fdKey or protocol. That means the backend decision is not
+    // tied to the specific link being read.
     if(isServer){
 #if defined(__unix__)
         rc = usb_server_read(usbFdRead, data, size);
@@ -1389,6 +1505,7 @@ int usbPlatformWrite(XLinkProtocol_t protocol, void *fdKey, void *data, int size
 #endif  /*USE_LINK_JTAG*/
 #else
 
+    // Same global backend selection issue as usbPlatformRead().
     if(isServer){
 #if defined(__unix__)
         rc = usb_server_write(usbFdWrite, data, size);
@@ -1429,6 +1546,9 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
         return rc;
     }
 
+    // This helper opens, claims, transfers, and closes on every call. That is
+    // simple and stateless, but more expensive than keeping a persistent gate
+    // handle if call frequency grows.
     libusb_device_handle *gate_dev_handle;
     libusb_open(gate_dev, &gate_dev_handle);
     if (gate_dev_handle == NULL) {
@@ -1446,9 +1566,10 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
         return rc;
     }
     
+    // dev is unused; it can be removed without changing behavior.
     libusb_device* dev = libusb_get_device(gate_dev_handle);
 
-    /* Now we claim our ffs interfaces */
+    /* Now we claim our gate interface */
     rc = libusb_claim_interface(gate_dev_handle, USB_EP_INTERFACE_GATE);
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
@@ -1456,6 +1577,11 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
         return rc;
     }
 
+    // The "transferred" out-parameter is currently aliased onto rc itself.
+    // libusb writes the byte count there before returning a status code, so the
+    // variable serves two unrelated purposes in one expression. It works only
+    // because the status code is then assigned back into rc. This is legal but
+    // unnecessarily opaque.
     rc = libusb_bulk_transfer(gate_dev_handle, USB_EP_ENDPOINT_GATE_IN, (unsigned char*)data, size, &rc, timeout);
     
     libusb_close(gate_dev_handle);
@@ -1479,6 +1605,7 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
         return rc;
     }
 
+    // Same open/claim/transfer/close lifecycle as usbPlatformGateRead().
     libusb_device_handle *gate_dev_handle;
     libusb_open(gate_dev, &gate_dev_handle);
     if (gate_dev_handle == NULL) {
@@ -1496,9 +1623,10 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
         return rc;
     }
     
+    // dev is unused; it can be removed without changing behavior.
     libusb_device* dev = libusb_get_device(gate_dev_handle);
 
-    /* Now we claim our ffs interfaces */
+    /* Now we claim our gate interface */
     rc = libusb_claim_interface(gate_dev_handle, USB_EP_INTERFACE_GATE);
     if (rc != LIBUSB_SUCCESS) {
         libusb_close(gate_dev_handle);
@@ -1506,6 +1634,8 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
         return rc;
     }
 
+    // Same note as in usbPlatformGateRead(): rc is reused as both "bytes
+    // transferred" storage and final libusb status code.
     rc = libusb_bulk_transfer(gate_dev_handle, USB_EP_ENDPOINT_GATE_OUT, (unsigned char*)data, size, &rc, timeout);
     
     libusb_close(gate_dev_handle);
