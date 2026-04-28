@@ -64,7 +64,6 @@ typedef struct xLinkDesc_t {
     xLinkDeviceHandle_t deviceHandle;
     linkId_t id;
     XLink_sem_t pingSem;
-    XLink_sem_t dispatcherClosedSem;
 
     //Deprecated fields. Begin.
     int hostClosedFD;

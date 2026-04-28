@@ -98,8 +98,8 @@ static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
 
 static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr);
 
-static int dispatcherClean(xLinkSchedulerState_t* curr);
-static int dispatcherReset(xLinkSchedulerState_t* curr);
+static int dispatcherFinalizeStop(xLinkSchedulerState_t* curr);
+static int dispatcherDrainAndDestroy(xLinkSchedulerState_t* curr);
 static int dispatcherDeviceFdDown(xLinkSchedulerState_t* curr);
 
 static void dispatcherFreeEvents(eventQueueHandler_t *queue, xLinkEventState_t state);
@@ -185,14 +185,8 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
         perror("pthread_mutex_init error");
         return -1;
     }
-    if (pthread_mutex_init(&(curr->cleanMutex), NULL) != 0) {
-        perror("pthread_mutex_init error");
-        pthread_mutex_destroy(&(curr->queueMutex));
-        return -1;
-    }
     if (pthread_mutex_init(&(curr->resetMutex), NULL) != 0) {
         perror("pthread_mutex_init error");
-        pthread_mutex_destroy(&(curr->cleanMutex));
         pthread_mutex_destroy(&(curr->queueMutex));
         return -1;
     }
@@ -239,15 +233,6 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     return 0;
 }
 
-int DispatcherClean(xLinkDeviceHandle_t *deviceHandle) {
-    XLINK_RET_IF(deviceHandle == NULL);
-
-    xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(deviceHandle);
-    XLINK_RET_IF(curr == NULL);
-
-    return dispatcherClean(curr);
-}
-
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle){
     XLINK_RET_IF(deviceHandle == NULL);
 
@@ -257,12 +242,40 @@ int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle){
     return dispatcherDeviceFdDown(curr);
 }
 
+int DispatcherStop(xLinkDeviceHandle_t *deviceHandle, int forceTransportDown) {
+    XLINK_RET_IF(deviceHandle == NULL);
+
+    xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(deviceHandle);
+    XLINK_RET_IF(curr == NULL);
+
+    XLinkSession_t* session = getSessionFromDeviceHandle(deviceHandle);
+    if (session != NULL) {
+        XLinkSessionLifecycleBeginStop(session, X_LINK_LINK_DOWN_LOCAL_RESET);
+    }
+    curr->resetXLink = 1;
+
+    if (forceTransportDown) {
+        dispatcherDeviceFdDown(curr);
+    }
+
+    if (XLink_sem_post(&curr->notifyDispatcherSem)) {
+        mvLog(MVLOG_DEBUG, "can't post notifyDispatcherSem during stop\n");
+    }
+    if (XLink_sem_post(&curr->addEventSem)) {
+        mvLog(MVLOG_DEBUG, "can't post addEventSem during stop\n");
+    }
+
+    return 0;
+}
+
 xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event, XLinkTimespec* outTime)
 {
     xLinkSchedulerState_t* curr = getSchedulerFromDeviceHandle(&event->deviceHandle);
     XLINK_RET_ERR_IF(curr == NULL, NULL);
 
-    if(curr->resetXLink) {
+    XLinkSession_t* session = getSessionFromDeviceHandle(&event->deviceHandle);
+    if (curr->resetXLink ||
+        (session != NULL && XLinkSessionLifecycleGetState(session) >= XLINK_SESSION_STOPPING)) {
         return NULL;
     }
 
@@ -270,6 +283,14 @@ xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event
     int rc = XLink_sem_wait(&curr->addEventSem);
     if (rc) {
         mvLog(MVLOG_ERROR,"can't wait semaphore\n");
+        return NULL;
+    }
+
+    if (curr->resetXLink ||
+        (session != NULL && XLinkSessionLifecycleGetState(session) >= XLINK_SESSION_STOPPING)) {
+        if (XLink_sem_post(&curr->addEventSem)) {
+            mvLog(MVLOG_ERROR,"can't post semaphore\n");
+        }
         return NULL;
     }
 
@@ -540,17 +561,37 @@ static void* eventReader(void* ctx)
         
         if (sc) {
             mvLog(MVLOG_DEBUG,"Failed to receive event (err %d)", sc);
+            if (curr->resetXLink) {
+                break;
+            }
+            XLinkSession_t* session = getSessionFromDeviceHandle(&curr->deviceHandle);
+            if (session != NULL) {
+                XLinkSessionLifecycleBeginStop(session, X_LINK_LINK_DOWN_TRANSPORT_ERROR);
+            }
+            curr->resetXLink = 1;
+            dispatcherDeviceFdDown(curr);
+            if (XLink_sem_post(&curr->notifyDispatcherSem)) {
+                mvLog(MVLOG_DEBUG, "can't post notifyDispatcherSem after receive failure\n");
+            }
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
             dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
             dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
             XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, NULL);
-            continue;
+            break;
         }
 
         DispatcherAddEvent(EVENT_REMOTE, &event);
 
         if (event.header.type == XLINK_RESET_REQ) {
+            XLinkSession_t* session = getSessionFromDeviceHandle(&curr->deviceHandle);
+            if (session != NULL) {
+                XLinkSessionLifecycleBeginStop(session, X_LINK_LINK_DOWN_REMOTE_RESET);
+            }
             curr->resetXLink = 1;
+            dispatcherDeviceFdDown(curr);
+            if (XLink_sem_post(&curr->notifyDispatcherSem)) {
+                mvLog(MVLOG_DEBUG, "can't post notifyDispatcherSem after reset request\n");
+            }
             mvLog(MVLOG_DEBUG,"Read XLINK_RESET_REQ, stopping eventReader thread.");
         }
     }
@@ -601,6 +642,8 @@ static void* eventSchedulerRun(void* ctx)
         mvLog(MVLOG_ERROR, "sendEvents method finished with an error: %s", XLinkErrorToStr(rc));
     }
 
+    dispatcherDeviceFdDown(curr);
+
     sc = pthread_join(readerThreadId, NULL);
     if (sc) {
         mvLog(MVLOG_ERROR, "Waiting for thread failed");
@@ -611,8 +654,8 @@ static void* eventSchedulerRun(void* ctx)
         mvLog(MVLOG_WARN, "Thread attr destroy failed");
     }
 
-    if (dispatcherReset(curr) != 0) {
-        mvLog(MVLOG_WARN, "Failed to reset or was already reset");
+    if (dispatcherFinalizeStop(curr) != 0) {
+        mvLog(MVLOG_WARN, "Failed to finalize dispatcher stop or was already finalized");
     }
 
     if (curr->resetXLink != 1) {
@@ -621,15 +664,9 @@ static void* eventSchedulerRun(void* ctx)
         mvLog(MVLOG_INFO,"Scheduler thread stopped");
     }
 
-    xLinkDesc_t* link = curr->link;
-    if(link == NULL || XLink_sem_post(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_DEBUG,"can't post dispatcherClosedSem\n");
-    }
-
-    // Notify per-link callback only after dispatcher reset completed and teardown is safe.
     XLinkSession_t* session = getSessionFromDeviceHandle(&curr->deviceHandle);
-    if (session != NULL && session->linkDownCallback != NULL) {
-        session->linkDownCallback(session->linkDownCallbackContext);
+    if (session != NULL) {
+        XLinkSessionLifecycleMarkStopped(session);
     }
 
     return NULL;
@@ -722,17 +759,24 @@ static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState
         }
     }
     if (i == MAX_EVENTS) {
-        mvLog(MVLOG_FATAL,"no request for this response: %s %d\n", TypeToStr(event->packet.header.type), event->origin);
-        mvLog(MVLOG_DEBUG,"#### (i == MAX_EVENTS) %s %d %d\n", TypeToStr(event->packet.header.type), event->origin, (int)event->packet.header.id);
-        for (i = 0; i < MAX_EVENTS; i++)
-        {
-            xLinkEventHeader_t *header = &curr->lQueue.q[i].packet.header;
-
-            mvLog(MVLOG_DEBUG,"%d) header->id %i, header->type %s(%i), curr->lQueue.q[i].isServed %i, EVENT_PENDING %i\n", i, (int)header->id
-            , TypeToStr(header->type), header->type, curr->lQueue.q[i].isServed, EVENT_PENDING);
-
+        XLinkSession_t* session = getSessionFromDeviceHandle(&curr->deviceHandle);
+        if (curr->resetXLink ||
+            (session != NULL && XLinkSessionLifecycleGetState(session) >= XLINK_SESSION_STOPPING)) {
+            mvLog(MVLOG_WARN, "dropping late response during teardown: %s %d\n",
+                  TypeToStr(event->packet.header.type), event->origin);
+            return 0;
         }
-        return 1;
+        mvLog(MVLOG_ERROR,"no request for this response, forcing teardown: %s %d\n",
+              TypeToStr(event->packet.header.type), event->origin);
+        if (session != NULL) {
+            XLinkSessionLifecycleBeginStop(session, X_LINK_LINK_DOWN_TRANSPORT_ERROR);
+        }
+        curr->resetXLink = 1;
+        dispatcherDeviceFdDown(curr);
+        if (XLink_sem_post(&curr->notifyDispatcherSem)) {
+            mvLog(MVLOG_DEBUG, "can't post notifyDispatcherSem after unmatched response\n");
+        }
+        return 0;
     }
     return 0;
 }
@@ -852,15 +896,10 @@ static xLinkEventPriv_t* dispatcherGetNextEvent(xLinkSchedulerState_t* curr)
     return event;
 }
 
-static int dispatcherClean(xLinkSchedulerState_t* curr)
+static int dispatcherDrainAndDestroy(xLinkSchedulerState_t* curr)
 {
-    XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->cleanMutex), 1);
     if (curr->schedulerId == -1) {
-        mvLog(MVLOG_WARN,"Scheduler has already been reset or cleaned");
-        if(pthread_mutex_unlock(&curr->cleanMutex) != 0) {
-            mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex");
-        }
-
+        mvLog(MVLOG_WARN,"Scheduler has already been finalized");
         return 1;
     }
 
@@ -898,10 +937,7 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     }
     XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
 
-    mvLog(MVLOG_INFO, "Clean Dispatcher Successfully...");
-    if(pthread_mutex_unlock(&curr->cleanMutex) != 0) {
-        mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
-    }
+    mvLog(MVLOG_INFO, "Dispatcher queues cleaned successfully...");
     XLINK_RET_ERR_IF(pthread_mutex_destroy(&(curr->queueMutex)) != 0, 1);
     return 0;
 }
@@ -929,15 +965,15 @@ static int dispatcherDeviceFdDown(xLinkSchedulerState_t* curr){
     return ret;
 }
 
-static int dispatcherReset(xLinkSchedulerState_t* curr)
+static int dispatcherFinalizeStop(xLinkSchedulerState_t* curr)
 {
     ASSERT_XLINK(curr != NULL);
 
     XLINK_RET_ERR_IF(pthread_mutex_lock(&curr->resetMutex), 1);
     if (curr->dispatcherLinkDown == 1) {
-        mvLog(MVLOG_WARN,"Scheduler has already been reset");
+        mvLog(MVLOG_WARN,"Scheduler has already been finalized");
         if(pthread_mutex_unlock(&curr->resetMutex) != 0) {
-            mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex");
+            mvLog(MVLOG_ERROR, "Failed to unlock reset_mutex");
         }
 
         return 1;
@@ -949,8 +985,8 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
         curr->dispatcherDeviceFdDown = 1;
     }
 
-    if(dispatcherClean(curr)) {
-        mvLog(MVLOG_INFO, "Failed to clean dispatcher");
+    if(dispatcherDrainAndDestroy(curr)) {
+        mvLog(MVLOG_INFO, "Failed to drain dispatcher queues");
     }
 
     glControlFunc->closeLink(&curr->deviceHandle);
@@ -958,10 +994,10 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
     // Set dispatcher link state "down", to disallow resetting again
     curr->dispatcherLinkDown = 1;
 
-    mvLog(MVLOG_DEBUG,"Reset Successfully\n");
+    mvLog(MVLOG_DEBUG,"Dispatcher finalized successfully\n");
 
     if(pthread_mutex_unlock(&curr->resetMutex) != 0) {
-        mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
+        mvLog(MVLOG_ERROR, "Failed to unlock reset_mutex after finalizing dispatcher");
         return 1;
     }
     return 0;
@@ -975,7 +1011,9 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
     while (!curr->resetXLink) {
         event = dispatcherGetNextEvent(curr);
         if(event == NULL) {
-            mvLog(MVLOG_ERROR,"Dispatcher received NULL event!");
+            if (!curr->resetXLink) {
+                mvLog(MVLOG_ERROR,"Dispatcher received NULL event!");
+            }
             break; // Means that user reset XLink.
         }
         

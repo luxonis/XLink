@@ -64,7 +64,6 @@ typedef struct xLinkSchedulerState_t {
     int schedulerId;
     int queueProcPriority;
     pthread_mutex_t queueMutex;
-    pthread_mutex_t cleanMutex;
     pthread_mutex_t resetMutex;
     XLink_sem_t addEventSem;
     XLink_sem_t notifyDispatcherSem;
@@ -79,9 +78,17 @@ typedef struct xLinkSchedulerState_t {
     uint32_t server;
 } xLinkSchedulerState_t;
 
+typedef enum {
+    XLINK_SESSION_STARTING = 0,
+    XLINK_SESSION_RUNNING = 1,
+    XLINK_SESSION_STOPPING = 2,
+    XLINK_SESSION_STOPPED = 3,
+} XLinkSessionState_t;
+
 struct XLinkSession_t {
     XLinkLinkDownCallback_t linkDownCallback;
     void* linkDownCallbackContext;
+    void* lifecycle;
     xLinkDesc_t link;
     xLinkSchedulerState_t scheduler;
 };
@@ -116,6 +123,13 @@ void XLinkGlobalHandlerAccumulateRead(uint32_t bytes, float timeSeconds);
 void XLinkGlobalHandlerAccumulateWrite(uint32_t bytes, float timeSeconds);
 int XLinkGlobalHandlerCopyProfilingData(XLinkProf_t* prof);
 void XLinkGlobalHandlerPrintProfilingData(void);
+int XLinkSessionLifecycleInit(XLinkSession_t* session);
+void XLinkSessionLifecycleDestroy(XLinkSession_t* session);
+void XLinkSessionLifecycleMarkRunning(XLinkSession_t* session);
+XLinkSessionState_t XLinkSessionLifecycleGetState(const XLinkSession_t* session);
+int XLinkSessionLifecycleBeginStop(XLinkSession_t* session, XLinkLinkDownReason_t reason);
+void XLinkSessionLifecycleMarkStopped(XLinkSession_t* session);
+int XLinkSessionLifecycleWaitStopped(XLinkSession_t* session);
 #ifdef __cplusplus
 }
 #endif

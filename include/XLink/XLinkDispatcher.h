@@ -32,8 +32,8 @@ XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc);
 XLinkError_t DispatcherStart(xLinkDesc_t *deviceHandle);
 XLinkError_t DispatcherStartServer(xLinkDesc_t *deviceHandle);
 XLinkError_t DispatcherStartImpl(xLinkDesc_t *deviceHandle, bool server);
-int DispatcherClean(xLinkDeviceHandle_t *deviceHandle);
 int DispatcherDeviceFdDown(xLinkDeviceHandle_t *deviceHandle);
+int DispatcherStop(xLinkDeviceHandle_t *deviceHandle, int forceTransportDown);
 
 xLinkEvent_t* DispatcherAddEvent(xLinkEventOrigin_t origin, xLinkEvent_t *event);
 xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event, XLinkTimespec* outTime);

@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
                 auto roundState = roundStates[connection][round];
 
                 XLinkHandler_t handler = testutils::makeTcpHandler(endpoint);
-                handler.linkDownCallback = [](void* context) {
+                handler.linkDownCallback = [](XLinkLinkDownReason_t, void* context) {
                     auto* state = static_cast<RoundState*>(context);
                     if (state == nullptr) {
                         return;

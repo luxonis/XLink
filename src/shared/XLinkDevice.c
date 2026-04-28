@@ -46,6 +46,7 @@ static linkId_t nextLinkId = 0;
 static xLinkDesc_t* allocateSession(XLinkHandler_t* handler);
 static void deallocateSession(XLinkHandler_t* handler);
 static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc);
+static XLinkError_t stopAndReapSession(XLinkHandler_t* handler, XLinkError_t status);
 
 // ------------------------------------
 // Helpers declaration. End.
@@ -183,6 +184,7 @@ XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
     }
 
     link->peerState = XLINK_UP;
+    XLinkSessionLifecycleMarkRunning(getSession(handler));
     link->hostClosedFD = 0;
     handler->linkId = link->id;
     return X_LINK_SUCCESS;
@@ -273,31 +275,18 @@ XLinkError_t XLinkConnectTimeout(XLinkHandler_t* handler, unsigned int timeoutMs
 
     event.header.type = XLINK_PING_REQ;
     event.deviceHandle = link->deviceHandle;
-    DispatcherAddEvent(EVENT_LOCAL, &event);
+    if (DispatcherAddEvent(EVENT_LOCAL, &event) == NULL) {
+        XLinkSessionLifecycleBeginStop(getSession(handler), X_LINK_LINK_DOWN_CONNECT_FAILURE);
+        return stopAndReapSession(handler, X_LINK_TIMEOUT);
+    }
 
     if (DispatcherWaitEventComplete(&link->deviceHandle, timeoutMs)) {
-        xLinkEvent_t resetEvent = {0};
-        resetEvent.header.type = XLINK_RESET_REQ;
-        resetEvent.deviceHandle = link->deviceHandle;
-
-        DispatcherDeviceFdDown(&link->deviceHandle);
-        DispatcherAddEvent(EVENT_LOCAL, &resetEvent);
-
-        if (XLink_sem_wait(&link->dispatcherClosedSem)) {
-            mvLog(MVLOG_ERROR, "can't wait dispatcherClosedSem\n");
-            return X_LINK_ERROR;
-        }
-
-        if (pthread_join(getSchedulerFromDeviceHandle(&link->deviceHandle)->xLinkThreadId, NULL) != 0) {
-            mvLog(MVLOG_ERROR, "can't join scheduler thread\n");
-            return X_LINK_ERROR;
-        }
-
-        deallocateSession(handler);
-        return X_LINK_TIMEOUT;
+        XLinkSessionLifecycleBeginStop(getSession(handler), X_LINK_LINK_DOWN_CONNECT_FAILURE);
+        return stopAndReapSession(handler, X_LINK_TIMEOUT);
     }
 
     link->peerState = XLINK_UP;
+    XLinkSessionLifecycleMarkRunning(getSession(handler));
     link->hostClosedFD = 0;
     handler->linkId = link->id;
     return X_LINK_SUCCESS;
@@ -344,25 +333,13 @@ XLinkError_t XLinkBootFirmware(const deviceDesc_t* deviceDesc, const char* firmw
 
 XLinkError_t XLinkResetRemoteTimeout(XLinkHandler_t* handler, unsigned int timeoutMs)
 {
-    xLinkDesc_t* link = getLink(handler);
-    XLINK_RET_IF(link == NULL);
+    XLinkSession_t* session = getSession(handler);
+    XLINK_RET_IF(session == NULL);
+    xLinkDesc_t* link = &session->link;
 
-    if (getXLinkState(link) != XLINK_UP) {
+    if (XLinkSessionLifecycleGetState(session) != XLINK_SESSION_RUNNING || getXLinkState(link) != XLINK_UP) {
         mvLog(MVLOG_WARN, "Link is down, cleaning up local session without reset");
-
-        int rc = XLink_sem_wait(&link->dispatcherClosedSem);
-        if (rc) {
-            mvLog(MVLOG_ERROR, "can't wait dispatcherClosedSem\n");
-            return X_LINK_ERROR;
-        }
-
-        if (pthread_join(getSchedulerFromDeviceHandle(&link->deviceHandle)->xLinkThreadId, NULL) != 0) {
-            mvLog(MVLOG_ERROR, "can't join scheduler thread\n");
-            return X_LINK_ERROR;
-        }
-
-        deallocateSession(handler);
-        return X_LINK_COMMUNICATION_NOT_OPEN;
+        return stopAndReapSession(handler, X_LINK_COMMUNICATION_NOT_OPEN);
     }
 
     // Add event to reset device. After sending it, dispatcher will close fd link
@@ -370,27 +347,18 @@ XLinkError_t XLinkResetRemoteTimeout(XLinkHandler_t* handler, unsigned int timeo
     event.header.type = XLINK_RESET_REQ;
     event.deviceHandle = link->deviceHandle;
     mvLog(MVLOG_DEBUG, "sending reset remote event\n");
-    DispatcherAddEvent(EVENT_LOCAL, &event);
+
     XLinkError_t ret = X_LINK_SUCCESS;
-    if (DispatcherWaitEventComplete(&link->deviceHandle, timeoutMs)) {
-        // Closing device link unblocks any blocked events.
-        DispatcherDeviceFdDown(&link->deviceHandle);
-        ret = X_LINK_TIMEOUT;
+    if (DispatcherAddEvent(EVENT_LOCAL, &event) == NULL) {
+        ret = X_LINK_COMMUNICATION_NOT_OPEN;
+    } else if (DispatcherWaitEventComplete(&link->deviceHandle, timeoutMs)) {
+        ret = (timeoutMs == XLINK_NO_RW_TIMEOUT ||
+               XLinkSessionLifecycleGetState(session) >= XLINK_SESSION_STOPPING ||
+               getXLinkState(link) != XLINK_UP)
+                  ? X_LINK_COMMUNICATION_NOT_OPEN
+                  : X_LINK_TIMEOUT;
     }
-
-    int rc = XLink_sem_wait(&link->dispatcherClosedSem);
-    if(rc) {
-        mvLog(MVLOG_ERROR,"can't wait dispatcherClosedSem\n");
-        return X_LINK_ERROR;
-    }
-
-    if (pthread_join(getSchedulerFromDeviceHandle(&link->deviceHandle)->xLinkThreadId, NULL) != 0) {
-        mvLog(MVLOG_ERROR, "can't join scheduler thread\n");
-        return X_LINK_ERROR;
-    }
-
-    deallocateSession(handler);
-    return ret;
+    return stopAndReapSession(handler, ret);
 }
 
 XLinkError_t XLinkResetRemote(XLinkHandler_t* handler)
@@ -455,23 +423,21 @@ xLinkDesc_t* allocateSession(XLinkHandler_t* handler) {
     xLinkDesc_t* link = &session->link;
     session->linkDownCallback = handler->linkDownCallback;
     session->linkDownCallbackContext = handler->linkDownCallbackContext;
-
-    if (XLink_sem_init(&link->pingSem, 0, 0)) {
-        mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
+    if (XLinkSessionLifecycleInit(session) != 0) {
         free(session);
         return NULL;
     }
 
-    if (XLink_sem_init(&link->dispatcherClosedSem, 0 ,0)) {
+    if (XLink_sem_init(&link->pingSem, 0, 0)) {
         mvLog(MVLOG_ERROR, "Cannot initialize semaphore\n");
-        XLink_sem_destroy(&link->pingSem);
+        XLinkSessionLifecycleDestroy(session);
         free(session);
         return NULL;
     }
 
     if (pthread_mutex_lock(&link_id_mutex) != 0) {
         XLink_sem_destroy(&link->pingSem);
-        XLink_sem_destroy(&link->dispatcherClosedSem);
+        XLinkSessionLifecycleDestroy(session);
         free(session);
         return NULL;
     }
@@ -479,7 +445,7 @@ xLinkDesc_t* allocateSession(XLinkHandler_t* handler) {
     nextLinkId = (linkId_t)((nextLinkId + 1u) % INVALID_LINK_ID);
     if (pthread_mutex_unlock(&link_id_mutex) != 0) {
         XLink_sem_destroy(&link->pingSem);
-        XLink_sem_destroy(&link->dispatcherClosedSem);
+        XLinkSessionLifecycleDestroy(session);
         free(session);
         return NULL;
     }
@@ -505,16 +471,36 @@ void deallocateSession(XLinkHandler_t* handler) {
     if (XLink_sem_destroy(&link->pingSem)) {
         mvLog(MVLOG_ERROR, "Cannot destroy semaphore\n");
     }
-
-    if (XLink_sem_destroy(&link->dispatcherClosedSem)) {
-        mvLog(MVLOG_ERROR, "Cannot destroy semaphore\n");
-    }
+    XLinkSessionLifecycleDestroy(session);
 
     if (handler != NULL) {
         handler->session = NULL;
         handler->linkId = INVALID_LINK_ID;
     }
     free(session);
+}
+
+static XLinkError_t stopAndReapSession(XLinkHandler_t* handler, XLinkError_t status) {
+    xLinkDesc_t* link = getLink(handler);
+    XLINK_RET_IF(link == NULL);
+    XLinkSessionLifecycleBeginStop(getSession(handler), status == X_LINK_TIMEOUT ? X_LINK_LINK_DOWN_CONNECT_FAILURE : X_LINK_LINK_DOWN_LOCAL_RESET);
+    xLinkSchedulerState_t* scheduler = getSchedulerFromDeviceHandle(&link->deviceHandle);
+    XLINK_RET_IF(scheduler == NULL);
+
+    if (DispatcherStop(&link->deviceHandle, 1)) {
+        mvLog(MVLOG_ERROR, "failed to request dispatcher stop\n");
+        return X_LINK_ERROR;
+    }
+    if (XLinkSessionLifecycleWaitStopped(getSession(handler)) != 0) {
+        mvLog(MVLOG_ERROR, "failed waiting for stopped state\n");
+        return X_LINK_ERROR;
+    }
+    if (pthread_join(scheduler->xLinkThreadId, NULL) != 0) {
+        mvLog(MVLOG_ERROR, "can't join scheduler thread\n");
+        return X_LINK_ERROR;
+    }
+    deallocateSession(handler);
+    return status;
 }
 
 XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {

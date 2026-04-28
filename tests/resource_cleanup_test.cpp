@@ -198,7 +198,7 @@ int main(int argc, char** argv) {
         std::thread server([&]() {
             std::string serverEndpoint = endpoint;
             XLinkHandler_t handler = testutils::makeTcpHandler(serverEndpoint);
-            handler.linkDownCallback = [](void* context) {
+            handler.linkDownCallback = [](XLinkLinkDownReason_t, void* context) {
                 auto* state = static_cast<LinkDownState*>(context);
                 if (state == nullptr || state->mutex == nullptr || state->cv == nullptr || state->flag == nullptr) {
                     return;

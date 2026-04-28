@@ -36,7 +36,7 @@ constexpr int kDefaultRounds = 1000;
 constexpr int kDefaultBasePort = 11930;
 constexpr int kDefaultWatchdogMs = 90000;
 constexpr std::int32_t kXLinkPingReq = 5;
-constexpr std::int32_t kXLinkPingResp = 12;
+constexpr std::int32_t kXLinkPingResp = 13;
 
 struct WireEventHeader {
     std::int32_t id;
@@ -327,7 +327,7 @@ public:
     }
 
 private:
-    static void onLinkDown(void* context) {
+    static void onLinkDown(XLinkLinkDownReason_t, void* context) {
         auto* state = static_cast<LinkDownState*>(context);
         if (state == nullptr) {
             return;
