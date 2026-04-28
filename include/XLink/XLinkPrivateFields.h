@@ -64,10 +64,9 @@ typedef struct xLinkSchedulerState_t {
     int schedulerId;
     int queueProcPriority;
     pthread_mutex_t queueMutex;
-    pthread_mutex_t resetMutex;
     XLink_sem_t addEventSem;
     XLink_sem_t notifyDispatcherSem;
-    volatile uint32_t resetXLink;
+    uint32_t resetXLink;
     uint32_t semaphores;
     pthread_t xLinkThreadId;
     eventQueueHandler_t lQueue;

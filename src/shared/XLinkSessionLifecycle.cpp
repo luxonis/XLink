@@ -10,7 +10,7 @@ struct XLinkSessionLifecycle {
     std::condition_variable stoppedCv;
     XLinkSessionState_t state = XLINK_SESSION_STARTING;
     bool callbackDelivered = false;
-    XLinkLinkDownReason_t reason = X_LINK_LINK_DOWN_UNKNOWN;
+    XLinkLinkDownReason_t reason = X_LINK_LINK_DOWN_LOCAL_RESET;
 };
 
 XLinkSessionLifecycle* getLifecycle(const XLinkSession_t* session) {
@@ -67,7 +67,7 @@ int XLinkSessionLifecycleBeginStop(XLinkSession_t* session, XLinkLinkDownReason_
     }
 
     std::lock_guard<std::mutex> lock(lifecycle->mutex);
-    if (lifecycle->reason == X_LINK_LINK_DOWN_UNKNOWN) {
+    if (lifecycle->state == XLINK_SESSION_STARTING || lifecycle->state == XLINK_SESSION_RUNNING) {
         lifecycle->reason = reason;
     }
     if (lifecycle->state == XLINK_SESSION_STOPPING || lifecycle->state == XLINK_SESSION_STOPPED) {
@@ -85,7 +85,7 @@ void XLinkSessionLifecycleMarkStopped(XLinkSession_t* session) {
 
     XLinkLinkDownCallback_t callback = nullptr;
     void* callbackContext = nullptr;
-    XLinkLinkDownReason_t reason = X_LINK_LINK_DOWN_UNKNOWN;
+    XLinkLinkDownReason_t reason = X_LINK_LINK_DOWN_LOCAL_RESET;
     {
         std::lock_guard<std::mutex> lock(lifecycle->mutex);
         lifecycle->state = XLINK_SESSION_STOPPED;

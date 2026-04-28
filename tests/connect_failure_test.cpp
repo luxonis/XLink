@@ -76,7 +76,7 @@ const CaseConfig kCases[] = {
     {"no_server", ServerMode::none, 0, 5, 0, X_LINK_DEVICE_NOT_FOUND},
     // Current behavior: a bare TCP accept is enough for XLinkConnectTimeout() to succeed.
     {"accept_only", ServerMode::acceptOnly, 1, 20, 0, X_LINK_TIMEOUT},
-    {"ping_only_timeout", ServerMode::pingOnly, 2, 10, 30, X_LINK_TIMEOUT},
+    {"ping_only_timeout", ServerMode::pingOnly, 2, 10, 100, X_LINK_TIMEOUT},
     {"ping_only_success", ServerMode::pingOnly, 3, 100, 0, X_LINK_SUCCESS},
     {"regular_server", ServerMode::regular, 4, 100, 0, X_LINK_SUCCESS},
 };

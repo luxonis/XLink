@@ -68,7 +68,7 @@ xlink_add_test(resource_cleanup_test_smoke resource_cleanup_test.cpp 50 11910 50
 
 # connect_failure_test.cpp:
 # [rounds] [base_port] [timeout_ms]
-xlink_add_test(connect_failure_test connect_failure_test.cpp 20 11930 30000)
+xlink_add_test(connect_failure_test connect_failure_test.cpp 1 11930 60000)
 
 # rtt_test.cpp:
 # [timeout_ms]

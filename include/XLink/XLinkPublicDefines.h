@@ -177,8 +177,7 @@ typedef struct XLinkGlobalHandler_t
 
 typedef struct XLinkSession_t XLinkSession_t;
 typedef enum {
-    X_LINK_LINK_DOWN_UNKNOWN = 0,
-    X_LINK_LINK_DOWN_LOCAL_RESET,
+    X_LINK_LINK_DOWN_LOCAL_RESET = 0,
     X_LINK_LINK_DOWN_REMOTE_RESET,
     X_LINK_LINK_DOWN_CONNECT_FAILURE,
     X_LINK_LINK_DOWN_TRANSPORT_ERROR,
