@@ -137,13 +137,30 @@ struct GateResponse {
     uint32_t platform;
 };
 
-// Tracks the single handle that is allowed for a physical USB path at any time.
-// The key uses the same path representation that the rest of this file exposes.
-static std::unordered_map<std::string, libusb_device_handle*> openDeviceHandlesByPath;
-static std::unordered_map<libusb_device_handle*, std::string> devicePathByHandle;
+struct DeviceHandleReservationKey {
+    std::string devicePath;
+    int interfaceNumber;
+
+    bool operator==(const DeviceHandleReservationKey& other) const {
+        return devicePath == other.devicePath && interfaceNumber == other.interfaceNumber;
+    }
+};
+
+struct DeviceHandleReservationKeyHash {
+    std::size_t operator()(const DeviceHandleReservationKey& key) const {
+        return std::hash<std::string>()(key.devicePath) ^ (std::hash<int>()(key.interfaceNumber) << 1);
+    }
+};
+
+static constexpr int USB_ANY_INTERFACE = -1;
+
+// Tracks active libusb handles by physical path and claimed interface.
+// USB_ANY_INTERFACE reserves the whole device and conflicts with every interface.
+static std::unordered_map<DeviceHandleReservationKey, libusb_device_handle*, DeviceHandleReservationKeyHash> openDeviceHandlesByReservation;
+static std::unordered_map<libusb_device_handle*, DeviceHandleReservationKey> deviceReservationByHandle;
 
 static std::string getLibusbDevicePath(libusb_device *dev);
-static libusb_error openLibusbDeviceExclusive(libusb_device *dev, libusb_device_handle **handle);
+static libusb_error openLibusbDeviceExclusive(libusb_device *dev, int interfaceNumber, libusb_device_handle **handle);
 static void closeLibusbDeviceExclusive(libusb_device_handle *handle);
 static libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev, std::string& outMxId);
 static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* pDesc, libusb_device *dev, GateResponse& outGateResponse, std::string& outSerial);
@@ -232,10 +249,8 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                 auto gateRc = getLibusbDeviceGateResponse(&desc, devs[i], gateResponse, mxId);
                 if(gateRc == LIBUSB_ERROR_BUSY) {
                     status = X_LINK_DEVICE_ALREADY_IN_USE;
-                    protocol = X_LINK_ANY_PROTOCOL;
-                    platform = (in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4)
-                                   ? in_deviceRequirements.platform
-                                   : X_LINK_ANY_PLATFORM;
+                    protocol = X_LINK_USB_EP;
+                    platform = X_LINK_ANY_PLATFORM;
                 } else if(gateRc != LIBUSB_SUCCESS) {
                     continue;
                 } else {
@@ -353,6 +368,26 @@ static xLinkPlatformErrorCode_t refLibusbDeviceByNameWithInterface(const char* n
     return X_LINK_PLATFORM_SUCCESS;
 }
 
+static bool hasConflictingOpenHandleReservation(const DeviceHandleReservationKey& requestedReservation) {
+    for(std::unordered_map<DeviceHandleReservationKey, libusb_device_handle*, DeviceHandleReservationKeyHash>::const_iterator it =
+            openDeviceHandlesByReservation.begin();
+        it != openDeviceHandlesByReservation.end();
+        ++it) {
+        const DeviceHandleReservationKey& activeReservation = it->first;
+        if(activeReservation.devicePath != requestedReservation.devicePath) {
+            continue;
+        }
+
+        if(activeReservation.interfaceNumber == USB_ANY_INTERFACE ||
+           requestedReservation.interfaceNumber == USB_ANY_INTERFACE ||
+           activeReservation.interfaceNumber == requestedReservation.interfaceNumber) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 
 
 std::string getLibusbDevicePath(libusb_device *dev) {
@@ -384,39 +419,40 @@ std::string getLibusbDevicePath(libusb_device *dev) {
     return devicePath;
 }
 
-static libusb_error openLibusbDeviceExclusive(libusb_device *dev, libusb_device_handle **handle) {
+static libusb_error openLibusbDeviceExclusive(libusb_device *dev, int interfaceNumber, libusb_device_handle **handle) {
     if(dev == nullptr || handle == nullptr) {
         return LIBUSB_ERROR_INVALID_PARAM;
     }
 
     *handle = nullptr;
     const auto devicePath = getLibusbDevicePath(dev);
+    const DeviceHandleReservationKey reservationKey{devicePath, interfaceNumber};
 
     {
         std::lock_guard<std::mutex> lock(deviceHandleRegistryMutex);
 
-        // Reserve the path before calling into libusb so another thread cannot
-        // create a second handle for the same device in the gap before open().
-        if(openDeviceHandlesByPath.count(devicePath) > 0) {
-            mvLog(MVLOG_DEBUG, "Device %s already has an active libusb handle", devicePath.c_str());
+        // Reserve the path/interface before calling into libusb so another thread
+        // cannot create a conflicting handle in the gap before open().
+        if(hasConflictingOpenHandleReservation(reservationKey)) {
+            mvLog(MVLOG_DEBUG, "Device %s already has an active libusb handle for interface %d", devicePath.c_str(), interfaceNumber);
             return LIBUSB_ERROR_BUSY;
         }
 
-        openDeviceHandlesByPath.emplace(devicePath, nullptr);
+        openDeviceHandlesByReservation.emplace(reservationKey, nullptr);
     }
 
     libusb_device_handle* openedHandle = nullptr;
     const auto rc = libusb_open(dev, &openedHandle);
     if(rc != LIBUSB_SUCCESS) {
         std::lock_guard<std::mutex> lock(deviceHandleRegistryMutex);
-        openDeviceHandlesByPath.erase(devicePath);
+        openDeviceHandlesByReservation.erase(reservationKey);
         return static_cast<libusb_error>(rc);
     }
 
     {
         std::lock_guard<std::mutex> lock(deviceHandleRegistryMutex);
-        openDeviceHandlesByPath[devicePath] = openedHandle;
-        devicePathByHandle[openedHandle] = devicePath;
+        openDeviceHandlesByReservation[reservationKey] = openedHandle;
+        deviceReservationByHandle[openedHandle] = reservationKey;
     }
 
     *handle = openedHandle;
@@ -428,30 +464,31 @@ static void closeLibusbDeviceExclusive(libusb_device_handle *handle) {
         return;
     }
 
-    std::string devicePath;
+    DeviceHandleReservationKey reservationKey;
     {
         std::lock_guard<std::mutex> lock(deviceHandleRegistryMutex);
-        const auto it = devicePathByHandle.find(handle);
-        if(it != devicePathByHandle.end()) {
-            devicePath = it->second;
+        const auto it = deviceReservationByHandle.find(handle);
+        if(it != deviceReservationByHandle.end()) {
+            reservationKey = it->second;
             // Remove the reverse mapping before libusb_close() so a reused
             // handle address can be registered by a concurrent open.
-            devicePathByHandle.erase(it);
+            deviceReservationByHandle.erase(it);
         }
     }
 
     // Keep the reservation until libusb_close() finishes so no second handle
-    // can be created for the same device while the original one is closing.
+    // can be created for the same device/interface while the original handle
+    // is still closing.
     libusb_close(handle);
 
-    if(devicePath.empty()) {
+    if(reservationKey.devicePath.empty()) {
         return;
     }
 
     std::lock_guard<std::mutex> lock(deviceHandleRegistryMutex);
-    const auto pathIt = openDeviceHandlesByPath.find(devicePath);
-    if(pathIt != openDeviceHandlesByPath.end() && pathIt->second == handle) {
-        openDeviceHandlesByPath.erase(pathIt);
+    const auto reservationIt = openDeviceHandlesByReservation.find(reservationKey);
+    if(reservationIt != openDeviceHandlesByReservation.end() && reservationIt->second == handle) {
+        openDeviceHandlesByReservation.erase(reservationIt);
     }
 }
 
@@ -515,7 +552,7 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
             // Open device - if not already
             if(handle == nullptr){
-                libusb_rc = openLibusbDeviceExclusive(dev, &handle);
+                libusb_rc = openLibusbDeviceExclusive(dev, USB_ANY_INTERFACE, &handle);
                 if (libusb_rc < 0){
                     // Some kind of error, either NO_MEM, ACCESS, NO_DEVICE or other
                     mvLog(MVLOG_DEBUG, "libusb_open: %s", xlink_libusb_strerror(libusb_rc));
@@ -723,7 +760,7 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
     // get serial from usb descriptor
     libusb_device_handle *handle = nullptr;
     int libusb_rc = LIBUSB_SUCCESS;
-    libusb_rc = openLibusbDeviceExclusive(dev, &handle);
+    libusb_rc = openLibusbDeviceExclusive(dev, USB_EP_INTERFACE_GATE, &handle);
     if (libusb_rc != 0){
         return (libusb_error) libusb_rc;
     }
@@ -796,7 +833,8 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
     libusb_device_handle *h = NULL;
     int res;
 
-    if((res = openLibusbDeviceExclusive(dev, &h)) < 0)
+    const auto interfaceNumber = (protocol == X_LINK_USB_EP) ? USB_EP_INTERFACE_DEVICE : USB_VSC_INTERFACE;
+    if((res = openLibusbDeviceExclusive(dev, interfaceNumber, &h)) < 0)
     {
 
         // On windows, if libusb_rc is LIBUSB_ERROR_ACCESS and state is X_LINK_BOOTED, some other process is using the device
@@ -1075,7 +1113,7 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
     libusb_device_handle *h = NULL;
 
 
-    int libusb_rc = openLibusbDeviceExclusive(dev, &h);
+    int libusb_rc = openLibusbDeviceExclusive(dev, USB_ANY_INTERFACE, &h);
     if (libusb_rc < 0) {
         libusb_unref_device(dev);
         if(libusb_rc == LIBUSB_ERROR_ACCESS) {
@@ -1527,7 +1565,7 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
     }
 
     libusb_device_handle *gate_dev_handle;
-    rc = openLibusbDeviceExclusive(gate_dev, &gate_dev_handle);
+    rc = openLibusbDeviceExclusive(gate_dev, USB_EP_INTERFACE_GATE, &gate_dev_handle);
     if (rc != LIBUSB_SUCCESS || gate_dev_handle == NULL) {
         libusb_unref_device(gate_dev);
         return rc;
@@ -1579,7 +1617,7 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout)
     }
 
     libusb_device_handle *gate_dev_handle;
-    rc = openLibusbDeviceExclusive(gate_dev, &gate_dev_handle);
+    rc = openLibusbDeviceExclusive(gate_dev, USB_EP_INTERFACE_GATE, &gate_dev_handle);
     if (rc != LIBUSB_SUCCESS || gate_dev_handle == NULL) {
         libusb_unref_device(gate_dev);
         return rc;
