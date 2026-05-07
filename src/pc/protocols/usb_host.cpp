@@ -406,7 +406,9 @@ std::string getLibusbDevicePath(libusb_device *dev) {
         return "<error>";
     }
     if(count == 0){
-        // Only bus number is available
+        // Port path unavailable (e.g. root hub); append the device address so
+        // that two devices on the same bus still get distinct path strings.
+        devicePath += std::to_string(libusb_get_device_address(dev));
         return devicePath;
     }
 
