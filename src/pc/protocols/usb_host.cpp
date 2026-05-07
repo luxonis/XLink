@@ -1711,6 +1711,7 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
 
     // iterate over usb devices and populate with device info
     std::string goalPath{getLibusbDevicePath(dev)};
+    const bool goalPathUsesDeviceAddress = goalPath.find(".@") != std::string::npos;
     std::string deviceId;
     for(int i = 0; SetupDiEnumDeviceInfo(hDevInfoSet, i, &devInfoData); i++) {
         // get device instance id
@@ -1755,7 +1756,8 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
         }
 
         // initialize pseudo libusb path using the host controller index +1 as the "libusb bus number"
-        std::string pseudoLibUsbPath = std::to_string(std::distance(hostControllerLocationPaths.begin(), hostController) + 1);
+        const auto busNumber = std::distance(hostControllerLocationPaths.begin(), hostController) + 1;
+        std::string pseudoLibUsbPath = std::to_string(busNumber);
 
         // there is only one root hub per host controller, it is always on port 0,
         // therefore start the search past this known root hub in the usb path
@@ -1770,7 +1772,24 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
             pseudoLibUsbPath += '.' + std::to_string(port);
         }
 
-        if(pseudoLibUsbPath == goalPath) {
+        std::string candidatePath = pseudoLibUsbPath;
+        if(goalPathUsesDeviceAddress) {
+            DWORD deviceAddress = 0;
+            if(!SetupDiGetDeviceRegistryPropertyA(
+                    hDevInfoSet,
+                    &devInfoData,
+                    SPDRP_ADDRESS,
+                    NULL,
+                    reinterpret_cast<PBYTE>(&deviceAddress),
+                    sizeof(deviceAddress),
+                    NULL)) {
+                continue;
+            }
+
+            candidatePath = std::to_string(busNumber) + ".@" + std::to_string(deviceAddress);
+        }
+
+        if(candidatePath == goalPath) {
             deviceId = serialId;
             break;
         }
