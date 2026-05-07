@@ -406,9 +406,10 @@ std::string getLibusbDevicePath(libusb_device *dev) {
         return "<error>";
     }
     if(count == 0){
-        // Port path unavailable (e.g. root hub); append the device address so
-        // that two devices on the same bus still get distinct path strings.
-        devicePath += std::to_string(libusb_get_device_address(dev));
+        // Port path unavailable (e.g. root hub); append the device address with
+        // a '@' prefix so two devices on the same bus get distinct paths and the
+        // format is unambiguous vs. the "bus.port[.port…]" form.
+        devicePath += "@" + std::to_string(libusb_get_device_address(dev));
         return devicePath;
     }
 
