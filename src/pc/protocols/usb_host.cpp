@@ -239,6 +239,14 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                 // Get device mxid
                 libusb_error rc = getLibusbDeviceMxId(state, devicePath, &desc, devs[i], mxId);
                 mvLog(MVLOG_DEBUG, "getLibusbDeviceMxId returned: %s", xlink_libusb_strerror(rc));
+                if(state == X_LINK_BOOTED && rc == LIBUSB_ERROR_NO_DEVICE) {
+                    mvLog(MVLOG_WARN,
+                          "Skipping temporarily booted device %s during USB search because it disappeared while reading MXID (libusb rc: %d, msg: %s)",
+                          devicePath.c_str(),
+                          static_cast<int>(rc),
+                          xlink_libusb_strerror(rc));
+                    continue;
+                }
                 switch (rc)
                 {
                 case LIBUSB_SUCCESS:
