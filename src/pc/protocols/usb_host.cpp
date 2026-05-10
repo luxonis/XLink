@@ -136,6 +136,78 @@ struct GateResponse {
     uint32_t platform;
 };
 
+struct DeviceHandleKey {
+    std::string device;
+    int interface;
+
+    bool operator==(const DeviceHandleKey& other) const {
+        return device == other.device && interface == other.interface;
+    }
+};
+
+struct DeviceHandle {
+    libusb_device_handle* handle = nullptr;
+    std::mutex mtx;
+
+    DeviceHandle() = default;
+    DeviceHandle(const DeviceHandle&) = delete;
+    DeviceHandle& operator=(const DeviceHandle&) = delete;
+
+    DeviceHandle(DeviceHandle&& other) noexcept
+        : handle(other.handle), refCount(other.refCount) {
+        other.handle = nullptr;
+        other.refCount = 0;
+    }
+
+    DeviceHandle& operator=(DeviceHandle&& other) noexcept {
+        if(this != &other) {
+            handle = other.handle;
+            refCount = other.refCount;
+            other.handle = nullptr;
+            other.refCount = 0;
+        }
+        return *this;
+    }
+
+private:
+    int refCount = 0;
+
+public:
+    static libusb_error open(const std::string& devicePath, int interface, DeviceHandle& outDeviceHandle);
+
+    void retain() {
+        ++refCount;
+    }
+
+    bool close(int interface) {
+        if(refCount <= 0) {
+            return true;
+        }
+        if(--refCount <= 0) {
+            if(handle != nullptr) {
+                if(interface >= 0) {
+                    libusb_release_interface(handle, interface);
+                }
+                libusb_close(handle);
+                handle = nullptr;
+            }
+            return true;
+        }
+        return false;
+    }
+};
+
+struct DeviceHandleKeyHash {
+    std::size_t operator()(const DeviceHandleKey& key) const {
+        const auto deviceHash = std::hash<std::string>()(key.device);
+        const auto interfaceHash = std::hash<int>()(key.interface);
+        return deviceHash ^ (interfaceHash + 0x9e3779b9 + (deviceHash << 6) + (deviceHash >> 2));
+    }
+};
+
+std::mutex deviceHandlesMtx;
+std::unordered_map<DeviceHandleKey, DeviceHandle, DeviceHandleKeyHash> deviceHandles;
+
 static std::string getLibusbDevicePath(libusb_device *dev);
 static libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePath, const libusb_device_descriptor* pDesc, libusb_device *dev, std::string& outMxId);
 static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* pDesc, libusb_device *dev, GateResponse& outGateResponse, std::string& outSerial);
@@ -145,6 +217,122 @@ static xLinkPlatformErrorCode_t refLibusbDeviceByNameWithInterface(const char* n
 #ifdef _WIN32
 std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev);
 #endif
+
+libusb_error DeviceHandle::open(const std::string& devicePath, int interface, DeviceHandle& outDeviceHandle) {
+    libusb_device* dev = nullptr;
+    auto refRc = refLibusbDeviceByNameWithInterface(devicePath.c_str(), interface, &dev);
+    if(refRc != X_LINK_PLATFORM_SUCCESS || dev == nullptr) {
+        mvLog(MVLOG_WARN, "Unable to reference USB device %s for interface %d", devicePath.c_str(), interface);
+        return LIBUSB_ERROR_NO_DEVICE;
+    }
+
+    auto libusbRc = libusb_open(dev, &outDeviceHandle.handle);
+    if(libusbRc != LIBUSB_SUCCESS) {
+        mvLog(MVLOG_WARN, "Unable to open USB device %s: %s", devicePath.c_str(), xlink_libusb_strerror(libusbRc));
+        libusb_unref_device(dev);
+        return static_cast<libusb_error>(libusbRc);
+    }
+
+    int activeConfiguration = -1;
+    libusbRc = libusb_get_configuration(outDeviceHandle.handle, &activeConfiguration);
+    if(libusbRc == LIBUSB_SUCCESS && activeConfiguration != 1) {
+        libusbRc = libusb_set_configuration(outDeviceHandle.handle, 1);
+    }
+    if(libusbRc == LIBUSB_SUCCESS) {
+        libusb_set_auto_detach_kernel_driver(outDeviceHandle.handle, 1);
+        if(interface >= 0) {
+            libusbRc = libusb_claim_interface(outDeviceHandle.handle, interface);
+        }
+    }
+
+    libusb_unref_device(dev);
+
+    if(libusbRc != LIBUSB_SUCCESS) {
+        mvLog(MVLOG_WARN, "Unable to initialize USB device %s interface %d: %s",
+              devicePath.c_str(), interface, xlink_libusb_strerror(libusbRc));
+        libusb_close(outDeviceHandle.handle);
+        outDeviceHandle.handle = nullptr;
+        return static_cast<libusb_error>(libusbRc);
+    }
+
+    outDeviceHandle.refCount = 1;
+    return LIBUSB_SUCCESS;
+}
+
+DeviceHandleKey getDeviceHandleKey(const std::string& devicePath, int interface) {
+    DeviceHandleKey key{devicePath, interface};
+
+    libusb_device* dev = nullptr;
+    auto refRc = refLibusbDeviceByNameWithInterface(devicePath.c_str(), interface, &dev);
+    if(refRc != X_LINK_PLATFORM_SUCCESS || dev == nullptr) {
+        return key;
+    }
+
+    key.device += "#" + std::to_string(libusb_get_device_address(dev));
+
+    libusb_device_descriptor desc{};
+    if(libusb_get_device_descriptor(dev, &desc) == LIBUSB_SUCCESS) {
+        key.device += "#" + std::to_string(desc.idVendor) + ":" + std::to_string(desc.idProduct);
+
+        libusb_device_handle* serialHandle = nullptr;
+        if(desc.iSerialNumber != 0 && libusb_open(dev, &serialHandle) == LIBUSB_SUCCESS) {
+            unsigned char serial[256] = {};
+            const auto serialLen = libusb_get_string_descriptor_ascii(serialHandle, desc.iSerialNumber, serial, sizeof(serial));
+            if(serialLen > 0) {
+                key.device += "#";
+                key.device.append(reinterpret_cast<const char*>(serial), static_cast<size_t>(serialLen));
+            }
+            libusb_close(serialHandle);
+        }
+    }
+
+    libusb_unref_device(dev);
+    return key;
+}
+
+static libusb_error getDeviceHandle(const std::string& devicePath, int interface, DeviceHandle*& outHandle) {
+    const auto key = getDeviceHandleKey(devicePath, interface);
+
+    std::lock_guard<std::mutex> lock(deviceHandlesMtx);
+    auto it = deviceHandles.find(key);
+    if(it != deviceHandles.end()) {
+        std::lock_guard<std::mutex> handleLock(it->second.mtx);
+        it->second.retain();
+        outHandle = &it->second;
+        return LIBUSB_SUCCESS;
+    }
+
+    DeviceHandle openedHandle;
+    auto rc = DeviceHandle::open(devicePath, interface, openedHandle);
+    if(rc != LIBUSB_SUCCESS) {
+        outHandle = nullptr;
+        return rc;
+    }
+
+    auto inserted = deviceHandles.emplace(key, std::move(openedHandle));
+    outHandle = &inserted.first->second;
+    return LIBUSB_SUCCESS;
+}
+
+static void dropDeviceHandle(DeviceHandle& handle) {
+    std::lock_guard<std::mutex> lock(deviceHandlesMtx);
+    for(auto it = deviceHandles.begin(); it != deviceHandles.end(); ++it) {
+        if(&it->second != &handle) {
+            continue;
+        }
+
+        bool shouldErase = false;
+        {
+            std::lock_guard<std::mutex> handleLock(handle.mtx);
+            shouldErase = handle.close(it->first.interface);
+        }
+
+        if(shouldErase) {
+            deviceHandles.erase(it);
+        }
+        return;
+    }
+}
 
 xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, int sizeFoundDevices,
