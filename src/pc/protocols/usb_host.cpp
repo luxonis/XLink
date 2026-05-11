@@ -147,6 +147,7 @@ struct DeviceHandleKey {
 
 struct DeviceHandle {
     libusb_device_handle* handle = nullptr;
+    std::vector<int> claimedInterfaces;
     std::mutex mtx;
 
     DeviceHandle() = default;
@@ -154,7 +155,7 @@ struct DeviceHandle {
     DeviceHandle& operator=(const DeviceHandle&) = delete;
 
     DeviceHandle(DeviceHandle&& other) noexcept
-        : handle(other.handle), refCount(other.refCount) {
+        : handle(other.handle), claimedInterfaces(std::move(other.claimedInterfaces)), refCount(other.refCount) {
         other.handle = nullptr;
         other.refCount = 0;
     }
@@ -162,6 +163,7 @@ struct DeviceHandle {
     DeviceHandle& operator=(DeviceHandle&& other) noexcept {
         if(this != &other) {
             handle = other.handle;
+            claimedInterfaces = std::move(other.claimedInterfaces);
             refCount = other.refCount;
             other.handle = nullptr;
             other.refCount = 0;
@@ -180,12 +182,50 @@ public:
         ++refCount;
     }
 
+    libusb_error claimInterface(int interfaceNumber) {
+        std::lock_guard<std::mutex> lock(mtx);
+        if(handle == nullptr) {
+            return LIBUSB_ERROR_NO_DEVICE;
+        }
+        if(std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interfaceNumber) != claimedInterfaces.end()) {
+            return LIBUSB_ERROR_BUSY;
+        }
+
+        const auto rc = libusb_claim_interface(handle, interfaceNumber);
+        if(rc == LIBUSB_SUCCESS) {
+            claimedInterfaces.push_back(interfaceNumber);
+        }
+        return static_cast<libusb_error>(rc);
+    }
+
+    libusb_error releaseInterface(int interfaceNumber) {
+        std::lock_guard<std::mutex> lock(mtx);
+        if(handle == nullptr) {
+            return LIBUSB_ERROR_NO_DEVICE;
+        }
+
+        const auto it = std::find(claimedInterfaces.begin(), claimedInterfaces.end(), interfaceNumber);
+        if(it == claimedInterfaces.end()) {
+            return LIBUSB_ERROR_NOT_FOUND;
+        }
+
+        const auto rc = libusb_release_interface(handle, interfaceNumber);
+        if(rc == LIBUSB_SUCCESS || rc == LIBUSB_ERROR_NO_DEVICE || rc == LIBUSB_ERROR_NOT_FOUND) {
+            claimedInterfaces.erase(it);
+        }
+        return static_cast<libusb_error>(rc);
+    }
+
     bool close() {
         if(refCount <= 0) {
             return true;
         }
         if(--refCount <= 0) {
             if(handle != nullptr) {
+                for(const auto interfaceNumber : claimedInterfaces) {
+                    libusb_release_interface(handle, interfaceNumber);
+                }
+                claimedInterfaces.clear();
                 libusb_close(handle);
                 handle = nullptr;
             }
@@ -717,26 +757,24 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                     continue;
                 }
 
-                {
-                  std::lock_guard<std::mutex> lock(deviceHandle->mtx);
-                  // Set to auto detach & reattach kernel driver, and ignore
-                  // result (success or not supported)
-                  libusb_set_auto_detach_kernel_driver(deviceHandle->handle, 1);
-                  // Claim interface (as we'll be doing IO on endpoints)
-                  if ((libusb_rc = libusb_claim_interface(deviceHandle->handle,
-                                                          0)) < 0) {
-                    if (libusb_rc != LIBUSB_ERROR_BUSY) {
-                      mvLog(MVLOG_ERROR, "libusb_claim_interface: %s",
-                            xlink_libusb_strerror(libusb_rc));
-                    } else {
-                      mvLog(MVLOG_DEBUG, "libusb_claim_interface: %s",
-                            xlink_libusb_strerror(libusb_rc));
-                    }
-                    // retry - most likely device busy by another app
-                    std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
-                    continue;
+                // Set to auto detach & reattach kernel driver, and ignore
+                // result (success or not supported)
+                libusb_set_auto_detach_kernel_driver(deviceHandle->handle, 1);
+                bool interfaceClaimed = false;
+                // Claim interface (as we'll be doing IO on endpoints)
+                if ((libusb_rc = deviceHandle->claimInterface(0)) < 0) {
+                  if (libusb_rc != LIBUSB_ERROR_BUSY) {
+                    mvLog(MVLOG_ERROR, "libusb_claim_interface: %s",
+                          xlink_libusb_strerror(libusb_rc));
+                  } else {
+                    mvLog(MVLOG_DEBUG, "libusb_claim_interface: %s",
+                          xlink_libusb_strerror(libusb_rc));
                   }
+                  // retry - most likely device busy by another app
+                  std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
+                  continue;
                 }
+                interfaceClaimed = true;
 
                 const int send_ep = 0x01;
                 int transferred = 0;
@@ -756,6 +794,10 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                             mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, size);
                             // Mark as error and retry
                             libusb_rc = -1;
+                            if(interfaceClaimed) {
+                                deviceHandle->releaseInterface(0);
+                                interfaceClaimed = false;
+                            }
                             // retry
                             std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                             continue;
@@ -771,6 +813,10 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_size());
                     // Mark as error and retry
                     libusb_rc = -1;
+                    if(interfaceClaimed) {
+                        deviceHandle->releaseInterface(0);
+                        interfaceClaimed = false;
+                    }
                     // retry
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                     continue;
@@ -786,6 +832,10 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, expectedMxIdReadSize);
                     // Mark as error and retry
                     libusb_rc = -1;
+                    if(interfaceClaimed) {
+                        deviceHandle->releaseInterface(0);
+                        interfaceClaimed = false;
+                    }
                     // retry
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                     continue;
@@ -798,6 +848,10 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                     mvLog(MVLOG_ERROR, "libusb_bulk_transfer (%s), transfer: %d, expected: %d", xlink_libusb_strerror(libusb_rc), transferred, usb_mx_id_get_payload_end_size());
                     // Mark as error and retry
                     libusb_rc = -1;
+                    if(interfaceClaimed) {
+                        deviceHandle->releaseInterface(0);
+                        interfaceClaimed = false;
+                    }
                     // retry
                     std::this_thread::sleep_for(SLEEP_BETWEEN_RETRIES);
                     continue;
@@ -805,11 +859,10 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
                 // End
                 ///////////////////////
 
-                {
-                  std::lock_guard<std::mutex> lock(deviceHandle->mtx);
-                  // Release claimed interface
-                  // ignore error as it doesn't matter
-                  libusb_release_interface(deviceHandle->handle, 0);
+                // Release claimed interface; ignore errors as it doesn't matter
+                if(interfaceClaimed) {
+                    deviceHandle->releaseInterface(0);
+                    interfaceClaimed = false;
                 }
 
                 // Parse mxId into HEX presentation
@@ -890,11 +943,7 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
         return (libusb_error) libusb_rc;
     }
 
-    {
-      std::lock_guard<std::mutex> lock(deviceHandle->mtx);
-      libusb_rc =
-          libusb_claim_interface(deviceHandle->handle, USB_EP_INTERFACE_GATE);
-    }
+    libusb_rc = deviceHandle->claimInterface(USB_EP_INTERFACE_GATE);
     if (libusb_rc != 0) {
         dropDeviceHandle(*deviceHandle);
         return (libusb_error)libusb_rc;
@@ -1005,25 +1054,20 @@ static libusb_error usb_open_device(XLinkProtocol_t protocol, libusb_device *dev
         }
     }
 
-    {
-      std::lock_guard<std::mutex> lock(deviceHandle->mtx);
-      // Set to auto detach & reattach kernel driver, and ignore result (success
-      // or not supported)
-      libusb_set_auto_detach_kernel_driver(deviceHandle->handle, 1);
+    // Set to auto detach & reattach kernel driver, and ignore result (success
+    // or not supported)
+    libusb_set_auto_detach_kernel_driver(deviceHandle->handle, 1);
 
-      if (protocol == X_LINK_USB_EP) {
-        if ((res = libusb_claim_interface(deviceHandle->handle,
-                                          USB_EP_INTERFACE_DEVICE)) < 0) {
-          mvLog(MVLOG_DEBUG, "claiming interface %d failed: %s\n",
-                USB_EP_INTERFACE_DEVICE, xlink_libusb_strerror(res));
+    if (protocol == X_LINK_USB_EP) {
+        if ((res = deviceHandle->claimInterface(USB_EP_INTERFACE_DEVICE)) < 0) {
+            mvLog(MVLOG_DEBUG, "claiming interface %d failed: %s\n",
+                  USB_EP_INTERFACE_DEVICE, xlink_libusb_strerror(res));
         }
-      } else {
-        if ((res = libusb_claim_interface(deviceHandle->handle,
-                                          USB_VSC_INTERFACE)) < 0) {
-          mvLog(MVLOG_DEBUG, "claiming interface %d failed: %s\n",
-                USB_VSC_INTERFACE, xlink_libusb_strerror(res));
+    } else {
+        if ((res = deviceHandle->claimInterface(USB_VSC_INTERFACE)) < 0) {
+            mvLog(MVLOG_DEBUG, "claiming interface %d failed: %s\n",
+                  USB_VSC_INTERFACE, xlink_libusb_strerror(res));
         }
-      }
     }
 
     if(res < 0) {
@@ -1264,12 +1308,6 @@ xLinkPlatformErrorCode_t usbLinkBootBootloader(const char *path) {
 
 void usbLinkClose(XLinkProtocol_t protocol, libusb_device_handle *f)
 {
-    if (protocol == X_LINK_USB_EP){
-        libusb_release_interface(f, USB_EP_INTERFACE_DEVICE);
-    } else {
-        libusb_release_interface(f, USB_VSC_INTERFACE);
-    }
-
     dropDeviceHandle(f);
 }
 
@@ -1687,17 +1725,13 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
         return LIBUSB_ERROR_NO_DEVICE;
     }
 
-    {
-      std::lock_guard<std::mutex> lock(gateDeviceHandle->mtx);
-      /* Not strictly necessary, but it is better to use it,
-       * as we're using kernel modules together with our interfaces
-       */
-      rc = libusb_set_auto_detach_kernel_driver(gateDeviceHandle->handle, 1);
-      if (rc == LIBUSB_SUCCESS || rc == LIBUSB_ERROR_NOT_SUPPORTED) {
-        /* Now we claim our ffs interfaces */
-        rc = libusb_claim_interface(gateDeviceHandle->handle,
-                                    USB_EP_INTERFACE_GATE);
-      }
+    /* Not strictly necessary, but it is better to use it,
+     * as we're using kernel modules together with our interfaces
+     */
+    rc = libusb_set_auto_detach_kernel_driver(gateDeviceHandle->handle, 1);
+    if (rc == LIBUSB_SUCCESS || rc == LIBUSB_ERROR_NOT_SUPPORTED) {
+      /* Now we claim our ffs interfaces */
+      rc = gateDeviceHandle->claimInterface(USB_EP_INTERFACE_GATE);
     }
 
     if (rc != LIBUSB_SUCCESS) {
@@ -1731,24 +1765,19 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout) {
 
   DeviceHandle *gateDeviceHandle = nullptr;
   auto gatePath = getLibusbDevicePath(gate_dev);
+  rc = getDeviceHandle(gatePath, USB_EP_INTERFACE_GATE, gate_dev, gateDeviceHandle);
   libusb_unref_device(gate_dev);
-
-  rc = getDeviceHandle(gatePath, USB_EP_INTERFACE_GATE, gateDeviceHandle);
   if (rc != LIBUSB_SUCCESS || gateDeviceHandle == nullptr) {
     return LIBUSB_ERROR_NO_DEVICE;
   }
 
-  {
-    std::lock_guard<std::mutex> lock(gateDeviceHandle->mtx);
-    /* Not strictly necessary, but it is better to use it,
-     * as we're using kernel modules together with our interfaces
-     */
-    rc = libusb_set_auto_detach_kernel_driver(gateDeviceHandle->handle, 1);
-    if (rc == LIBUSB_SUCCESS || rc == LIBUSB_ERROR_NOT_SUPPORTED) {
-      /* Now we claim our ffs interfaces */
-      rc = libusb_claim_interface(gateDeviceHandle->handle,
-                                  USB_EP_INTERFACE_GATE);
-    }
+  /* Not strictly necessary, but it is better to use it,
+   * as we're using kernel modules together with our interfaces
+   */
+  rc = libusb_set_auto_detach_kernel_driver(gateDeviceHandle->handle, 1);
+  if (rc == LIBUSB_SUCCESS || rc == LIBUSB_ERROR_NOT_SUPPORTED) {
+    /* Now we claim our ffs interfaces */
+    rc = gateDeviceHandle->claimInterface(USB_EP_INTERFACE_GATE);
   }
 
   if (rc != LIBUSB_SUCCESS) {
