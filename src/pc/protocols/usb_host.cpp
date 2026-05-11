@@ -937,7 +937,20 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
 
     // get serial from usb descriptor
     DeviceHandle* deviceHandle = nullptr;
+    bool interfaceClaimed = false;
     const auto devicePath = getLibusbDevicePath(dev);
+    const auto cleanup = [&]() {
+        if(deviceHandle == nullptr) {
+            return;
+        }
+        if(interfaceClaimed) {
+            deviceHandle->releaseInterface(USB_EP_INTERFACE_GATE);
+            interfaceClaimed = false;
+        }
+        dropDeviceHandle(*deviceHandle);
+        deviceHandle = nullptr;
+    };
+
     int libusb_rc = getDeviceHandle(devicePath, USB_EP_INTERFACE_GATE, dev, deviceHandle);
     if (libusb_rc != 0){
         return (libusb_error) libusb_rc;
@@ -945,9 +958,10 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
 
     libusb_rc = deviceHandle->claimInterface(USB_EP_INTERFACE_GATE);
     if (libusb_rc != 0) {
-        dropDeviceHandle(*deviceHandle);
+        cleanup();
         return (libusb_error)libusb_rc;
     }
+    interfaceClaimed = true;
 
     USBGateRequest usbGateRequest = {12, 0};
 
@@ -955,14 +969,14 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
 
     libusb_rc = libusb_bulk_transfer(deviceHandle->handle, USB_EP_ENDPOINT_GATE_OUT, (unsigned char*)&usbGateRequest, sizeof(usbGateRequest), &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
-        dropDeviceHandle(*deviceHandle);
+        cleanup();
         return (libusb_error) libusb_rc;
     }
 
     USBGateRequest usbGateResponse = { 0 };
     libusb_rc = libusb_bulk_transfer(deviceHandle->handle, USB_EP_ENDPOINT_GATE_IN, (unsigned char*)&usbGateResponse, sizeof(usbGateResponse), &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
-        dropDeviceHandle(*deviceHandle);
+        cleanup();
         return (libusb_error) libusb_rc;
     }
 
@@ -970,7 +984,7 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
     respBuffer.resize(usbGateResponse.RequestSize);
     libusb_rc = libusb_bulk_transfer(deviceHandle->handle, USB_EP_ENDPOINT_GATE_IN, (unsigned char*)&respBuffer[0], usbGateResponse.RequestSize, &transferred, DEFAULT_WRITE_TIMEOUT);
     if (libusb_rc != 0) {
-        dropDeviceHandle(*deviceHandle);
+        cleanup();
         return (libusb_error) libusb_rc;
     }
 
@@ -987,9 +1001,7 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
     outGateResponse = gateResponse;
 
     // Close opened device
-    if(deviceHandle != nullptr){
-        dropDeviceHandle(*deviceHandle);
-    }
+    cleanup();
 
     return libusb_error::LIBUSB_SUCCESS;
 }
@@ -1718,6 +1730,7 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
     }
 
     DeviceHandle* gateDeviceHandle = nullptr;
+    bool interfaceClaimed = false;
     auto gatePath = getLibusbDevicePath(gate_dev);
     rc = getDeviceHandle(gatePath, USB_EP_INTERFACE_GATE, gate_dev, gateDeviceHandle);
     libusb_unref_device(gate_dev);
@@ -1732,6 +1745,7 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
     if (rc == LIBUSB_SUCCESS || rc == LIBUSB_ERROR_NOT_SUPPORTED) {
       /* Now we claim our ffs interfaces */
       rc = gateDeviceHandle->claimInterface(USB_EP_INTERFACE_GATE);
+      interfaceClaimed = (rc == LIBUSB_SUCCESS);
     }
 
     if (rc != LIBUSB_SUCCESS) {
@@ -1740,7 +1754,10 @@ int usbPlatformGateRead(const char *name, void *data, int size, int timeout)
     }
 
     rc = libusb_bulk_transfer(gateDeviceHandle->handle, USB_EP_ENDPOINT_GATE_IN, (unsigned char*)data, size, &rc, timeout);
-    
+
+    if (interfaceClaimed) {
+      gateDeviceHandle->releaseInterface(USB_EP_INTERFACE_GATE);
+    }
     dropDeviceHandle(*gateDeviceHandle);
 
     return rc;
@@ -1764,6 +1781,7 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout) {
   }
 
   DeviceHandle *gateDeviceHandle = nullptr;
+  bool interfaceClaimed = false;
   auto gatePath = getLibusbDevicePath(gate_dev);
   rc = getDeviceHandle(gatePath, USB_EP_INTERFACE_GATE, gate_dev, gateDeviceHandle);
   libusb_unref_device(gate_dev);
@@ -1778,6 +1796,7 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout) {
   if (rc == LIBUSB_SUCCESS || rc == LIBUSB_ERROR_NOT_SUPPORTED) {
     /* Now we claim our ffs interfaces */
     rc = gateDeviceHandle->claimInterface(USB_EP_INTERFACE_GATE);
+    interfaceClaimed = (rc == LIBUSB_SUCCESS);
   }
 
   if (rc != LIBUSB_SUCCESS) {
@@ -1788,6 +1807,9 @@ int usbPlatformGateWrite(const char *name, void *data, int size, int timeout) {
   rc = libusb_bulk_transfer(gateDeviceHandle->handle, USB_EP_ENDPOINT_GATE_OUT,
                             (unsigned char *)data, size, &rc, timeout);
 
+  if (interfaceClaimed) {
+    gateDeviceHandle->releaseInterface(USB_EP_INTERFACE_GATE);
+  }
   dropDeviceHandle(*gateDeviceHandle);
 
   return rc;
