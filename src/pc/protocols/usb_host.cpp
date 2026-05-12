@@ -633,7 +633,6 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
 static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* pDesc, libusb_device *dev, GateResponse& outGateResponse, std::string& outSerial) {
     GateResponse gateResponse = {0};
-    std::string serial = "";
 
     // get serial from usb descriptor
     libusb_device_handle *handle = nullptr;
@@ -676,12 +675,8 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
 
 
     size_t serialStrLen = usbGateResponse.RequestSize - sizeof(GateResponse);
-    serial.resize(serialStrLen + 1);
-    for (int i = 0; i < serialStrLen; ++i) {
-        serial[i] = respBuffer[i];
-    }
-    serial[serialStrLen] = '\0';
-    outSerial = serial;
+    const auto serialEnd = std::find(respBuffer.begin(), respBuffer.begin() + serialStrLen, 0);
+    outSerial.assign(reinterpret_cast<const char*>(respBuffer.data()), std::distance(respBuffer.begin(), serialEnd));
 
     memcpy(&gateResponse, &respBuffer[serialStrLen], sizeof(gateResponse));
     outGateResponse = gateResponse;
