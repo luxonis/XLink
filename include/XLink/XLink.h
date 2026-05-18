@@ -10,6 +10,7 @@
 #ifndef _XLINK_H
 #define _XLINK_H
 #include "XLinkPublicDefines.h"
+#include "XLinkTime.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -27,6 +28,66 @@ extern "C"
  * Now XLink can work with PCIe and USB simultaneously.
  */
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler);
+
+/**
+ * @brief Initializes XLink Server and detached discovery service
+ * @param globalHandler[in] XLink global communication parameters
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkServer(XLinkHandler_t* handler, const char* deviceId, XLinkDeviceState_t state, XLinkPlatform_t platform);
+
+/**
+ * @brief Initializes only XLink Server and not discovery service
+ * @param globalHandler[in] XLink global communication parameters
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkServerOnly(XLinkHandler_t* handler);
+
+/**
+ * @brief Starts discovery service with given description of itself
+ * @param deviceId[in] Id to respond with
+ * @param state[in] State to respond with
+ * @param platform[in] Platform to respond with
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkDiscoveryServiceStart(const char* deviceId, XLinkDeviceState_t state, XLinkPlatform_t platform);
+
+/**
+ * @brief Sets a callback when discovery services receives a reset request
+ * @param cb[in] Callback
+ */
+void XLinkDiscoveryServiceSetCallbackReset(void (*cb)());
+
+/**
+ * @brief Checks whether or not a service is running
+ * @return True if service is running, false otherwise
+ */
+bool XLinkDiscoveryServiceIsRunning();
+
+/**
+ * @brief Stops discovery service. Blocking operation for max 500ms
+ */
+void XLinkDiscoveryServiceStop();
+
+/**
+ * @brief Detaches discovery service thread. Use when not intending to stop it manually
+ */
+void XLinkDiscoveryServiceDetach();
+
+/**
+ * @brief Adds a callback for link down events
+ * @param cb[in] Callback function to be called
+ * @return Callback id, -1 for error
+ */
+int XLinkAddLinkDownCb(void (*cb)(linkId_t));
+
+/**
+ * @brief Removes callback with given id
+ *
+ * @param cbId callback id retrieved by XLinkAddLinkDownCb function
+ * @return status, 0 ok else error
+ */
+int XLinkRemoveLinkDownCb(int cbId);
 
 #ifndef __DEVICE__
 
@@ -64,12 +125,14 @@ XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequiremen
  * @param[in,out]  out_foundDevicesPtr - pointer to array with all found devices descriptions
  * @param[out]     devicesArraySize - size of out_foundDevicesPtr
  * @param[out]     out_foundDevicesCount - amount of found devices
+ * @param[in]      timeoutMs - for how long to search for
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirements,
                                          deviceDesc_t *out_foundDevicesPtr,
                                          const unsigned int devicesArraySize,
-                                         unsigned int *out_foundDevicesCount);
+                                         unsigned int *out_foundDevicesCount,
+                                         int timeoutMs);
 
 /**
  * @brief Returns all Myriad devices description which meets the requirements
@@ -240,6 +303,43 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId);
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
 XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer, int size);
+
+XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int size, XLinkTimespec* outTSend);
+
+/**
+ * @brief Sends/Receives a message to Gate via USB
+ * @param[in] name - Device name/path
+ * @param[in] data - Data to be transmitted/collected
+ * @param[in] size - The data size
+ * @param[in] size - USB timeout
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkGateWrite(const char *name, void *data, int size, int timeout);
+XLinkError_t XLinkGateRead(const char *name, void *data, int size, int timeout);
+
+/**
+ * @brief Sends a package to initiate the writing of a file descriptor
+ * @warning Actual size of the written data is ALIGN_UP(size, 64)
+ * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
+ * @param[in] buffer - FD to be transmitted
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkWriteFd(streamId_t const streamId, const long fd);
+XLinkError_t XLinkWriteFd_(streamId_t streamId, const long fd, XLinkTimespec* outTSend);
+XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, const uint8_t* dataBuffer, int dataSize);
+
+
+/**
+ * @brief Sends a package to initiate the writing of data to a remote stream
+ * @warning Actual size of the written data is ALIGN_UP(size, 64)
+ * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
+ * @param[in] buffer1 – data buffer to be transmitted
+ * @param[in] buffer1Size – size of the data to be transmitted
+ * @param[in] buffer2 – data buffer to be transmitted
+ * @param[in] buffer2Size – size of the data to be transmitted
+ * @return Status code of the operation: X_LINK_SUCCESS (0) for success
+ */
+XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, int buffer1Size, const uint8_t* buffer2, int buffer2Size);
 
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream

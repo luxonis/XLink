@@ -34,14 +34,17 @@ typedef enum {
     X_LINK_PLATFORM_DRIVER_NOT_LOADED = -128,
     X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED = X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_VSC,
     X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED = X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_TCP_IP,
+    X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED = X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_LOCAL_SHDMEM,
+    X_LINK_PLATFORM_TCP_IP_OR_LOCAL_SHDMEM_DRIVER_NOT_LOADED = X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_TCP_IP_OR_LOCAL_SHDMEM,
     X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED = X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_PCIE,
+    X_LINK_PLATFORM_USB_EP_DRIVER_NOT_LOADED = X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP,
 } xLinkPlatformErrorCode_t;
 
 // ------------------------------------
 // Device management. Begin.
 // ------------------------------------
 
-xLinkPlatformErrorCode_t XLinkPlatformInit(void* options);
+xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler);
 
 #ifndef __DEVICE__
 /**
@@ -49,7 +52,7 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(void* options);
  */
 xLinkPlatformErrorCode_t XLinkPlatformFindDevices(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, unsigned sizeFoundDevices,
-                                                     unsigned *out_amountOfFoundDevices);
+                                                     unsigned *out_amountOfFoundDevices, int timeoutMs);
 xLinkPlatformErrorCode_t XLinkPlatformFindDevicesDynamic(const deviceDesc_t in_deviceRequirements,
                                                      deviceDesc_t* out_foundDevices, unsigned sizeFoundDevices,
                                                      unsigned *out_amountOfFoundDevices, int timeoutMs, bool (*cb)(deviceDesc_t*, unsigned int));
@@ -64,8 +67,10 @@ xLinkPlatformErrorCode_t XLinkPlatformFindArrayOfDevicesNames(
 xLinkPlatformErrorCode_t XLinkPlatformBootRemote(const deviceDesc_t* deviceDesc, const char* binaryPath);
 xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite,
-                         XLinkProtocol_t protocol, void** fd);
+                         XLinkProtocol_t *protocol, void** fd);
 xLinkPlatformErrorCode_t XLinkPlatformBootBootloader(const char* name, XLinkProtocol_t protocol);
+xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite,
+                         XLinkProtocol_t *protocol, void** fd);
 
 UsbSpeed_t get_usb_speed();
 const char* get_mx_serial();
@@ -84,7 +89,10 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
 // ------------------------------------
 
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size);
-int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size);
+int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void *data2, int size2);
+int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, long *fd);
+int XLinkPlatformGateWrite(const char *name, void *data, int size, int timeout);
+int XLinkPlatformGateRead(const char *name, void *data, int size, int timeout);
 
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment);
 void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment);
@@ -99,17 +107,8 @@ void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment);
 // Helpers. Begin.
 // ------------------------------------
 
-#ifndef __DEVICE__
-
 int XLinkPlatformIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state);
 char* XLinkPlatformErrorToStr(const xLinkPlatformErrorCode_t errorCode);
-
-// for deprecated API
-XLinkPlatform_t XLinkPlatformPidToPlatform(const int pid);
-XLinkDeviceState_t XLinkPlatformPidToState(const int pid);
-// for deprecated API
-
-#endif // __DEVICE__
 
 // ------------------------------------
 // Helpers. End.

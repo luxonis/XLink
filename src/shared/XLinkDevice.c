@@ -3,6 +3,7 @@
 //
 
 #include <errno.h>
+#include "XLinkPublicDefines.h"
 #include "stdio.h"
 #include "stdint.h"
 #include "string.h"
@@ -27,6 +28,8 @@
 #if (defined(_WIN32) || defined(_WIN64))
 #include "win_time.h"
 #endif
+
+#include "tcpip_host.h"
 
 // ------------------------------------
 // Global fields. Begin.
@@ -56,12 +59,7 @@ static uint32_t init_once = 0;
 static linkId_t getNextAvailableLinkUniqueId();
 static xLinkDesc_t* getNextAvailableLink();
 static void freeGivenLink(xLinkDesc_t* link);
-
-#ifndef __DEVICE__
-
 static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc);
-
-#endif // __DEVICE__
 
 // ------------------------------------
 // Helpers declaration. End.
@@ -82,11 +80,6 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
         return X_LINK_SUCCESS;
     }
 
-#ifdef __DEVICE__
-    mvLogLevelSet(MVLOG_FATAL);
-    mvLogDefaultLevelSet(MVLOG_FATAL);
-#endif
-
     ASSERT_XLINK(XLINK_MAX_STREAMS <= MAX_POOLS_ALLOC);
     glHandler = globalHandler;
     if (sem_init(&pingSem,0,0)) {
@@ -94,7 +87,7 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     }
     int i;
 
-    xLinkPlatformErrorCode_t init_status = XLinkPlatformInit(globalHandler->options);
+    xLinkPlatformErrorCode_t init_status = XLinkPlatformInit(globalHandler);
     if (init_status != X_LINK_PLATFORM_SUCCESS) {
         pthread_mutex_unlock(&init_mutex);
         return parsePlatformError(init_status);
@@ -140,32 +133,6 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
             link->availableStreams[stream].id = INVALID_STREAM_ID;
     }
 
-#ifdef __DEVICE__
-    link = getNextAvailableLink();
-    if (link == NULL) {
-        pthread_mutex_unlock(&init_mutex);
-        return X_LINK_COMMUNICATION_NOT_OPEN;
-    }
-    link->peerState = XLINK_UP;
-    link->deviceHandle.xLinkFD = NULL;
-    link->deviceHandle.protocol = globalHandler->protocol;
-
-    xLinkDeviceHandle_t temp = {0};
-    temp.protocol = globalHandler->protocol;
-    {
-        int rc;
-        if (rc = DispatcherStart(&temp)) { //myriad has one
-            mvLog(MVLOG_ERROR, " DispatcherStart(&temp) method call failed with an error: %d", rc);
-            pthread_mutex_unlock(&init_mutex);
-            return rc;
-        }
-    }
-
-    while(((sem_wait(&pingSem) == -1) && errno == EINTR)
-        continue;
-
-#endif
-
     init_once = 1;
     int status = pthread_mutex_unlock(&init_mutex);
     if(status){
@@ -176,7 +143,78 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
     return X_LINK_SUCCESS;
 }
 
-#ifndef __DEVICE__
+void XLinkDiscoveryServiceSetCallbackReset(void (*cb)()) {
+    tcpip_set_discovery_service_reset_callback(cb);
+}
+XLinkError_t XLinkDiscoveryServiceStart(const char* deviceId, XLinkDeviceState_t state, XLinkPlatform_t platform) {
+    return parsePlatformError(tcpip_start_discovery_service(deviceId, state, platform));
+}
+bool XLinkDiscoveryServiceIsRunning() {
+    return tcpip_is_running_discovery_service();
+}
+void XLinkDiscoveryServiceStop() {
+    tcpip_stop_discovery_service();
+}
+void XLinkDiscoveryServiceDetach() {
+    tcpip_detach_discovery_service();
+}
+
+XLinkError_t XLinkServer(XLinkHandler_t* handler, const char* deviceId, XLinkDeviceState_t state, XLinkPlatform_t platform) {
+    // Start discovery
+    XLinkError_t ret = XLinkDiscoveryServiceStart(deviceId, state, platform);
+    if(ret != X_LINK_SUCCESS)  {
+        return ret;
+    }
+
+    // Detach discovery
+    XLinkDiscoveryServiceDetach();
+
+    // Start server and return
+    return XLinkServerOnly(handler);
+}
+
+
+XLinkError_t XLinkServerOnly(XLinkHandler_t* handler)
+{
+    XLINK_RET_IF(handler == NULL);
+    if (strnlen(handler->devicePath, MAX_PATH_LENGTH) < 2) {
+        mvLog(MVLOG_ERROR, "Device path is incorrect");
+        return X_LINK_ERROR;
+    }
+
+    xLinkDesc_t* link = getNextAvailableLink();
+    XLINK_RET_IF(link == NULL);
+    mvLog(MVLOG_DEBUG,"%s() device name %s glHandler %p protocol %d\n", __func__, handler->devicePath, glHandler, handler->protocol);
+
+    link->deviceHandle.protocol = handler->protocol;
+    int connectStatus = XLinkPlatformServer(handler->devicePath2, handler->devicePath,
+                                             &link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
+
+    if (connectStatus < 0) {
+        /**
+         * Connection may be unsuccessful at some amount of first tries.
+         * In this case, asserting the status provides enormous amount of logs in tests.
+         */
+
+        // Free used link
+        freeGivenLink(link);
+
+        // Return an informative error
+        return parsePlatformError(connectStatus);
+    }
+
+    XLINK_RET_ERR_IF(
+        DispatcherStartServer(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
+
+    // Wait till client pings
+    while(((sem_wait(&pingSem) == -1) && errno == EINTR))
+        continue;
+
+    link->peerState = XLINK_UP;
+    link->hostClosedFD = 0;
+    handler->linkId = link->id;
+    return X_LINK_SUCCESS;
+}
 
 int XLinkIsDescriptionValid(const deviceDesc_t *in_deviceDesc, const XLinkDeviceState_t state) {
     return XLinkPlatformIsDescriptionValid(in_deviceDesc, state);
@@ -188,7 +226,7 @@ XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequiremen
 
     xLinkPlatformErrorCode_t rc;
     unsigned numFoundDevices = 0;
-    rc = XLinkPlatformFindDevices(in_deviceRequirements, out_foundDevice, 1, &numFoundDevices);
+    rc = XLinkPlatformFindDevices(in_deviceRequirements, out_foundDevice, 1, &numFoundDevices, XLINK_DEVICE_DEFAULT_SEARCH_TIMEOUT_MS);
     if(numFoundDevices <= 0){
         return X_LINK_DEVICE_NOT_FOUND;
     }
@@ -198,13 +236,14 @@ XLinkError_t XLinkFindFirstSuitableDevice(const deviceDesc_t in_deviceRequiremen
 XLinkError_t XLinkFindAllSuitableDevices(const deviceDesc_t in_deviceRequirements,
                                          deviceDesc_t *out_foundDevicesPtr,
                                          const unsigned int devicesArraySize,
-                                         unsigned int* out_foundDevicesCount) {
+                                         unsigned int* out_foundDevicesCount,
+                                         int timeoutMs) {
     XLINK_RET_IF(out_foundDevicesPtr == NULL);
     XLINK_RET_IF(devicesArraySize <= 0);
     XLINK_RET_IF(out_foundDevicesCount == NULL);
 
     xLinkPlatformErrorCode_t rc;
-    rc = XLinkPlatformFindDevices(in_deviceRequirements, out_foundDevicesPtr, devicesArraySize, out_foundDevicesCount);
+    rc = XLinkPlatformFindDevices(in_deviceRequirements, out_foundDevicesPtr, devicesArraySize, out_foundDevicesCount, timeoutMs);
 
     return parsePlatformError(rc);
 }
@@ -239,8 +278,8 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
 
     link->deviceHandle.protocol = handler->protocol;
     int connectStatus = XLinkPlatformConnect(handler->devicePath2, handler->devicePath,
-                                             link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
-
+                                             &link->deviceHandle.protocol, &link->deviceHandle.xLinkFD);
+    
     if (connectStatus < 0) {
         /**
          * Connection may be unsuccessful at some amount of first tries.
@@ -253,9 +292,9 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
         // Return an informative error
         return parsePlatformError(connectStatus);
     }
-
+    
     XLINK_RET_ERR_IF(
-        DispatcherStart(&link->deviceHandle) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
+        DispatcherStart(link) != X_LINK_SUCCESS, X_LINK_TIMEOUT);
 
     xLinkEvent_t event = {0};
 
@@ -269,14 +308,6 @@ XLinkError_t XLinkConnect(XLinkHandler_t* handler)
     }
 
     link->peerState = XLINK_UP;
-    #if (!defined(_WIN32) && !defined(_WIN64) )
-        link->usbConnSpeed = get_usb_speed();
-        mv_strcpy(link->mxSerialId, XLINK_MAX_MX_ID_SIZE, get_mx_serial());
-    #else
-        link->usbConnSpeed = X_LINK_USB_SPEED_UNKNOWN;
-        mv_strcpy(link->mxSerialId, XLINK_MAX_MX_ID_SIZE, "UNKNOWN");
-    #endif
-
     link->hostClosedFD = 0;
     handler->linkId = link->id;
     return X_LINK_SUCCESS;
@@ -401,9 +432,6 @@ XLinkError_t XLinkResetRemoteTimeout(linkId_t id, int timeoutMs)
 
 XLinkError_t XLinkResetAll()
 {
-#if defined(NO_BOOT)
-    mvLog(MVLOG_INFO, "Devices will not be restarted for this configuration (NO_BOOT)");
-#else
     int i;
     for (i = 0; i < MAX_LINKS; i++) {
         if (availableXLinks[i].id != INVALID_LINK_ID) {
@@ -425,11 +453,8 @@ XLinkError_t XLinkResetAll()
             }
         }
     }
-#endif
     return X_LINK_SUCCESS;
 }
-
-#endif // __DEVICE__
 
 XLinkError_t XLinkProfStart()
 {
@@ -521,7 +546,7 @@ const char* XLinkGetMxSerial(linkId_t id){
 // ------------------------------------
 
 // Used only by getNextAvailableLink
-static linkId_t getNextAvailableLinkUniqueId()
+linkId_t getNextAvailableLinkUniqueId()
 {
     linkId_t start = nextUniqueLinkId;
     do
@@ -553,7 +578,7 @@ static linkId_t getNextAvailableLinkUniqueId()
     return INVALID_LINK_ID;
 }
 
-static xLinkDesc_t* getNextAvailableLink() {
+xLinkDesc_t* getNextAvailableLink() {
 
     XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex) != 0, NULL);
 
@@ -590,7 +615,7 @@ static xLinkDesc_t* getNextAvailableLink() {
     return link;
 }
 
-static void freeGivenLink(xLinkDesc_t* link) {
+void freeGivenLink(xLinkDesc_t* link) {
 
     if(pthread_mutex_lock(&availableXLinksMutex) != 0){
         mvLog(MVLOG_ERROR, "Cannot lock mutex\n");
@@ -606,9 +631,7 @@ static void freeGivenLink(xLinkDesc_t* link) {
 
 }
 
-#ifndef __DEVICE__
-
-static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
+XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
     switch (rc) {
         case X_LINK_PLATFORM_SUCCESS:
             return X_LINK_SUCCESS;
@@ -621,19 +644,21 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc) {
         case X_LINK_PLATFORM_DEVICE_BUSY:
             return X_LINK_DEVICE_ALREADY_IN_USE;
         case X_LINK_PLATFORM_USB_DRIVER_NOT_LOADED:
+        case X_LINK_PLATFORM_USB_EP_DRIVER_NOT_LOADED:
             return X_LINK_INIT_USB_ERROR;
         case X_LINK_PLATFORM_TCP_IP_DRIVER_NOT_LOADED:
             return X_LINK_INIT_TCP_IP_ERROR;
+	case X_LINK_PLATFORM_LOCAL_SHDMEM_DRIVER_NOT_LOADED:
+	    return X_LINK_INIT_LOCAL_SHDMEM_ERROR;
         case X_LINK_PLATFORM_PCIE_DRIVER_NOT_LOADED:
             return X_LINK_INIT_PCIE_ERROR;
+	case X_LINK_PLATFORM_TCP_IP_OR_LOCAL_SHDMEM_DRIVER_NOT_LOADED:
         case X_LINK_PLATFORM_ERROR:
         case X_LINK_PLATFORM_INVALID_PARAMETERS:
         default:
             return X_LINK_ERROR;
     }
 }
-
-#endif // __DEVICE__
 
 /**
  * @brief Returns enum string value
@@ -655,6 +680,8 @@ const char* XLinkErrorToStr(XLinkError_t val) {
         case X_LINK_NOT_IMPLEMENTED: return "X_LINK_NOT_IMPLEMENTED";
         case X_LINK_INIT_USB_ERROR: return "X_LINK_INIT_USB_ERROR";
         case X_LINK_INIT_TCP_IP_ERROR: return "X_LINK_INIT_TCP_IP_ERROR";
+        case X_LINK_INIT_LOCAL_SHDMEM_ERROR: return "X_LINK_INIT_LOCAL_SHDMEM_ERROR";
+        case X_LINK_INIT_TCP_IP_OR_LOCAL_SHDMEM_ERROR: return "X_LINK_INIT_TCP_IP_OR_LOCAL_SHDMEM_ERROR";
         case X_LINK_INIT_PCIE_ERROR: return "X_LINK_INIT_PCIE_ERROR";
         default:
             return "INVALID_ENUM_VALUE";
@@ -673,6 +700,9 @@ const char* XLinkProtocolToStr(XLinkProtocol_t val) {
         case X_LINK_PCIE: return "X_LINK_PCIE";
         case X_LINK_IPC: return "X_LINK_IPC";
         case X_LINK_TCP_IP: return "X_LINK_TCP_IP";
+        case X_LINK_LOCAL_SHDMEM: return "X_LINK_LOCAL_SHDMEM";
+        case X_LINK_TCP_IP_OR_LOCAL_SHDMEM: return "X_LINK_TCP_IP_OR_LOCAL_SHDMEM";
+        case X_LINK_USB_EP: return "X_LINK_USB_EP";
         case X_LINK_NMB_OF_PROTOCOLS: return "X_LINK_NMB_OF_PROTOCOLS";
         case X_LINK_ANY_PROTOCOL: return "X_LINK_ANY_PROTOCOL";
         default:
@@ -690,6 +720,8 @@ const char* XLinkPlatformToStr(XLinkPlatform_t val) {
         case X_LINK_ANY_PLATFORM: return "X_LINK_ANY_PLATFORM";
         case X_LINK_MYRIAD_2: return "X_LINK_MYRIAD_2";
         case X_LINK_MYRIAD_X: return "X_LINK_MYRIAD_X";
+        case X_LINK_RVC3: return "X_LINK_RVC3";
+        case X_LINK_RVC4: return "X_LINK_RVC4";
         default:
             return "INVALID_ENUM_VALUE";
             break;
@@ -707,6 +739,9 @@ const char* XLinkDeviceStateToStr(XLinkDeviceState_t val) {
         case X_LINK_UNBOOTED: return "X_LINK_UNBOOTED";
         case X_LINK_BOOTLOADER: return "X_LINK_BOOTLOADER";
         case X_LINK_BOOTED_NON_EXCLUSIVE: return "X_LINK_BOOTED_NON_EXCLUSIVE";
+        case X_LINK_GATE: return "X_LINK_GATE";
+        case X_LINK_GATE_BOOTED: return "X_LINK_GATE_BOOTED";
+        case X_LINK_GATE_SETUP: return "X_LINK_GATE_SETUP";
         default:
             return "INVALID_ENUM_VALUE";
             break;
@@ -723,10 +758,8 @@ const char* XLinkPCIEBootloaderToStr(XLinkPCIEBootloader val) {
         case X_LINK_PCIE_UNKNOWN_BOOTLOADER: return "X_LINK_PCIE_UNKNOWN_BOOTLOADER";
         case X_LINK_PCIE_SIMPLIFIED_BOOTLOADER: return "X_LINK_PCIE_SIMPLIFIED_BOOTLOADER";
         case X_LINK_PCIE_UNIFIED_BOOTLOADER: return "X_LINK_PCIE_UNIFIED_BOOTLOADER";
-        default:
-            return "INVALID_ENUM_VALUE";
-            break;
     }
+    return "INVALID_ENUM_VALUE";
 }
 
 // ------------------------------------

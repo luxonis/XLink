@@ -51,47 +51,14 @@ typedef enum
     TCPIP_INVALID_PARAMETERS = -5
 } tcpipHostError_t;
 
-/* Host-to-device command list */
-typedef enum
-{
-    TCPIP_HOST_CMD_NO_COMMAND = 0,
-    TCPIP_HOST_CMD_DEVICE_DISCOVER = 1,
-    TCPIP_HOST_CMD_DEVICE_INFO = 2,
-    TCPIP_HOST_CMD_RESET = 3,
-    TCPIP_HOST_CMD_DEVICE_DISCOVERY_EX = 4,
-} tcpipHostCommand_t;
-
-/* Device state */
-typedef enum
-{
-    TCPIP_HOST_STATE_BOOTED = 1,
-    TCPIP_HOST_STATE_BOOTLOADER = 3,
-    TCPIP_HOST_STATE_FLASH_BOOTED = 4,
-} tcpipHostDeviceState_t;
-
-/* Device response payload */
-typedef struct
-{
-    tcpipHostCommand_t command;
-    char mxid[32];
-    uint32_t state;
-} tcpipHostDeviceDiscoveryResp_t;
-
-/* Device response payload extended*/
-typedef struct
-{
-    tcpipHostCommand_t command;
-    char id[32];
-    uint32_t state;
-    uint32_t protocol;
-    uint32_t platform;
-    uint16_t portHttp;
-    uint16_t portHttps;
-} tcpipHostDeviceDiscoveryExResp_t;
-
 /* **************************************************************************/
 /*      Public Function Declarations                                        */
 /* **************************************************************************/
+
+/**
+ * @brief Initializes TCP/IP protocol
+*/
+tcpipHostError_t tcpip_initialize();
 
 /**
  * @brief       Close socket
@@ -110,10 +77,11 @@ tcpipHostError_t tcpip_close_socket(TCPIP_SOCKET socket);
  * @param[in]   devices_size Size of devices array
  * @param[out]  device_count Total device IP address obtained
  * @param[in]   target_ip Target IP address to be checked
+ * @param[in]   timeout_ms Timeout in milliseconds
  * @retval      TCPIP_HOST_ERROR Failed to get network interface informations
  * @retval      TCPIP_HOST_SUCCESS Received all device IP address available
 */
-xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count);
+xLinkPlatformErrorCode_t tcpip_get_devices(const deviceDesc_t in_deviceRequirements, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count, int timeout_ms);
 
 xLinkPlatformErrorCode_t tcpip_create_search_context(void** pctx, const deviceDesc_t in_deviceRequirements);
 xLinkPlatformErrorCode_t tcpip_perform_search(void* ctx, deviceDesc_t* devices, size_t devices_size, unsigned int* device_count);
@@ -126,6 +94,20 @@ xLinkPlatformErrorCode_t tcpip_close_search_context(void* ctx);
 */
 xLinkPlatformErrorCode_t tcpip_boot_bootloader(const char* name);
 
+int tcpipPlatformRead(void *fd, void *data, int size);
+int tcpipPlatformWrite(void *fd, void *data, int size);
+int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
+int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd, long *sockFd);
+xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name);
+int tcpipPlatformDeviceFdDown(void *fd);
+int tcpipPlatformClose(void *fd);
+int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
+
+xLinkPlatformErrorCode_t tcpip_start_discovery_service(const char* id, XLinkDeviceState_t state, XLinkPlatform_t platform);
+void tcpip_stop_discovery_service();
+void tcpip_detach_discovery_service();
+void tcpip_set_discovery_service_reset_callback(void (*cb)());
+bool tcpip_is_running_discovery_service();
 
 #ifdef __cplusplus
 }

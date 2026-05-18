@@ -10,6 +10,7 @@
 #ifndef _XLINKPUBLICDEFINES_H
 #define _XLINKPUBLICDEFINES_H
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include "XLinkTime.h"
 #ifdef __cplusplus
@@ -27,6 +28,7 @@ extern "C"
 #endif
 #define XLINK_MAX_PACKETS_PER_STREAM 64
 #define XLINK_NO_RW_TIMEOUT 0xFFFFFFFF
+#define XLINK_DEVICE_DEFAULT_SEARCH_TIMEOUT_MS 500
 
 
 typedef enum {
@@ -53,6 +55,8 @@ typedef enum{
     X_LINK_NOT_IMPLEMENTED,
     X_LINK_INIT_USB_ERROR,
     X_LINK_INIT_TCP_IP_ERROR,
+    X_LINK_INIT_LOCAL_SHDMEM_ERROR,
+    X_LINK_INIT_TCP_IP_OR_LOCAL_SHDMEM_ERROR,
     X_LINK_INIT_PCIE_ERROR,
 } XLinkError_t;
 
@@ -62,6 +66,9 @@ typedef enum{
     X_LINK_PCIE,
     X_LINK_IPC,
     X_LINK_TCP_IP,
+    X_LINK_LOCAL_SHDMEM,
+    X_LINK_TCP_IP_OR_LOCAL_SHDMEM,
+    X_LINK_USB_EP,
     X_LINK_NMB_OF_PROTOCOLS,
     X_LINK_ANY_PROTOCOL
 } XLinkProtocol_t;
@@ -70,6 +77,8 @@ typedef enum{
     X_LINK_ANY_PLATFORM = 0,
     X_LINK_MYRIAD_2 = 2450,
     X_LINK_MYRIAD_X = 2480,
+    X_LINK_RVC3 = 3000,
+    X_LINK_RVC4 = 4000,
 } XLinkPlatform_t;
 
 typedef enum{
@@ -97,6 +106,18 @@ typedef enum{
      * The device has booted the flashed firmware/pipeline (e.g. in case of OAK POE devices in standalone mode).
      */
     X_LINK_BOOTED_NON_EXCLUSIVE = X_LINK_FLASH_BOOTED,
+    /**
+     * The device is running Gate
+     */
+    X_LINK_GATE,
+    /**
+     * The device is running Gate and already booted
+     */
+    X_LINK_GATE_BOOTED,
+    /**
+     * The device is in setup mode
+     */
+    X_LINK_GATE_SETUP
 } XLinkDeviceState_t;
 
 typedef enum{
@@ -127,6 +148,7 @@ typedef struct streamPacketDesc_t
 {
     uint8_t* data;
     uint32_t length;
+    int32_t fd; // file descriptor
     XLinkTimespec tRemoteSent; /// remote timestamp of when the packet was sent. Related to remote clock. Note: not directly related to local clock
     XLinkTimespec tReceived; /// local timestamp of when the packet was received. Related to local monotonic clock
 } streamPacketDesc_t;

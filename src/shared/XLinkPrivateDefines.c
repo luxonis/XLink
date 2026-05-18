@@ -87,17 +87,16 @@ streamId_t XLinkAddOrUpdateStream(void *fd, const char *name,
     if (readSize && !stream->readSize) {
         stream->readSize = readSize;
 
-#ifdef __DEVICE__
-        // FIXME: not the best solution but the simplest for now:
-        // it is just for a check; real allocation will be done during receiving an usb package
-        void *buffer = XLinkPlatformAllocateData(ALIGN_UP(readSize, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
-        if (buffer == NULL) {
-            mvLog(MVLOG_ERROR,"Cannot create stream. Requested memory = %u", stream->readSize);
-            return INVALID_STREAM_ID;
-        } else {
-            XLinkPlatformDeallocateData(buffer, ALIGN_UP(readSize, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
-        }
-#endif
+        // // Just allocate data
+        // // FIXME: not the best solution but the simplest for now:
+        // // it is just for a check; real allocation will be done during receiving an usb package
+        // void *buffer = XLinkPlatformAllocateData(ALIGN_UP(readSize, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
+        // if (buffer == NULL) {
+        //     mvLog(MVLOG_ERROR,"Cannot create stream. Requested memory = %u", stream->readSize);
+        //     return INVALID_STREAM_ID;
+        // } else {
+        //     XLinkPlatformDeallocateData(buffer, ALIGN_UP(readSize, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
+        // }
     }
     if (writeSize && !stream->writeSize) {
         stream->writeSize = writeSize;

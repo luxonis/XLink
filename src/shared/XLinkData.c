@@ -25,17 +25,20 @@
 #include "XLinkLog.h"
 #include "XLinkStringUtils.h"
 
+#ifdef __unix__
+#include <sys/stat.h>
+#endif
+
 // ------------------------------------
 // Helpers declaration. Begin.
 // ------------------------------------
 
-#ifndef __DEVICE__
 static XLinkError_t checkEventHeader(xLinkEventHeader_t header);
-#endif
-
 static float timespec_diff(struct timespec *start, struct timespec *stop);
 static XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs);
+static XLinkError_t addEvent_(xLinkEvent_t *event, unsigned int timeoutMs, XLinkTimespec* outTime);
 static XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs);
+static XLinkError_t addEventWithPerf_(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs, XLinkTimespec* outTime);
 static XLinkError_t addEventWithPerfTimeout(xLinkEvent_t *event, float* opTime, unsigned int msTimeout);
 static XLinkError_t getLinkByStreamId(streamId_t streamId, xLinkDesc_t** out_link);
 
@@ -69,7 +72,6 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
             DispatcherWaitEventComplete(&link->deviceHandle, XLINK_NO_RW_TIMEOUT),
             INVALID_STREAM_ID);
 
-#ifndef __DEVICE__
         XLinkError_t eventStatus = checkEventHeader(event.header);
         if (eventStatus != X_LINK_SUCCESS) {
             mvLog(MVLOG_ERROR, "Got wrong package from device, error code = %s", XLinkErrorToStr(eventStatus));
@@ -80,22 +82,19 @@ streamId_t XLinkOpenStream(linkId_t id, const char* name, int stream_write_size)
                 return INVALID_STREAM_ID;
             }
         }
-#endif
     }
     streamId_t streamId = getStreamIdByName(link, name);
 
-#ifndef __DEVICE__
     if (streamId > 0x0FFFFFFF) {
         mvLog(MVLOG_ERROR, "Cannot find stream id by the \"%s\" name", name);
         mvLog(MVLOG_ERROR,"Max streamId reached!");
         return INVALID_STREAM_ID;
     }
-#else
-    if (streamId == INVALID_STREAM_ID) {
-        mvLog(MVLOG_ERROR,"Max streamId reached %x!", streamId);
-        return INVALID_STREAM_ID;
-    }
-#endif
+    // TODO(themarpe) - server side
+    // if (streamId == INVALID_STREAM_ID) {
+    //     mvLog(MVLOG_ERROR,"Max streamId reached %x!", streamId);
+    //     return INVALID_STREAM_ID;
+    // }
 
     COMBINE_IDS(streamId, id);
     return streamId;
@@ -118,8 +117,28 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId)
     return X_LINK_SUCCESS;
 }
 
-XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
-                            int size)
+XLinkError_t XLinkGateWrite(const char *name, void *data, int size, int timeout)
+{
+    int rc = XLinkPlatformGateWrite(name, data, size, timeout);
+    if(rc < 0) {
+        return X_LINK_ERROR;
+    } else {
+        return X_LINK_SUCCESS;
+    }
+}
+
+XLinkError_t XLinkGateRead(const char *name, void *data, int size, int timeout)
+{
+    int rc = XLinkPlatformGateRead(name, data, size, timeout);
+    if(rc < 0) {
+        return X_LINK_ERROR;
+    } else {
+        return X_LINK_SUCCESS;
+    }
+}
+
+XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer,
+                            int size, XLinkTimespec* outTSend)
 {
     XLINK_RET_IF(buffer == NULL);
 
@@ -132,14 +151,139 @@ XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
     XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_REQ,
         size,(void*)buffer, link->deviceHandle);
 
-    XLINK_RET_IF(addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT));
+    XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
 
-    if (glHandler->profEnable) {
+    if( glHandler->profEnable) {
         glHandler->profilingData.totalWriteBytes += size;
         glHandler->profilingData.totalWriteTime += opTime;
     }
     link->profilingData.totalWriteBytes += size;
     link->profilingData.totalWriteTime += size;
+
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkWriteFd(streamId_t const streamId, const long fd)
+{
+    return XLinkWriteFd_(streamId, fd, NULL);
+}
+
+XLinkError_t XLinkWriteFd_(streamId_t streamId, const long fd, XLinkTimespec* outTSend)
+{
+    float opTime = 0.0f;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId_t streamIdOnly = EXTRACT_STREAM_ID(streamId);
+
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamIdOnly, XLINK_WRITE_FD_REQ,
+        sizeof(long),(void*)fd, link->deviceHandle);
+
+    event.data2 = (void*)NULL;
+    event.data2Size = -1;
+
+    int size = sizeof(long);
+#if defined(__unix__)
+    if (event.deviceHandle.protocol != X_LINK_LOCAL_SHDMEM &&
+	event.header.type == XLINK_WRITE_FD_REQ) {
+
+	if (fd >= 0) {
+	    // Determine file size through fstat
+    	    struct stat fileStats;
+	    fstat(fd, &fileStats);
+	    size = fileStats.st_size;
+
+	    if (size > 0) {
+		event.header.size = size;
+	    }
+	}
+    }
+#endif
+
+    XLINK_RET_IF(addEventWithPerf_(&event, &opTime, XLINK_NO_RW_TIMEOUT, outTSend));
+
+    if( glHandler->profEnable) {
+        glHandler->profilingData.totalWriteBytes += size;
+        glHandler->profilingData.totalWriteTime += opTime;
+    }
+    link->profilingData.totalWriteBytes += size;
+    link->profilingData.totalWriteTime += size;
+
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, const uint8_t* dataBuffer, int dataSize)
+{
+    ASSERT_XLINK(dataBuffer);
+
+    float opTime = 0;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId = EXTRACT_STREAM_ID(streamId);
+
+    int totalSize = dataSize;
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_FD_REQ, totalSize, (void*)fd, link->deviceHandle);
+
+    event.data2 = (void*)dataBuffer;
+    event.data2Size = dataSize;
+
+#if defined(__unix__)
+    if (event.deviceHandle.protocol != X_LINK_LOCAL_SHDMEM &&
+	event.header.type == XLINK_WRITE_FD_REQ) {
+
+	if (fd >= 0) {
+	    // Determine file size through fstat
+    	    struct stat fileStats;
+	    fstat(fd, &fileStats);
+	    int size = fileStats.st_size;
+
+	    if (size > 0) {
+		event.header.size += size;
+		totalSize += size;
+	    }
+	}
+    }
+#endif
+
+    XLINK_RET_IF(addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT));
+
+    if( glHandler->profEnable) {
+        glHandler->profilingData.totalWriteBytes += totalSize;
+        glHandler->profilingData.totalWriteTime += opTime;
+    }
+
+    return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkWriteData(streamId_t const streamId, const uint8_t* buffer,
+                            int size)
+{
+    return XLinkWriteData_(streamId, buffer, size, NULL);
+}
+
+XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, int buffer1Size, const uint8_t* buffer2, int buffer2Size)
+{
+    ASSERT_XLINK(buffer1);
+    ASSERT_XLINK(buffer2);
+
+    float opTime = 0;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF(getLinkByStreamId(streamId, &link));
+    streamId = EXTRACT_STREAM_ID(streamId);
+
+    int totalSize = buffer1Size + buffer2Size;
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, streamId, XLINK_WRITE_REQ, totalSize,(void*)buffer1, link->deviceHandle);
+    event.data2 = (void*)buffer2;
+    event.data2Size = buffer2Size;
+
+    XLINK_RET_IF(addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT));
+
+    if( glHandler->profEnable) {
+        glHandler->profilingData.totalWriteBytes += totalSize;
+        glHandler->profilingData.totalWriteTime += opTime;
+    }
 
     return X_LINK_SUCCESS;
 }
@@ -417,11 +561,11 @@ float timespec_diff(struct timespec *start, struct timespec *stop)
     return start->tv_nsec/ 1000000000.0f + start->tv_sec;
 }
 
-XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
+XLinkError_t addEvent_(xLinkEvent_t *event, unsigned int timeoutMs, XLinkTimespec* outTime)
 {
     ASSERT_XLINK(event);
 
-    xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, event);
+    xLinkEvent_t* ev = DispatcherAddEvent_(EVENT_LOCAL, event, outTime);
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
             TypeToStr(event->header.type), event->header.id, event->header.streamName);
@@ -459,27 +603,34 @@ XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
             return X_LINK_TIMEOUT;
         }
     }
-
     XLINK_RET_ERR_IF(
         event->header.flags.bitField.ack != 1,
         X_LINK_COMMUNICATION_FAIL);
 
     return X_LINK_SUCCESS;
 }
+XLinkError_t addEvent(xLinkEvent_t *event, unsigned int timeoutMs)
+{
+    return addEvent_(event, timeoutMs, NULL);
+}
 
-XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs)
+XLinkError_t addEventWithPerf_(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs, XLinkTimespec* outTime)
 {
     ASSERT_XLINK(opTime);
 
     struct timespec start, end;
     clock_gettime(CLOCK_REALTIME, &start);
 
-    XLINK_RET_IF_FAIL(addEvent(event, timeoutMs));
+    XLINK_RET_IF_FAIL(addEvent_(event, timeoutMs, outTime));
 
     clock_gettime(CLOCK_REALTIME, &end);
     *opTime = timespec_diff(&start, &end);
 
     return X_LINK_SUCCESS;
+}
+XLinkError_t addEventWithPerf(xLinkEvent_t *event, float* opTime, unsigned int timeoutMs)
+{
+    return addEventWithPerf_(event, opTime, timeoutMs, NULL);
 }
 
 XLinkError_t addEventTimeout(xLinkEvent_t *event, struct timespec abstime)

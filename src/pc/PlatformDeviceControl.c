@@ -10,6 +10,8 @@
 #include "usb_host.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
+#include "local_memshd.h"
+#include "tcpip_memshd.h"
 #include "XLinkStringUtils.h"
 #include "PlatformDeviceFd.h"
 
@@ -22,10 +24,12 @@
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <fcntl.h>
+#endif  /*USE_USB_VSC*/
 
 int usbFdWrite = -1;
 int usbFdRead = -1;
-#endif  /*USE_USB_VSC*/
+int usbGateFdWrite = -1;
+int usbGateFdRead = -1;
 
 #include "XLinkPublicDefines.h"
 
@@ -63,30 +67,22 @@ static const int statuswaittimeout = 5;
 // ------------------------------------
 
 static int pciePlatformConnect(UNUSED const char *devPathRead, const char *devPathWrite, void **fd);
-static int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
-
 static xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name);
 static int pciePlatformBootBootloader(const char *name);
-static xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name);
-
 static int pciePlatformClose(void *f);
-static int tcpipPlatformClose(void *fd);
-
 static int pciePlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
-static int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 
 // ------------------------------------
 // Wrappers declaration. End.
 // ------------------------------------
 
 
-void xlinkSetProtocolInitialized(const XLinkProtocol_t protocol, int initialized);
-
 // ------------------------------------
 // XLinkPlatform API implementation. Begin.
 // ------------------------------------
 
-xLinkPlatformErrorCode_t XLinkPlatformInit(void* options)
+void xlinkSetProtocolInitialized(const XLinkProtocol_t protocol, int initialized);
+xLinkPlatformErrorCode_t XLinkPlatformInit(XLinkGlobalHandler_t* globalHandler)
 {
     // Set that all protocols are initialized at first
     for(int i = 0; i < X_LINK_NMB_OF_PROTOCOLS; i++) {
@@ -94,16 +90,25 @@ xLinkPlatformErrorCode_t XLinkPlatformInit(void* options)
     }
 
     // check for failed initialization; LIBUSB_SUCCESS = 0
-    if (usbInitialize(options) != 0) {
+    if (usbInitialize(globalHandler->options) != 0) {
         xlinkSetProtocolInitialized(X_LINK_USB_VSC, 0);
+        xlinkSetProtocolInitialized(X_LINK_USB_EP, 0);
     }
 
-    // TODO(themarpe) - move to tcpip_host
-    //tcpipInitialize();
-#if (defined(_WIN32) || defined(_WIN64)) && defined(USE_TCP_IP)
-    WSADATA wsa_data;
-    WSAStartup(MAKEWORD(2,2), &wsa_data);
+    // Initialize tcpip protocol if necessary
+    if(tcpip_initialize() != TCPIP_HOST_SUCCESS) {
+        xlinkSetProtocolInitialized(X_LINK_TCP_IP, 0);
+    }
+
+#if defined(__unix__)
+    // Initialize the shared memory protocol if necessary
+    if (shdmem_initialize() != 0) {
+	xlinkSetProtocolInitialized(X_LINK_LOCAL_SHDMEM, 0);
+    }
 #endif
+
+    xlinkSetProtocolInitialized(X_LINK_TCP_IP_OR_LOCAL_SHDMEM, 1);
+
     return X_LINK_PLATFORM_SUCCESS;
 }
 
@@ -174,21 +179,55 @@ xLinkPlatformErrorCode_t XLinkPlatformBootFirmware(const deviceDesc_t* deviceDes
 }
 
 
-xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t protocol, void** fd)
+xLinkPlatformErrorCode_t XLinkPlatformConnect(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t *protocol, void** fd)
 {
-    if(!XLinkIsProtocolInitialized(protocol)) {
-        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+protocol;
+    if(!XLinkIsProtocolInitialized(*protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+*protocol;
     }
-    switch (protocol) {
+
+    switch (*protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformConnect(devPathRead, devPathWrite, fd);
+        case X_LINK_USB_EP:
+            return usbPlatformConnect(*protocol, devPathRead, devPathWrite, fd);
 
         case X_LINK_PCIE:
             return pciePlatformConnect(devPathRead, devPathWrite, fd);
 
         case X_LINK_TCP_IP:
             return tcpipPlatformConnect(devPathRead, devPathWrite, fd);
+	
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    return tcpipOrLocalShdmemPlatformConnect(protocol, devPathRead, devPathWrite, fd);
+
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformConnect(devPathRead, devPathWrite, fd);
+#endif
+
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+}
+
+xLinkPlatformErrorCode_t XLinkPlatformServer(const char* devPathRead, const char* devPathWrite, XLinkProtocol_t *protocol, void** fd)
+{
+    switch (*protocol) {
+        case X_LINK_USB_VSC:
+        case X_LINK_USB_CDC:
+        case X_LINK_USB_EP:
+            return usbPlatformServer(devPathRead, devPathWrite, fd);
+
+        case X_LINK_TCP_IP:
+            return tcpipPlatformServer(devPathRead, devPathWrite, fd, NULL);
+
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    return tcpipOrLocalShdmemPlatformServer(protocol, devPathRead, devPathWrite, fd);
+
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformServer(devPathRead, devPathWrite, fd, NULL);
+#endif
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -230,13 +269,19 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformClose(deviceHandle->xLinkFD);
+        case X_LINK_USB_EP:
+            return usbPlatformClose(deviceHandle->protocol, deviceHandle->xLinkFD);
 
         case X_LINK_PCIE:
             return pciePlatformClose(deviceHandle->xLinkFD);
 
         case X_LINK_TCP_IP:
             return tcpipPlatformClose(deviceHandle->xLinkFD);
+	
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformClose(deviceHandle->xLinkFD);
+#endif
 
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
@@ -292,82 +337,6 @@ int pciePlatformConnect(UNUSED const char *devPathRead,
     return pcie_init(devPathWrite, fd);
 }
 
-// TODO add IPv6 to tcpipPlatformConnect()
-int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd)
-{
-#if defined(USE_TCP_IP)
-    if (!devPathWrite || !fd) {
-        return X_LINK_PLATFORM_INVALID_PARAMETERS;
-    }
-
-    TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
-
-#if (defined(_WIN32) || defined(_WIN64) )
-    if(sock == INVALID_SOCKET)
-    {
-        return TCPIP_HOST_ERROR;
-    }
-#else
-    if(sock < 0)
-    {
-        return TCPIP_HOST_ERROR;
-    }
-#endif
-
-    // Disable sigpipe reception on send
-    #if defined(SO_NOSIGPIPE)
-        const int set = 1;
-        setsockopt(sock, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set));
-    #endif
-
-    struct sockaddr_in serv_addr = { 0 };
-
-    const size_t maxlen = 255;
-    size_t len = strnlen(devPathWrite, maxlen + 1);
-    if (len == 0 || len >= maxlen + 1)
-        return X_LINK_PLATFORM_INVALID_PARAMETERS;
-    char *const serv_ip = (char *)malloc(len + 1);
-    if (!serv_ip)
-        return X_LINK_PLATFORM_ERROR;
-    serv_ip[0] = 0;
-    // Parse port if specified, or use default
-    int port = TCPIP_LINK_SOCKET_PORT;
-    sscanf(devPathWrite, "%[^:]:%d", serv_ip, &port);
-
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-
-    int ret = inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr);
-    free(serv_ip);
-
-    if(ret <= 0)
-    {
-        tcpip_close_socket(sock);
-        return -1;
-    }
-
-    int on = 1;
-    if(setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
-    {
-        perror("setsockopt TCP_NODELAY");
-        tcpip_close_socket(sock);
-        return -1;
-    }
-
-    if(connect(sock, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0)
-    {
-        tcpip_close_socket(sock);
-        return -1;
-    }
-
-    // Store the socket and create a "unique" key instead
-    // (as file descriptors are reused and can cause a clash with lookups between scheduler and link)
-    *fd = createPlatformDeviceFdKey((void*) (uintptr_t) sock);
-
-#endif
-    return 0;
-}
-
 
 xLinkPlatformErrorCode_t usbPlatformBootBootloader(const char *name)
 {
@@ -380,10 +349,6 @@ int pciePlatformBootBootloader(const char *name)
     return -1;
 }
 
-xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name)
-{
-    return tcpip_boot_bootloader(name);
-}
 
 
 static char* pciePlatformStateToStr(const pciePlatformState_t platformState) {
@@ -417,43 +382,6 @@ int pciePlatformClose(void *f)
     return rc;
 }
 
-int tcpipPlatformClose(void *fdKey)
-{
-#if defined(USE_TCP_IP)
-
-    int status = 0;
-
-    void* tmpsockfd = NULL;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key");
-        return -1;
-    }
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
-
-#ifdef _WIN32
-    status = shutdown(sock, SD_BOTH);
-    if (status == 0) { status = closesocket(sock); }
-#else
-    if(sock != -1)
-    {
-        status = shutdown(sock, SHUT_RDWR);
-        if (status == 0) { status = close(sock); }
-    }
-#endif
-
-    if(destroyPlatformDeviceFdKey(fdKey)){
-        mvLog(MVLOG_FATAL, "Cannot destroy file descriptor key");
-        return -1;
-    }
-
-    return status;
-
-#endif
-    return -1;
-}
-
-
-
 int pciePlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length){
     // Temporary open fd to boot device and then close it
     int* pcieFd = NULL;
@@ -468,11 +396,6 @@ int pciePlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmwar
 #endif
     pcie_close(pcieFd); // Will not check result for now
     return rc;
-}
-
-int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length){
-    // TCPIP doesn't support a boot mechanism
-    return -1;
 }
 
 // ------------------------------------
