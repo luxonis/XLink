@@ -1,0 +1,5 @@
+[registry]
+global-credential-providers = ["cargo:token", "cargo:libsecret", "cargo:macos-keychain", "cargo:wincred"]
+
+[registries.luxonis]
+index = "sparse+https://crates.int.luxonis.com/api/v1/crates/"

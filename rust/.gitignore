@@ -1,0 +1,4 @@
+/target
+Cargo.lock
+# vendored by CI when publishing, see .github/workflows/rust-bindings.yml
+xlink-sys/xlink-src/

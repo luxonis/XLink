@@ -1,0 +1,17 @@
+[package]
+name = "xlink"
+description = "Safe Rust bindings to the XLink library (device discovery for Luxonis RVC2 devices)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# Enable the USB (VSC) protocol. Requires libusb-1.0 on the system.
+libusb = ["xlink-sys/libusb"]
+
+[dependencies]
+xlink-sys = { path = "../xlink-sys", version = "=0.1.0", registry = "luxonis" }
+thiserror = "2"

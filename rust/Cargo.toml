@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["xlink-sys", "xlink"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/luxonis/XLink"
+# Only publish to the internal Luxonis registry (never crates.io).
+# Publishing is done by CI on `bindings/vX.Y.Z` tags, see
+# .github/workflows/rust-bindings.yml
+publish = ["luxonis"]

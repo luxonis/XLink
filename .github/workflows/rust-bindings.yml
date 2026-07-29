@@ -1,0 +1,82 @@
+name: Rust bindings
+
+on:
+  push:
+    tags:
+      - 'bindings/v*'
+  pull_request:
+    paths:
+      - 'rust/**'
+      - 'src/**'
+      - 'include/**'
+      - '.github/workflows/rust-bindings.yml'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+  publish:
+    name: Publish to crates.int.luxonis.com
+    if: startsWith(github.ref, 'refs/tags/bindings/v')
+    needs: test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    env:
+      CARGO_REGISTRIES_LUXONIS_TOKEN: ${{ secrets.CARGO_REGISTRIES_LUXONIS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check that the crate version matches the tag
+        run: |
+          version="${GITHUB_REF_NAME#bindings/v}"
+          grep -q "^version = \"${version}\"$" Cargo.toml || {
+            echo "Tag ${GITHUB_REF_NAME} does not match workspace version:"
+            grep "^version = " Cargo.toml
+            exit 1
+          }
+
+      - name: Vendor XLink C/C++ sources into xlink-sys
+        # A published .crate archive can only contain files inside the crate
+        # directory; xlink-sys/build.rs prefers this vendored copy over ../../
+        run: |
+          mkdir -p xlink-sys/xlink-src
+          cp -r ../src ../include xlink-sys/xlink-src/
+
+      - name: Publish xlink-sys
+        run: cargo publish -p xlink-sys --registry luxonis --allow-dirty
+
+      - name: Publish xlink
+        # Retry a few times, the just-published xlink-sys may take a moment
+        # to appear in the registry index.
+        run: |
+          for i in $(seq 1 5); do
+            cargo publish -p xlink --registry luxonis --allow-dirty && exit 0
+            echo "Publish attempt ${i} failed, retrying in 15s..."
+            sleep 15
+          done
+          exit 1

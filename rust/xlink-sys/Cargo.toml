@@ -1,0 +1,19 @@
+[package]
+name = "xlink-sys"
+description = "Raw FFI bindings to the XLink library, built from source"
+links = "XLink"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = []
+# Enable the USB (VSC) protocol. Requires libusb-1.0 to be available on the
+# system (discovered via pkg-config on unix).
+libusb = []
+
+[build-dependencies]
+cc = { version = "1.2", features = ["parallel"] }
+pkg-config = "0.3"
