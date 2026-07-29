@@ -44,6 +44,9 @@ jobs:
       run:
         working-directory: rust
     env:
+      # Override the credential providers from rust/.cargo/config.toml:
+      # cargo:libsecret needs libsecret-1.so.0 which CI runners don't have.
+      CARGO_REGISTRY_GLOBAL_CREDENTIAL_PROVIDERS: cargo:token
       CARGO_REGISTRIES_LUXONIS_TOKEN: ${{ secrets.CARGO_REGISTRIES_LUXONIS_TOKEN }}
     steps:
       - uses: actions/checkout@v4

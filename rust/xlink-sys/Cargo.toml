@@ -7,6 +7,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+# Explicit include list: `xlink-src/` (the C/C++ sources vendored by CI before
+# publishing) is gitignored, and cargo would otherwise exclude it from the
+# published .crate archive.
+include = ["/src", "/build.rs", "/xlink-src"]
 
 [features]
 default = []
