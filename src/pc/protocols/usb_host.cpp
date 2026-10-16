@@ -1187,7 +1187,6 @@ int usbPlatformClose(XLinkProtocol_t protocol, void *fdKey)
             close(usbFdWrite);
             usbFdWrite = -1;
         }
-        isServer = false;
 
         if(destroyPlatformDeviceFdKey(fdKey)){
             mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key: %" PRIxPTR, (uintptr_t) fdKey);
