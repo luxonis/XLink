@@ -77,6 +77,13 @@ xlink_add_test(multithreading_search_test multithreading_search_test.cpp)
 # RTT test
 xlink_add_test(rtt_test rtt_test.cpp)
 
+# Timed out read must not leave a stale event in the dispatcher
+xlink_add_test(read_timeout_test read_timeout_test.cpp)
+add_test(NAME read_timeout_test_link_down COMMAND read_timeout_test link-down 127.0.0.1:11501)
+if(NOT WIN32)
+    add_test(NAME read_timeout_test_peer_killed COMMAND read_timeout_test peer-killed 127.0.0.1:11502)
+endif()
+
 # WIP
 # Throughput test
 # xlink_add_test(throughput_test throughput_test.cpp)
