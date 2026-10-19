@@ -1177,6 +1177,24 @@ int usbPlatformClose(XLinkProtocol_t protocol, void *fdKey)
 #endif  /*USE_LINK_JTAG*/
 #else
 
+#if defined(__unix__)
+    if(isServer){
+        if (usbFdRead != -1){
+            close(usbFdRead);
+            usbFdRead = -1;
+        }
+        if (usbFdWrite != -1){
+            close(usbFdWrite);
+            usbFdWrite = -1;
+        }
+
+        if(destroyPlatformDeviceFdKey(fdKey)){
+            mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key: %" PRIxPTR, (uintptr_t) fdKey);
+        }
+        return -1;
+    }
+#endif
+
     void* tmpUsbHandle = NULL;
     if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
         mvLog(MVLOG_FATAL, "Cannot find USB Handle by key: %" PRIxPTR, (uintptr_t) fdKey);
