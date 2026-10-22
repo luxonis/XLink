@@ -29,6 +29,7 @@ extern "C" {
 #include <stdio.h>
 #include <stdarg.h>
 #include <inttypes.h>
+#include "XLinkExport.h"
 
 #include "XLinkExport.h"
 

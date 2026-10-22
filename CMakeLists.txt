@@ -4,12 +4,6 @@
 
 cmake_minimum_required(VERSION 3.10)
 
-include("cmake/HunterGate.cmake")
-HunterGate(
-    URL "https://github.com/cpp-pm/hunter/archive/9d9242b60d5236269f894efd3ddd60a9ca83dd7f.tar.gz"
-    SHA1 "16cc954aa723bccd16ea45fc91a858d0c5246376"
-    LOCAL # Local config for dependencies
-)
 
 ### Constants
 set(TARGET_NAME "XLink")
@@ -20,21 +14,14 @@ project(${TARGET_NAME} LANGUAGES C CXX)
 
 set(PROJECT_EXPORT_GROUP "${PROJECT_NAME}Targets")
 
-# Set default installation directory
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install" CACHE PATH "Installation Directory" FORCE)
-endif()
-
 # Compile with USB protocol capabilities
 option(XLINK_ENABLE_LIBUSB "Enable USB protocol which requires libusb library" ON)
 # Build examples
 option(XLINK_BUILD_EXAMPLES "Build XLink examples" OFF)
 # Build tests
 option(XLINK_BUILD_TESTS "Build XLink tests" OFF)
-# Debug option
-set(XLINK_LIBUSB_LOCAL "" CACHE STRING "Path to local libub source to use instead of Hunter")
-# Debug option
-option(XLINK_LIBUSB_SYSTEM "Use system libusb library instead of Hunter" OFF)
+# Install headers only (skip binary lib in install tree)
+option(XLINK_INSTALL_PUBLIC_ONLY "Install only header interface target (XLinkPublic)" OFF)
 
 # Specify exporting all symbols on Windows
 if(WIN32 AND BUILD_SHARED_LIBS)
@@ -65,6 +52,7 @@ get_cmake_property(is_multi_config GENERATOR_IS_MULTI_CONFIG)
 if(is_multi_config)
     set_target_properties(${TARGET_NAME} PROPERTIES DEBUG_POSTFIX "d")
 endif()
+
 # Define export header to support shared library on Windows
 include(GenerateExportHeader)
 generate_export_header(${TARGET_NAME}
@@ -89,13 +77,12 @@ if(XLINK_ENABLE_LIBUSB)
     else()
         # Link to CMake libusb
         target_link_libraries(${TARGET_NAME} PRIVATE usb-1.0)
-        if(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+        if(WIN32 AND NOT MINGW)
             target_link_libraries(${TARGET_NAME} PRIVATE delayimp.lib)
             # workaround https://gitlab.kitware.com/cmake/cmake/-/issues/20022
 	    target_link_options(${TARGET_NAME} PUBLIC "$<LINK_ONLY:/DELAYLOAD:libusb-1.0$<$<CONFIG:Debug>:d>.dll>")
         endif()
     endif()
-    
     if(WIN32 AND NOT MINGW)
         target_link_libraries(${TARGET_NAME} PRIVATE Pathcch.lib)
     endif()
@@ -157,15 +144,9 @@ target_compile_definitions(${TARGET_NAME}
         USE_TCP_IP
 )
 
-if (ENABLE_MYRIAD_NO_BOOT)
-    target_compile_definitions(${TARGET_NAME}
-        PRIVATE
-        NO_BOOT)
-endif()
 
-# Set C99 standard
+# Set C99 and C++11 standard
 set_property(TARGET ${TARGET_NAME} PROPERTY C_STANDARD 99)
-# Set compiler features (c++11), and disables extensions (g++11)
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD 11)
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET ${TARGET_NAME} PROPERTY CXX_EXTENSIONS OFF)
@@ -220,16 +201,17 @@ endif()
 
 include(GNUInstallDirs)
 
+# Handle public-only install option
+set(_XLINK_INSTALL_TARGETS ${TARGET_PUBLIC_NAME})
+if(NOT XLINK_INSTALL_PUBLIC_ONLY)
+    list(APPEND _XLINK_INSTALL_TARGETS ${TARGET_NAME})
+endif()
+
 # Export targets (capability to import current build directory)
 export(TARGETS ${TARGET_NAME} ${TARGET_PUBLIC_NAME} FILE "${PROJECT_NAME}Targets.cmake")
 
 # Dependencies file
 configure_file("cmake/${PROJECT_NAME}Dependencies.cmake" ${PROJECT_NAME}Dependencies.cmake COPYONLY)
-
-# Configure config file (one for exporting build directory, one for installation)
-if(${HUNTER_INSTALL_PREFIX})
-    file(RELATIVE_PATH XLINK_DEPENDENCIES_INSTALLATION_PATH_REL "${CMAKE_CURRENT_BINARY_DIR}" "${HUNTER_INSTALL_PREFIX}")
-endif()
 
 configure_file(cmake/${PROJECT_NAME}Config.cmake.in ${PROJECT_NAME}Config.cmake @ONLY)
 
@@ -239,7 +221,7 @@ configure_file(cmake/${PROJECT_NAME}Config.cmake.in _install/${PROJECT_NAME}Conf
 
 # Install targets
 install(
-    TARGETS ${TARGET_NAME} ${TARGET_PUBLIC_NAME}
+    TARGETS ${_XLINK_INSTALL_TARGETS}
     EXPORT ${PROJECT_EXPORT_GROUP}
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -252,13 +234,6 @@ install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}Export.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/XLink
 )
-
-# Install Hunter dependencies
-if(XLINK_ENABLE_LIBUSB)
-    if(NOT XLINK_LIBUSB_LOCAL AND NOT XLINK_LIBUSB_SYSTEM)
-        install(DIRECTORY "${HUNTER_INSTALL_PREFIX}/" DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}/dependencies")
-    endif()
-endif()
 # Install export group (information about targets)
 install(EXPORT ${PROJECT_EXPORT_GROUP}
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"

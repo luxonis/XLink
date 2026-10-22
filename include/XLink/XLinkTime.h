@@ -1,6 +1,7 @@
 #ifndef _XLINK_TIME_H
 #define _XLINK_TIME_H
 
+#include <stdint.h>
 #ifdef __cplusplus
 extern "C"
 {

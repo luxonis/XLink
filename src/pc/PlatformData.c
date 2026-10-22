@@ -14,6 +14,7 @@
 #include "usb_host.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
+#include "local_memshd.h"
 #include "PlatformDeviceFd.h"
 #include "inttypes.h"
 
@@ -35,6 +36,9 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <signal.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/un.h>
 #endif
 
 #ifdef USE_LINK_JTAG
@@ -52,20 +56,19 @@
 #include <termios.h>
 
 #include "usb_host.h"
+#endif  /*USE_USB_VSC*/
 
 extern int usbFdWrite;
 extern int usbFdRead;
-#endif  /*USE_USB_VSC*/
+extern int usbGateFdWrite;
+extern int usbGateFdRead;
 
 // ------------------------------------
 // Wrappers declaration. Begin.
 // ------------------------------------
 
 static int pciePlatformRead(void *f, void *data, int size);
-static int tcpipPlatformRead(void *fd, void *data, int size);
-
 static int pciePlatformWrite(void *f, void *data, int size);
-static int tcpipPlatformWrite(void *fd, void *data, int size);
 
 // ------------------------------------
 // Wrappers declaration. End.
@@ -86,7 +89,8 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformWrite(deviceHandle->xLinkFD, data, size);
+        case X_LINK_USB_EP:
+            return usbPlatformWrite(deviceHandle->protocol, deviceHandle->xLinkFD, data, size);
 
         case X_LINK_PCIE:
             return pciePlatformWrite(deviceHandle->xLinkFD, data, size);
@@ -94,12 +98,37 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
         case X_LINK_TCP_IP:
             return tcpipPlatformWrite(deviceHandle->xLinkFD, data, size);
 
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformWrite(deviceHandle->xLinkFD, data, size);
+#endif
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    mvLog(MVLOG_ERROR, "Failed to write with TCP_IP_OR_LOCAL_SHDMEM\n");
+
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
 }
 
-int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
+int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void *data2, int size2)
+{
+    if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
+    }
+
+    switch (deviceHandle->protocol) {
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformWriteFd(deviceHandle->xLinkFD, fd, data2, size2);
+#endif
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    mvLog(MVLOG_ERROR, "Failed to write FD with TCP_IP_OR_LOCAL_SHDMEM\n");
+        default:
+            return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
+}
+
+int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, long *fd)
 {
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
         return X_LINK_PLATFORM_DRIVER_NOT_LOADED+deviceHandle->protocol;
@@ -108,18 +137,45 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
     switch (deviceHandle->protocol) {
         case X_LINK_USB_VSC:
         case X_LINK_USB_CDC:
-            return usbPlatformRead(deviceHandle->xLinkFD, data, size);
+        case X_LINK_USB_EP:
+            return usbPlatformRead(deviceHandle->protocol, deviceHandle->xLinkFD, data, size);
 
         case X_LINK_PCIE:
             return pciePlatformRead(deviceHandle->xLinkFD, data, size);
 
         case X_LINK_TCP_IP:
             return tcpipPlatformRead(deviceHandle->xLinkFD, data, size);
-
+	
+#if defined(__unix__)
+	case X_LINK_LOCAL_SHDMEM:
+	    return shdmemPlatformRead(deviceHandle->xLinkFD, data, size, fd);
+#endif
+	case X_LINK_TCP_IP_OR_LOCAL_SHDMEM:
+	    mvLog(MVLOG_ERROR, "Failed to read with TCP_IP_OR_LOCAL_SHDMEM\n");
         default:
             return X_LINK_PLATFORM_INVALID_PARAMETERS;
     }
 }
+
+int XLinkPlatformGateWrite(const char *name, void *data, int size, int timeout)
+{
+    if(!XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
+    }
+
+    return usbPlatformGateWrite(name, data, size, timeout);
+}
+
+int XLinkPlatformGateRead(const char *name, void *data, int size, int timeout)
+{
+    if(!XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED+X_LINK_USB_EP;
+    }
+
+    return usbPlatformGateRead(name, data, size, timeout);
+}
+
+
 
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment)
 {
@@ -262,70 +318,7 @@ int pciePlatformRead(void *f, void *data, int size)
 #endif
 }
 
-static int tcpipPlatformRead(void *fdKey, void *data, int size)
-{
-#if defined(USE_TCP_IP)
-    int nread = 0;
 
-    void* tmpsockfd = NULL;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
-    }
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
-
-    while(nread < size)
-    {
-        int rc = recv(sock, &((char*)data)[nread], size - nread, 0);
-        if(rc <= 0)
-        {
-            return -1;
-        }
-        else
-        {
-            nread += rc;
-        }
-    }
-#endif
-    return 0;
-}
-
-static int tcpipPlatformWrite(void *fdKey, void *data, int size)
-{
-#if defined(USE_TCP_IP)
-    int byteCount = 0;
-
-    void* tmpsockfd = NULL;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key: %" PRIxPTR, (uintptr_t) fdKey);
-        return -1;
-    }
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
-
-    while(byteCount < size)
-    {
-        // Use send instead of write and ignore SIGPIPE
-        //rc = write((intptr_t)fd, &((char*)data)[byteCount], size - byteCount);
-
-        int flags = 0;
-        #if defined(MSG_NOSIGNAL)
-            // Use flag NOSIGNAL on send call
-            flags = MSG_NOSIGNAL;
-        #endif
-
-        int rc = send(sock, &((char*)data)[byteCount], size - byteCount, flags);
-        if(rc <= 0)
-        {
-            return -1;
-        }
-        else
-        {
-            byteCount += rc;
-        }
-    }
-#endif
-    return 0;
-}
 
 // ------------------------------------
 // Wrappers implementation. End.
