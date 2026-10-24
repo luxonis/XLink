@@ -586,6 +586,75 @@ int DispatcherServeEvent(eventId_t id, xLinkEventType_t type, streamId_t stream,
     return 0;
 }
 
+int DispatcherCancelEvent(xLinkDeviceHandle_t *deviceHandle, xLinkEvent_t *event)
+{
+    XLINK_RET_ERR_IF(deviceHandle == NULL, 1);
+    XLINK_RET_ERR_IF(event == NULL, 1);
+
+    while (1) {
+        xLinkSchedulerState_t* curr = findCorrespondingScheduler(deviceHandle->xLinkFD);
+        if (curr == NULL) {
+            // Dispatcher is already cleaned, it served all events before
+            return 0;
+        }
+
+        int found = 0;
+        int inProgress = 0;
+        xLinkEventPriv_t* queuedEvent;
+        XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, 1);
+        for (queuedEvent = curr->lQueue.q;
+             queuedEvent < curr->lQueue.q + MAX_EVENTS;
+             queuedEvent++)
+        {
+            if (queuedEvent->isServed == EVENT_SERVED || queuedEvent->retEv != event) {
+                continue;
+            }
+            found = 1;
+            if (queuedEvent->isServed == EVENT_ALLOCATED ||
+                queuedEvent->isServed == EVENT_READY) {
+                // The dispatcher did not process this event yet, processes it
+                // now or data for it came. It does not wait for the remote to
+                // do this. Wait for the result, else data can be lost.
+                inProgress = 1;
+                continue;
+            }
+            mvLog(MVLOG_DEBUG,"cancelled %d %s, status %d\n",
+                  (int)queuedEvent->packet.header.id,
+                  TypeToStr((int)queuedEvent->packet.header.type),
+                  queuedEvent->isServed);
+            // The caller does not wait any more and its event (on the caller
+            // stack) becomes invalid. Do not copy the result to it and do not
+            // post the semaphore of the caller thread.
+            queuedEvent->retEv = NULL;
+            queuedEvent->sem = NULL;
+            if (queuedEvent->isServed == EVENT_BLOCKED) {
+                // Event is not in progress, remove it from the queue
+                queuedEvent->isServed = EVENT_SERVED;
+            }
+        }
+        XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
+
+        if (!found) {
+            // The event was served after the wait stopped. postAndMarkEventServed()
+            // copied the result to the caller and posted its semaphore.
+            // Consume this post, else the next wait of this thread returns too early.
+            XLink_sem_t* id = getSem(pthread_self(), curr);
+            if (id != NULL) {
+                XLink_sem_trywait(id);
+            }
+            return 0;
+        }
+        if (!inProgress) {
+            return 1;
+        }
+#if (defined(_WIN32) || defined(_WIN64) )
+        Sleep(1);
+#else
+        usleep(1000);
+#endif
+    }
+}
+
 // ------------------------------------
 // XLinkDispatcher.h implementation. End.
 // ------------------------------------
