@@ -31,6 +31,7 @@
 #include <thread>
 #include <chrono>
 #include <cstring>
+#include <cstdlib>
 #include <vector>
 
 // Used server side only
@@ -1225,16 +1226,41 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 }
 
 
+// Start with 8 MiB bulk read chunks and drop down to 4 MiB or 1 MiB if OS refuses it
+static constexpr int USB_READ_CHUNK_START = 8 * 1024 * 1024;
+static constexpr int USB_READ_CHUNK_STEP = 4 * 1024 * 1024;
+static constexpr int USB_READ_CHUNK_MIN = DEFAULT_CHUNKSZ;
+
+static int usb_read_chunk_start()
+{
+    const char* value = std::getenv("XLINK_USB_READ_CHUNK_MIB");
+    const int mib = value ? std::atoi(value) : 0;
+    if(mib <= 0)
+        return USB_READ_CHUNK_START;
+    return std::min(mib, USB_READ_CHUNK_START / (1024 * 1024)) * 1024 * 1024;
+}
+
+static std::atomic<int> usb_read_chunk{usb_read_chunk_start()};
 
 int usb_read(libusb_device_handle *f, void *data, size_t size, uint8_t ep)
 {
-    const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
     {
-        int bt, ss = (int)size;
+        int chunk_size = usb_read_chunk.load();
+        int bt = 0, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
         int rc = libusb_bulk_transfer(f, ep, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+        if(rc == LIBUSB_ERROR_NO_MEM && bt == 0 && chunk_size > USB_READ_CHUNK_MIN)
+        {
+            // The transfer was refused before any data moved: read the same bytes again in smaller reads
+            const int smaller = chunk_size > USB_READ_CHUNK_STEP ? USB_READ_CHUNK_STEP : USB_READ_CHUNK_MIN;
+            if(usb_read_chunk.compare_exchange_strong(chunk_size, smaller))
+            {
+                mvLog(MVLOG_WARN, "bulk read of %d bytes: %s, using reads of %d bytes", ss, xlink_libusb_strerror(rc), smaller);
+            }
+            continue;
+        }
         if(rc)
             return rc;
         data = ((char *)data) + bt;
