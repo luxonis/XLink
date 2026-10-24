@@ -486,6 +486,8 @@ XLinkError_t addEventTimeout(xLinkEvent_t *event, struct timespec abstime)
 {
     ASSERT_XLINK(event);
 
+    // Local copy: after DispatcherAddEvent() the dispatcher thread can write to "event"
+    xLinkDeviceHandle_t deviceHandle = event->deviceHandle;
     xLinkEvent_t* ev = DispatcherAddEvent(EVENT_LOCAL, event);
     if(ev == NULL) {
         mvLog(MVLOG_ERROR, "Dispatcher failed on adding event. type: %s, id: %d, stream name: %s\n",
@@ -493,8 +495,13 @@ XLinkError_t addEventTimeout(xLinkEvent_t *event, struct timespec abstime)
         return X_LINK_ERROR;
     }
 
-    if (DispatcherWaitEventCompleteTimeout(&event->deviceHandle, abstime)) {
-        return X_LINK_TIMEOUT;
+    if (DispatcherWaitEventCompleteTimeout(&deviceHandle, abstime)) {
+        // The dispatcher keeps a pointer to "event" (on the caller stack)
+        // to copy the result to it. Remove it before we return.
+        if (DispatcherCancelEvent(&deviceHandle, event)) {
+            return X_LINK_TIMEOUT;
+        }
+        // The event was served after the timeout, use the result
     }
 
     XLINK_RET_ERR_IF(
