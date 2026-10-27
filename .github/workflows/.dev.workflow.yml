@@ -19,15 +19,17 @@ jobs:
       # Set as env (not -D) so that the CMake runs that Hunter starts also get it.
       CMAKE_POLICY_VERSION_MINIMUM: '3.5'
     strategy:
+      fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        # windows-2022 (VS 2022): the Hunter version that we use does not know VS 2026 (windows-latest).
+        os: [macos-latest, windows-2022, ubuntu-latest]
         compiler: [default]
         libusb: [ON, OFF]
         include:
-          - os: windows-latest
+          - os: windows-2022
             compiler: mingw
             libusb: ON
-          - os: windows-latest
+          - os: windows-2022
             compiler: mingw
             libusb: OFF
 
