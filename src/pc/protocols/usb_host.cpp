@@ -30,6 +30,8 @@
 #include <string>
 #include <thread>
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -1235,21 +1237,287 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 
 
 
-int usb_read(libusb_device_handle *f, void *data, size_t size, uint8_t ep)
-{
-    const int chunk_size = DEFAULT_CHUNKSZ;
-    while(size > 0)
-    {
-        int bt, ss = (int)size;
-        if(ss > chunk_size)
-            ss = chunk_size;
-        int rc = libusb_bulk_transfer(f, ep, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
-        if(rc)
+// Host side bulk reads.
+//
+// The sync path reads one chunk at a time with libusb_bulk_transfer(). Only one transfer is then queued
+// at the host controller: after each chunk the link idles until the next transfer is submitted.
+// The async path keeps several bulk transfers in flight for consecutive parts of the destination
+// buffer, and submits the next part each time the oldest transfer completes. The data goes straight
+// into the caller's buffer. libusb events are handled in the calling thread, like libusb sync.c does,
+// so that several XLink reader threads (one for each device) can use the same libusb context.
+//
+// Environment variables (read once, the active values are printed to stderr):
+//   XLINK_USB_ASYNC_READ=0|1       0: sync path only. Default 1.
+//   XLINK_USB_ASYNC_TRANSFERS=K    transfers in flight for one read. Default 4.
+//   XLINK_USB_ASYNC_CHUNK_KIB=C    size of one transfer in KiB. Default 256.
+//   XLINK_USB_SYNC_CHUNK_KIB=S     chunk of the sync path in KiB. Default 1024 (experiments only).
+namespace {
+
+// The lengths of transfers that are in flight together are multiples of this value. It is a multiple
+// of every bulk wMaxPacketSize (64 full speed, 512 high speed, 1024 SuperSpeed), thus such a transfer
+// cannot overflow (babble) when the device sends more data than the transfer expects.
+constexpr size_t USB_READ_ALIGN = 1024;
+constexpr int USB_ASYNC_READ_MAX_TRANSFERS = 32;
+constexpr size_t USB_ASYNC_READ_MIN_CHUNK = 64 * 1024;
+// 4 x 256 KiB was the best or equal best on RVC2 (OAK-D S2) and RVC4 (OAK4 Pro) for messages of
+// 1 to 16 MiB. Small transfers also keep the pipeline busy for messages of about 1 MiB.
+constexpr size_t USB_ASYNC_READ_DEFAULT_CHUNK = 256 * 1024;
+constexpr size_t USB_READ_MAX_CHUNK = 8 * 1024 * 1024;
+// On Linux each submitted transfer takes kernel memory from usbfs_memory_mb (16 MiB by default),
+// which all usbfs users of the host share.
+constexpr size_t USB_ASYNC_READ_MAX_IN_FLIGHT = 8 * 1024 * 1024;
+
+struct UsbReadConfig {
+    bool async = true;
+    int transfers = 4;
+    size_t chunk = USB_ASYNC_READ_DEFAULT_CHUNK;
+    size_t syncChunk = DEFAULT_CHUNKSZ;
+};
+
+long envAsLong(const char* name, long defaultValue) {
+    const char* value = std::getenv(name);
+    if(value == nullptr || *value == '\0') {
+        return defaultValue;
+    }
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    return end != value ? parsed : defaultValue;
+}
+
+size_t envAsKibChunk(const char* name, size_t defaultValue) {
+    const long kib = envAsLong(name, static_cast<long>(defaultValue / 1024));
+    const long clamped = std::min(std::max(kib, static_cast<long>(USB_ASYNC_READ_MIN_CHUNK / 1024)), static_cast<long>(USB_READ_MAX_CHUNK / 1024));
+    return static_cast<size_t>(clamped) * 1024;
+}
+
+const UsbReadConfig& usbReadConfig() {
+    static const UsbReadConfig config = [] {
+        UsbReadConfig c;
+        c.async = envAsLong("XLINK_USB_ASYNC_READ", 1) != 0;
+        c.chunk = envAsKibChunk("XLINK_USB_ASYNC_CHUNK_KIB", c.chunk);
+        c.syncChunk = envAsKibChunk("XLINK_USB_SYNC_CHUNK_KIB", c.syncChunk);
+        const long transfers = std::min(std::max(envAsLong("XLINK_USB_ASYNC_TRANSFERS", c.transfers), 1L), static_cast<long>(USB_ASYNC_READ_MAX_TRANSFERS));
+        const long maxTransfers = std::max(1L, static_cast<long>(USB_ASYNC_READ_MAX_IN_FLIGHT / c.chunk));
+        c.transfers = static_cast<int>(std::min(transfers, maxTransfers));
+        fprintf(stderr,
+                "XLink USB read: async=%d transfers=%d chunk=%u KiB (max %u KiB in flight), sync chunk=%u KiB\n",
+                c.async ? 1 : 0,
+                c.transfers,
+                static_cast<unsigned>(c.chunk / 1024),
+                static_cast<unsigned>(c.chunk * static_cast<size_t>(c.transfers) / 1024),
+                static_cast<unsigned>(c.syncChunk / 1024));
+        return c;
+    }();
+    return config;
+}
+
+int usb_read_sync(libusb_device_handle* f, unsigned char* data, size_t size, uint8_t ep, size_t chunk) {
+    while(size > 0) {
+        int bt = 0;
+        const int ss = static_cast<int>(std::min(size, chunk));
+        const int rc = libusb_bulk_transfer(f, ep, data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+        if(rc) {
             return rc;
-        data = ((char *)data) + bt;
-        size -= bt;
+        }
+        data += bt;
+        size -= static_cast<size_t>(bt);
     }
     return 0;
+}
+
+struct AsyncReadSlot {
+    libusb_transfer* transfer = nullptr;
+    // Set to 1 by the completion callback (the "completed" flag of libusb sync.c)
+    int done = 0;
+    // Where the transfer writes into the destination buffer
+    size_t offset = 0;
+};
+
+// Runs in the thread that handles the libusb events. This can be another XLink thread.
+void LIBUSB_CALL asyncReadCallback(libusb_transfer* transfer) {
+    *static_cast<int*>(transfer->user_data) = 1;
+}
+
+// Same mapping as do_sync_bulk_transfer() in libusb sync.c
+int asyncReadStatusToError(libusb_transfer_status status) {
+    switch(status) {
+        case LIBUSB_TRANSFER_COMPLETED:
+            return LIBUSB_SUCCESS;
+        case LIBUSB_TRANSFER_TIMED_OUT:
+            return LIBUSB_ERROR_TIMEOUT;
+        case LIBUSB_TRANSFER_STALL:
+            return LIBUSB_ERROR_PIPE;
+        case LIBUSB_TRANSFER_OVERFLOW:
+            return LIBUSB_ERROR_OVERFLOW;
+        case LIBUSB_TRANSFER_NO_DEVICE:
+            return LIBUSB_ERROR_NO_DEVICE;
+        case LIBUSB_TRANSFER_ERROR:
+        case LIBUSB_TRANSFER_CANCELLED:
+            return LIBUSB_ERROR_IO;
+    }
+    return LIBUSB_ERROR_OTHER;
+}
+
+// Handles libusb events until the transfer of the slot is complete (sync_transfer_wait_for_completion()
+// in libusb sync.c). libusb_close() removes in-flight transfers of the handle from the libusb lists and
+// sets their dev_handle to NULL: their callback never runs.
+void asyncReadWait(AsyncReadSlot& slot, bool& cancelRequested) {
+    while(!slot.done) {
+        const int rc = libusb_handle_events_completed(context, &slot.done);
+        if(rc < 0 && rc != LIBUSB_ERROR_INTERRUPTED) {
+            mvLog(MVLOG_ERROR, "libusb_handle_events failed: %s, cancelling transfer", xlink_libusb_strerror(rc));
+            if(slot.transfer->dev_handle != nullptr) {
+                cancelRequested = true;
+                libusb_cancel_transfer(slot.transfer);
+            }
+        }
+        if(slot.transfer->dev_handle == nullptr) {
+            slot.transfer->status = LIBUSB_TRANSFER_NO_DEVICE;
+            slot.done = 1;
+        }
+    }
+}
+
+// Reads exactly 'size' bytes with up to config.transfers bulk transfers in flight.
+//
+// Short packets: the transfers on one endpoint complete in order, and the data after a short packet
+// goes into the next queued transfer, at an offset that is too far into the buffer. The completed
+// transfers are processed in order and each one is moved down to the first missing byte (memmove;
+// nothing moves when there is no short packet). Because the in-flight transfers cover at most
+// [first missing byte, size), they cannot receive bytes of the next XLink message.
+// Only transfers with a length that is a multiple of USB_READ_ALIGN are in flight together. The last
+// unaligned part of the message is read alone after all other transfers completed, with a transfer
+// of exactly the remaining size, like the sync path does.
+//
+// LIBUSB_ERROR_NO_MEM at submit (Linux: usbfs_memory_mb used up): fewer transfers in flight, then
+// smaller transfers, then the sync path for the rest of the message.
+int usb_read_async(libusb_device_handle* f, unsigned char* data, size_t size, uint8_t ep, const UsbReadConfig& config) {
+    AsyncReadSlot slots[USB_ASYNC_READ_MAX_TRANSFERS];
+    const int numSlots = config.transfers;
+    bool syncFallback = false;
+    for(int i = 0; i < numSlots; i++) {
+        slots[i].transfer = libusb_alloc_transfer(0);
+        if(slots[i].transfer == nullptr) {
+            syncFallback = true;
+        }
+    }
+
+    size_t received = 0;   // data[0, received) holds the first 'received' bytes of the message
+    size_t submitted = 0;  // end of the buffer part of the newest in-flight transfer
+    size_t chainEnd = 0;   // in-flight transfers stay inside data[received, chainEnd)
+    size_t chunk = config.chunk;
+    int maxInFlight = numSlots;
+    int head = 0;  // slot of the oldest in-flight transfer
+    int inFlight = 0;
+    int rc = LIBUSB_SUCCESS;
+    bool cancelRequested = false;
+    bool linkClosing = false;
+
+    while(rc == LIBUSB_SUCCESS && !syncFallback) {
+        // Keep the queue full
+        while(inFlight < maxInFlight) {
+            if(inFlight == 0) {
+                const size_t remaining = size - received;
+                if(remaining == 0) {
+                    break;
+                }
+                submitted = received;
+                chainEnd = remaining <= chunk ? size : received + remaining / USB_READ_ALIGN * USB_READ_ALIGN;
+            }
+            if(submitted >= chainEnd) {
+                break;
+            }
+            const int length = static_cast<int>(std::min(chunk, chainEnd - submitted));
+            AsyncReadSlot& slot = slots[(head + inFlight) % numSlots];
+            slot.offset = submitted;
+            slot.done = 0;
+            libusb_fill_bulk_transfer(slot.transfer, f, ep, data + submitted, length, asyncReadCallback, &slot.done, XLINK_USB_DATA_TIMEOUT);
+            const int submitRc = libusb_submit_transfer(slot.transfer);
+            if(submitRc == LIBUSB_ERROR_NO_MEM) {
+                if(inFlight > 0) {
+                    maxInFlight = inFlight;
+                } else if(chunk > USB_ASYNC_READ_MIN_CHUNK) {
+                    chunk = std::max(USB_ASYNC_READ_MIN_CHUNK, chunk / 2 / USB_READ_ALIGN * USB_READ_ALIGN);
+                    continue;
+                } else {
+                    syncFallback = true;
+                }
+                static std::atomic<bool> warned{false};
+                mvLog(warned.exchange(true) ? MVLOG_DEBUG : MVLOG_WARN,
+                      "USB read: no memory to submit a transfer of %d B with %d in flight, using %s",
+                      length,
+                      inFlight,
+                      syncFallback ? "the sync path" : "fewer transfers in flight");
+                break;
+            }
+            if(submitRc != LIBUSB_SUCCESS) {
+                rc = submitRc;
+                linkClosing = submitRc == LIBUSB_ERROR_NO_DEVICE;
+                break;
+            }
+            submitted += static_cast<size_t>(length);
+            inFlight++;
+        }
+        if(rc != LIBUSB_SUCCESS || inFlight == 0) {
+            break;
+        }
+
+        // Wait for the oldest transfer, then move its data to the first missing byte
+        AsyncReadSlot& slot = slots[head];
+        asyncReadWait(slot, cancelRequested);
+        head = (head + 1) % numSlots;
+        inFlight--;
+        const libusb_transfer_status status = slot.transfer->status;
+        if(status != LIBUSB_TRANSFER_COMPLETED) {
+            rc = asyncReadStatusToError(status);
+            // The device is gone, or something else (release of the interface, close) cancelled the
+            // transfers: the other transfers end without help. Do not cancel them, the device handle
+            // can be closed at any time now.
+            linkClosing = status == LIBUSB_TRANSFER_NO_DEVICE || (status == LIBUSB_TRANSFER_CANCELLED && !cancelRequested);
+            break;
+        }
+        const size_t actual = static_cast<size_t>(slot.transfer->actual_length);
+        if(actual > 0 && slot.offset != received) {
+            memmove(data + received, data + slot.offset, actual);
+        }
+        received += actual;
+    }
+
+    // On an error, wait until libusb is done with each in-flight transfer before the transfers are freed
+    // and the caller gets the buffer back.
+    if(inFlight > 0) {
+        if(!linkClosing) {
+            for(int i = 0; i < inFlight; i++) {
+                AsyncReadSlot& slot = slots[(head + i) % numSlots];
+                if(!slot.done && slot.transfer->dev_handle != nullptr) {
+                    cancelRequested = true;
+                    libusb_cancel_transfer(slot.transfer);
+                }
+            }
+        }
+        for(int i = 0; i < inFlight; i++) {
+            asyncReadWait(slots[(head + i) % numSlots], cancelRequested);
+        }
+    }
+    for(int i = 0; i < numSlots; i++) {
+        libusb_free_transfer(slots[i].transfer);
+    }
+
+    if(rc == LIBUSB_SUCCESS && syncFallback) {
+        rc = usb_read_sync(f, data + received, size - received, ep, DEFAULT_CHUNKSZ);
+    }
+    return rc;
+}
+
+}  // namespace
+
+int usb_read(libusb_device_handle *f, void *data, size_t size, uint8_t ep)
+{
+    const UsbReadConfig& config = usbReadConfig();
+    if(config.async && size > config.chunk) {
+        return usb_read_async(f, static_cast<unsigned char*>(data), size, ep, config);
+    }
+    return usb_read_sync(f, static_cast<unsigned char*>(data), size, ep, config.syncChunk);
 }
 
 int usb_write(libusb_device_handle *f, const void *data, size_t size, uint8_t ep)
