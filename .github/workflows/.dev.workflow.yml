@@ -14,6 +14,10 @@ jobs:
 
   build:
     runs-on: ${{ matrix.os }}
+    env:
+      # CMake 4 rejects cmake_minimum_required < 3.5, which Hunter and its packages still use.
+      # Set as env (not -D) so that the CMake runs that Hunter starts also get it.
+      CMAKE_POLICY_VERSION_MINIMUM: '3.5'
     strategy:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
