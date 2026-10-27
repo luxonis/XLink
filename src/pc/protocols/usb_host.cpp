@@ -614,8 +614,17 @@ static int send_file(libusb_device_handle* h, uint8_t endpoint, const void* tx_b
         rc = libusb_bulk_transfer(h, endpoint, p, wb, &wbr, write_timeout);
         if((rc || (wb != wbr)) && (wb != 0)) // Don't check the return code for ZLP
         {
-            if(rc == LIBUSB_ERROR_NO_DEVICE)
+            if(rc == LIBUSB_ERROR_NO_DEVICE) {
+                // The device leaves the bus when it boots, so NO_DEVICE right after the last bytes
+                // is expected. Before that it means the upload was interrupted (link reset or
+                // disconnect): the device did not get the whole image and will not boot from it.
+                twb += wbr;
+                if((unsigned)twb < filesize) {
+                    mvLog(MVLOG_ERROR, "bulk write: device disconnected after %d of %u bytes", twb, filesize);
+                    return USB_BOOT_ERROR;
+                }
                 break;
+            }
             mvLog(MVLOG_WARN, "bulk write: %s (%d bytes written, %d bytes to write)", xlink_libusb_strerror(rc), wbr, wb);
             if(rc == LIBUSB_ERROR_TIMEOUT)
                 return USB_BOOT_TIMEOUT;
