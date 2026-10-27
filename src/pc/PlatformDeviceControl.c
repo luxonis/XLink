@@ -347,7 +347,8 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     }
 
     int on = 1;
-    if(setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0)
+    // Winsock setsockopt takes 'const char *' (GCC 14 MinGW rejects 'int *')
+    if(setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (const char*)&on, sizeof(on)) < 0)
     {
         perror("setsockopt TCP_NODELAY");
         tcpip_close_socket(sock);
