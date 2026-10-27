@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # With additions of Luxonis
 
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.10)
 
 include("cmake/HunterGate.cmake")
 HunterGate(
