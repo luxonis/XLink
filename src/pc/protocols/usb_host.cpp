@@ -31,6 +31,7 @@
 #include <thread>
 #include <chrono>
 #include <cstring>
+#include <cstdlib>
 #include <vector>
 
 // Used server side only
@@ -239,6 +240,14 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                 // Get device mxid
                 libusb_error rc = getLibusbDeviceMxId(state, devicePath, &desc, devs[i], mxId);
                 mvLog(MVLOG_DEBUG, "getLibusbDeviceMxId returned: %s", xlink_libusb_strerror(rc));
+                if(state == X_LINK_BOOTED && rc == LIBUSB_ERROR_NO_DEVICE) {
+                    mvLog(MVLOG_WARN,
+                          "Skipping temporarily booted device %s during USB search because it disappeared while reading MXID (libusb rc: %d, msg: %s)",
+                          devicePath.c_str(),
+                          static_cast<int>(rc),
+                          xlink_libusb_strerror(rc));
+                    continue;
+                }
                 switch (rc)
                 {
                 case LIBUSB_SUCCESS:
@@ -633,7 +642,6 @@ libusb_error getLibusbDeviceMxId(XLinkDeviceState_t state, std::string devicePat
 
 static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* pDesc, libusb_device *dev, GateResponse& outGateResponse, std::string& outSerial) {
     GateResponse gateResponse = {0};
-    std::string serial = "";
 
     // get serial from usb descriptor
     libusb_device_handle *handle = nullptr;
@@ -676,12 +684,8 @@ static libusb_error getLibusbDeviceGateResponse(const libusb_device_descriptor* 
 
 
     size_t serialStrLen = usbGateResponse.RequestSize - sizeof(GateResponse);
-    serial.resize(serialStrLen + 1);
-    for (int i = 0; i < serialStrLen; ++i) {
-        serial[i] = respBuffer[i];
-    }
-    serial[serialStrLen] = '\0';
-    outSerial = serial;
+    const auto serialEnd = std::find(respBuffer.begin(), respBuffer.begin() + serialStrLen, 0);
+    outSerial.assign(reinterpret_cast<const char*>(respBuffer.data()), std::distance(respBuffer.begin(), serialEnd));
 
     memcpy(&gateResponse, &respBuffer[serialStrLen], sizeof(gateResponse));
     outGateResponse = gateResponse;
@@ -823,8 +827,17 @@ static int send_file(libusb_device_handle* h, uint8_t endpoint, const void* tx_b
         rc = libusb_bulk_transfer(h, endpoint, p, wb, &wbr, write_timeout);
         if((rc || (wb != wbr)) && (wb != 0)) // Don't check the return code for ZLP
         {
-            if(rc == LIBUSB_ERROR_NO_DEVICE)
+            if(rc == LIBUSB_ERROR_NO_DEVICE) {
+                // The device leaves the bus when it boots, so NO_DEVICE right after the last bytes
+                // is expected. Before that it means the upload was interrupted (link reset or
+                // disconnect): the device did not get the whole image and will not boot from it.
+                twb += wbr;
+                if((unsigned)twb < filesize) {
+                    mvLog(MVLOG_ERROR, "bulk write: device disconnected after %d of %u bytes", twb, filesize);
+                    return USB_BOOT_ERROR;
+                }
                 break;
+            }
             mvLog(MVLOG_WARN, "bulk write: %s (%d bytes written, %d bytes to write)", xlink_libusb_strerror(rc), wbr, wb);
             if(rc == LIBUSB_ERROR_TIMEOUT)
                 return USB_BOOT_TIMEOUT;
@@ -1174,6 +1187,24 @@ int usbPlatformClose(XLinkProtocol_t protocol, void *fdKey)
 #endif  /*USE_LINK_JTAG*/
 #else
 
+#if defined(__unix__)
+    if(isServer){
+        if (usbFdRead != -1){
+            close(usbFdRead);
+            usbFdRead = -1;
+        }
+        if (usbFdWrite != -1){
+            close(usbFdWrite);
+            usbFdWrite = -1;
+        }
+
+        if(destroyPlatformDeviceFdKey(fdKey)){
+            mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key: %" PRIxPTR, (uintptr_t) fdKey);
+        }
+        return -1;
+    }
+#endif
+
     void* tmpUsbHandle = NULL;
     if(getPlatformDeviceFdFromKey(fdKey, &tmpUsbHandle)){
         mvLog(MVLOG_FATAL, "Cannot find USB Handle by key: %" PRIxPTR, (uintptr_t) fdKey);
@@ -1204,16 +1235,41 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 }
 
 
+// Start with 8 MiB bulk read chunks and drop down to 4 MiB or 1 MiB if OS refuses it
+static constexpr int USB_READ_CHUNK_START = 8 * 1024 * 1024;
+static constexpr int USB_READ_CHUNK_STEP = 4 * 1024 * 1024;
+static constexpr int USB_READ_CHUNK_MIN = DEFAULT_CHUNKSZ;
+
+static int usb_read_chunk_start()
+{
+    const char* value = std::getenv("XLINK_USB_READ_CHUNK_MIB");
+    const int mib = value ? std::atoi(value) : 0;
+    if(mib <= 0)
+        return USB_READ_CHUNK_START;
+    return std::min(mib, USB_READ_CHUNK_START / (1024 * 1024)) * 1024 * 1024;
+}
+
+static std::atomic<int> usb_read_chunk{usb_read_chunk_start()};
 
 int usb_read(libusb_device_handle *f, void *data, size_t size, uint8_t ep)
 {
-    const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
     {
-        int bt, ss = (int)size;
+        int chunk_size = usb_read_chunk.load();
+        int bt = 0, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
         int rc = libusb_bulk_transfer(f, ep, (unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+        if(rc == LIBUSB_ERROR_NO_MEM && bt == 0 && chunk_size > USB_READ_CHUNK_MIN)
+        {
+            // The transfer was refused before any data moved: read the same bytes again in smaller reads
+            const int smaller = chunk_size > USB_READ_CHUNK_STEP ? USB_READ_CHUNK_STEP : USB_READ_CHUNK_MIN;
+            if(usb_read_chunk.compare_exchange_strong(chunk_size, smaller))
+            {
+                mvLog(MVLOG_WARN, "bulk read of %d bytes: %s, using reads of %d bytes", ss, xlink_libusb_strerror(rc), smaller);
+            }
+            continue;
+        }
         if(rc)
             return rc;
         data = ((char *)data) + bt;
