@@ -99,7 +99,6 @@ int tcpipPlatformWrite(void *fd, void *data, int size);
 int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void **fd);
 int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd, long *sockFd);
 xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name);
-int tcpipPlatformDeviceFdDown(void *fd);
 int tcpipPlatformClose(void *fd);
 int tcpipPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware, size_t length);
 
