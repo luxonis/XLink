@@ -1246,7 +1246,8 @@ static int usb_read_chunk_start()
     const int mib = value ? std::atoi(value) : 0;
     if(mib <= 0)
         return USB_READ_CHUNK_START;
-    return std::min(mib, USB_READ_CHUNK_START / (1024 * 1024)) * 1024 * 1024;
+    // Parentheses, because windows.h defines a min() macro
+    return (std::min)(mib, USB_READ_CHUNK_START / (1024 * 1024)) * 1024 * 1024;
 }
 
 static std::atomic<int> usb_read_chunk{usb_read_chunk_start()};
