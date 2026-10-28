@@ -306,12 +306,12 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 #if (defined(_WIN32) || defined(_WIN64) )
     if(sock == INVALID_SOCKET)
     {
-        return TCPIP_HOST_ERROR;
+        return X_LINK_PLATFORM_ERROR;
     }
 #else
     if(sock < 0)
     {
-        return TCPIP_HOST_ERROR;
+        return X_LINK_PLATFORM_ERROR;
     }
 #endif
 
@@ -436,10 +436,13 @@ int tcpipPlatformClose(void *fdKey)
     TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
 
 #ifdef _WIN32
-    if(shutdown(sock, SD_BOTH)) {
-        mvLog(MVLOG_DEBUG, "Error shutting down socket: %d", WSAGetLastError());
+    if(sock != INVALID_SOCKET)
+    {
+        if(shutdown(sock, SD_BOTH)) {
+            mvLog(MVLOG_DEBUG, "Error shutting down socket: %d", WSAGetLastError());
+        }
+        status = closesocket(sock);
     }
-    status = closesocket(sock);
 #else
     if(sock != -1)
     {
