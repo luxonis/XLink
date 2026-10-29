@@ -722,6 +722,8 @@ const char* XLinkPlatformToStr(XLinkPlatform_t val) {
         case X_LINK_MYRIAD_X: return "X_LINK_MYRIAD_X";
         case X_LINK_RVC3: return "X_LINK_RVC3";
         case X_LINK_RVC4: return "X_LINK_RVC4";
+        case X_LINK_RVC2NG:
+            return "X_LINK_RVC2NG";
         default:
             return "INVALID_ENUM_VALUE";
             break;

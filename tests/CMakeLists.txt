@@ -71,6 +71,11 @@ endmacro()
 
 # Tests
 
+if(UNIX)
+    xlink_add_test(platform_discovery_test platform_discovery_test.cpp)
+    set_tests_properties(platform_discovery_test PROPERTIES TIMEOUT 15 RUN_SERIAL TRUE)
+endif()
+
 # Multithreading search
 xlink_add_test(multithreading_search_test multithreading_search_test.cpp)
 

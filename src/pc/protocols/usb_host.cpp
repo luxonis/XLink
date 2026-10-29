@@ -214,8 +214,8 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
             XLinkProtocol_t protocol = X_LINK_USB_VSC;
             std::string mxId;
 
-            // Check for RVC3 and RVC4 first
-            if(state == X_LINK_GATE || in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4){
+            if (state == X_LINK_GATE || in_deviceRequirements.platform == X_LINK_RVC3 || in_deviceRequirements.platform == X_LINK_RVC4 ||
+                in_deviceRequirements.platform == X_LINK_RVC2NG) {
                 if(!libusbDeviceHasInterface(devs[i], USB_EP_INTERFACE_GATE)) {
                     // This may be the case on Windows with WinUSB, separate devices created for each interface
                     continue;
@@ -227,7 +227,9 @@ xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,
                     continue;
                 }
 
-                if (gateResponse.platform == 4){
+                if (gateResponse.platform == 5) {
+                    platform = X_LINK_RVC2NG;
+                } else if (gateResponse.platform == 4) {
                     platform = X_LINK_RVC4;
                 } else {
                     platform = X_LINK_RVC3;
