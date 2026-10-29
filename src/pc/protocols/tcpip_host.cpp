@@ -238,7 +238,16 @@ static tcpipHostDevicePlatform_t tcpip_convert_device_platform(XLinkPlatform_t p
     return TCPIP_HOST_PLATFORM_INVALID;
 }
 
-static int tcpip_setsockopt(int __fd, int __level, int __optname, const void *__optval, socklen_t __optlen) {
+// SOCKET is unsigned on Windows, so a "< 0" check never catches INVALID_SOCKET there
+static bool tcpip_is_valid_socket(TCPIP_SOCKET sock) {
+#if (defined(_WIN32) || defined(_WIN64) )
+    return sock != INVALID_SOCKET;
+#else
+    return sock >= 0;
+#endif
+}
+
+static int tcpip_setsockopt(TCPIP_SOCKET __fd, int __level, int __optname, const void *__optval, socklen_t __optlen) {
 #if (defined(_WIN32) || defined(_WIN64) )
     return setsockopt(__fd, __level, __optname, (const char*) __optval, __optlen);
 #else
@@ -974,14 +983,18 @@ int tcpipPlatformWrite(void *fdKey, void *data, int size)
 int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void **fd, long *sockFd)
 {
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
-    if(sock < 0)
+    if(!tcpip_is_valid_socket(sock))
     {
         mvLog(MVLOG_FATAL, "Couldn't open socket for server");
-        tcpip_close_socket(sock);
         return X_LINK_PLATFORM_ERROR;
     }
-   
+
     if (sockFd != nullptr) *sockFd = sock;
+    // Unpublish before closing, so that the caller never sees a closed (and maybe reused) fd
+    auto closeListenSocket = [&]() {
+        if (sockFd != nullptr) *sockFd = -1;
+        tcpip_close_socket(sock);
+    };
 
     int reuse_addr = 1;
     int sc;
@@ -989,7 +1002,7 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     if(sc < 0)
     {
         mvLog(MVLOG_FATAL, "Couldn't set server socket options");
-        tcpip_close_socket(sock);
+        closeListenSocket();
         return X_LINK_PLATFORM_ERROR;
     }
 
@@ -1019,14 +1032,14 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
     {
         mvLog(MVLOG_FATAL, "Couldn't bind to server socket");
         perror("bind");
-        tcpip_close_socket(sock);
+        closeListenSocket();
         return X_LINK_PLATFORM_ERROR;
     }
 
     if(listen(sock, 1) < 0)
     {
         mvLog(MVLOG_FATAL, "Couldn't listen to server socket");
-        tcpip_close_socket(sock);
+        closeListenSocket();
         return X_LINK_PLATFORM_ERROR;
     }
 
@@ -1037,12 +1050,11 @@ int tcpipPlatformServer(const char *devPathRead, const char *devPathWrite, void 
 #endif
 
     socklen_portable len = (socklen_portable) sizeof(client);
-    int connfd = accept(sock, (struct sockaddr*)&client, &len);
+    TCPIP_SOCKET connfd = accept(sock, (struct sockaddr*)&client, &len);
     // Regardless of return, close the listening socket
-    tcpip_close_socket(sock);
-    if (sockFd != nullptr) *sockFd = -1;
+    closeListenSocket();
     // Then check if connection was accepted succesfully
-    if(connfd < 0)
+    if(!tcpip_is_valid_socket(connfd))
     {
         mvLog(MVLOG_FATAL, "Couldn't accept a connection to server socket");
         return X_LINK_PLATFORM_ERROR;
@@ -1072,18 +1084,10 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
     }
 
     TCPIP_SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
-
-#if (defined(_WIN32) || defined(_WIN64) )
-    if(sock == INVALID_SOCKET)
+    if(!tcpip_is_valid_socket(sock))
     {
-        return TCPIP_HOST_ERROR;
+        return X_LINK_PLATFORM_ERROR;
     }
-#else
-    if(sock < 0)
-    {
-        return TCPIP_HOST_ERROR;
-    }
-#endif
 
     // Disable sigpipe reception on send
     #if defined(SO_NOSIGPIPE)
@@ -1095,11 +1099,15 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     const size_t maxlen = 255;
     size_t len = strnlen(devPathWrite, maxlen + 1);
-    if (len == 0 || len >= maxlen + 1)
+    if (len == 0 || len >= maxlen + 1) {
+        tcpip_close_socket(sock);
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
     char *const serv_ip = (char *)malloc(len + 1);
-    if (!serv_ip)
+    if (!serv_ip) {
+        tcpip_close_socket(sock);
         return X_LINK_PLATFORM_ERROR;
+    }
     serv_ip[0] = 0;
     // Parse port if specified, or use default
     int port = TCPIP_LINK_SOCKET_PORT;
@@ -1153,29 +1161,6 @@ xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name)
 }
 
 
-int tcpipPlatformDeviceFdDown(void *fdKey)
-{
-    int status = 0;
-
-    void* tmpsockfd = NULL;
-    if(getPlatformDeviceFdFromKey(fdKey, &tmpsockfd)){
-        mvLog(MVLOG_FATAL, "Cannot find file descriptor by key");
-        return -1;
-    }
-    TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
-
-#ifdef _WIN32
-    status = shutdown(sock, SD_BOTH);
-#else
-    if(sock != -1)
-    {
-        status = shutdown(sock, SHUT_RDWR);
-    }
-#endif
-
-    return status;
-}
-
 int tcpipPlatformClose(void *fdKey)
 {
     int status = 0;
@@ -1187,16 +1172,20 @@ int tcpipPlatformClose(void *fdKey)
     }
     TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
 
-#ifdef _WIN32
-    status = shutdown(sock, SD_BOTH);
-    if (status == 0) { status = closesocket(sock); }
-#else
-    if(sock != -1)
+    if(tcpip_is_valid_socket(sock))
     {
-        status = shutdown(sock, SHUT_RDWR);
-        if (status == 0) { status = close(sock); }
-    }
+#ifdef _WIN32
+        if(shutdown(sock, SD_BOTH)) {
+            mvLog(MVLOG_DEBUG, "Error shutting down socket: %d", tcpip_errno);
+        }
+        status = closesocket(sock);
+#else
+        if(shutdown(sock, SHUT_RDWR)) {
+            mvLog(MVLOG_DEBUG, "Error shutting down socket: %d", tcpip_errno);
+        }
+        status = close(sock);
 #endif
+    }
 
     if(destroyPlatformDeviceFdKey(fdKey)){
         mvLog(MVLOG_FATAL, "Cannot destroy file descriptor key");
