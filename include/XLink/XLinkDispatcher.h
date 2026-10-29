@@ -49,6 +49,20 @@ int DispatcherServeEvent(eventId_t id,
                              xLinkEventType_t type,
                              streamId_t stream,
                              void *xlinkFD);
+/**
+ * @brief Pipelining window of this side: the number of pipelined requests that
+ *        this side accepts from the peer, and the most that it sends.
+ *        XLINK_PIPELINE_WINDOW_DEFAULT, or the env var XLINK_PIPELINE_WINDOW
+ *        (0 turns pipelining off), read in DispatcherInitialize().
+ *        Not more than XLINK_PIPELINE_WINDOW_MAX.
+ */
+int DispatcherLocalPipelineWindow(void);
+/**
+ * @brief Sets the pipelining window of a link from the PING exchange.
+ * @param[in] xLinkFD - link of the peer
+ * @param[in] peerWindow - window announced by the peer, 0 for an old peer
+ */
+void DispatcherSetPeerPipelineWindow(void* xLinkFD, int peerWindow);
 #ifdef __cplusplus
 }
 #endif

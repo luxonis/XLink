@@ -519,7 +519,12 @@ int dispatcherLocalEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response,
         case XLINK_PING_REQ:
         {
             XLINK_EVENT_ACKNOWLEDGE(event);
-            mvLog(MVLOG_DEBUG,"XLINK_PING_REQ - do nothing\n");
+            // Announce pipelining to the peer. An old peer ignores the flag.
+            const int window = DispatcherLocalPipelineWindow();
+            if (window > 0) {
+                event->header.flags.bitField.pipelining = 1;
+                event->header.size = window;
+            }
             break;
         }
 	case XLINK_WRITE_RESP:
@@ -727,11 +732,22 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             break;
         }
         case XLINK_PING_REQ:
+        {
             response->header.type = XLINK_PING_RESP;
             XLINK_EVENT_ACKNOWLEDGE(response);
             response->deviceHandle = event->deviceHandle;
+            // Pipelining: use the window of the peer (0 for an old peer), announce ours.
+            // header.size has a value only when the flag is set.
+            DispatcherSetPeerPipelineWindow(event->deviceHandle.xLinkFD,
+                event->header.flags.bitField.pipelining ? (int)event->header.size : 0);
+            const int window = DispatcherLocalPipelineWindow();
+            if (window > 0) {
+                response->header.flags.bitField.pipelining = 1;
+                response->header.size = window;
+            }
             sem_post(&pingSem);
             break;
+        }
         case XLINK_RESET_REQ:
             mvLog(MVLOG_DEBUG,"reset request - received! Sending ACK *****\n");
             XLINK_EVENT_ACKNOWLEDGE(response);
@@ -786,6 +802,10 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             break;
         }
         case XLINK_PING_RESP:
+            // Pipelining: use the window of the peer. An old peer does not set the
+            // flag, and then header.size has no value.
+            DispatcherSetPeerPipelineWindow(event->deviceHandle.xLinkFD,
+                event->header.flags.bitField.pipelining ? (int)event->header.size : 0);
             break;
         case XLINK_RESET_RESP:
             break;

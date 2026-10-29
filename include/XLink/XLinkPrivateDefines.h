@@ -134,6 +134,15 @@ typedef enum
 
 #define MAX_EVENTS 64
 #define MAX_SCHEDULERS MAX_LINKS
+
+// Pipelining: the caller of a write or a release returns when the request is sent,
+// before the remote response. The flow control stays on the stream credit
+// (remoteFillLevel). Each peer announces in PING_REQ / PING_RESP (flag
+// "pipelining", window in header.size) how many such requests it accepts. Old peers
+// do not set the flag, so the link stays in the old mode (wait for each response).
+#define XLINK_PIPELINE_WINDOW_DEFAULT 16
+// The window must leave space in the remote event queue for the waiting callers
+#define XLINK_PIPELINE_WINDOW_MAX (MAX_EVENTS / 2)
 #define XLINK_MAX_DEVICES MAX_LINKS
 
 typedef struct xLinkEventHeader_t{
@@ -157,6 +166,9 @@ typedef struct xLinkEventHeader_t{
             uint32_t sizeTooBig : 1;
             uint32_t noSuchStream : 1;
             uint32_t moveSemantic : 1;
+            // PING_REQ / PING_RESP only: the sender supports pipelining and
+            // header.size is its window. Old peers send 0 here.
+            uint32_t pipelining : 1;
         }bitField;
     }flags;
 }xLinkEventHeader_t;

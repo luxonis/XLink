@@ -62,6 +62,7 @@ typedef struct xLinkEventPriv_t {
     XLinkTimespec* sendTime;
     XLink_sem_t* sem;
     void* data;
+    uint32_t seq; // order of addition to the queue
 } xLinkEventPriv_t;
 
 typedef struct {
@@ -73,8 +74,8 @@ typedef struct{
     xLinkEventPriv_t* end;
     xLinkEventPriv_t* base;
 
-    xLinkEventPriv_t* curProc;
     xLinkEventPriv_t* cur;
+    uint32_t nextSeq;
     XLINK_ALIGN_TO_BOUNDARY(64) xLinkEventPriv_t q[MAX_EVENTS];
 
 }eventQueueHandler_t;
@@ -102,6 +103,9 @@ typedef struct {
     uint32_t dispatcherLinkDown;
     uint32_t dispatcherDeviceFdDown;
     uint32_t server;
+    // Pipelining (see XLINK_PIPELINE_WINDOW_DEFAULT). Changed with queueMutex locked.
+    int pipelineWindow;   // 0: off. Else the most requests sent without a waiting caller
+    int pipelineInFlight; // requests sent without a waiting caller, response not received yet
 } xLinkSchedulerState_t;
 
 
@@ -120,6 +124,7 @@ DispatcherControlFunctions* glControlFunc;
 int numSchedulers;
 xLinkSchedulerState_t schedulerState[MAX_SCHEDULERS];
 sem_t addSchedulerSem;
+static int localPipelineWindow = XLINK_PIPELINE_WINDOW_DEFAULT; // set in DispatcherInitialize()
 
 static pthread_mutex_t unique_id_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t clean_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -150,6 +155,8 @@ static void* eventSchedulerRun(void* ctx);
 #endif
 
 static int isEventTypeRequest(xLinkEventPriv_t* event);
+static int isPipelinedRequest(xLinkEventType_t type);
+static int isPipelinedResponse(xLinkEventType_t type);
 static void postAndMarkEventServed(xLinkEventPriv_t *event);
 static int createUniqueID();
 static int findAvailableScheduler();
@@ -215,6 +222,19 @@ XLinkError_t DispatcherInitialize(DispatcherControlFunctions *controlFunc) {
         schedulerState[i].schedulerId = -1;
     }
 
+    int window = XLINK_PIPELINE_WINDOW_DEFAULT;
+    const char* env = getenv("XLINK_PIPELINE_WINDOW");
+    if (env != NULL) {
+        window = atoi(env);
+    }
+    if (window < 0) {
+        window = 0;
+    }
+    if (window > XLINK_PIPELINE_WINDOW_MAX) {
+        window = XLINK_PIPELINE_WINDOW_MAX;
+    }
+    localPipelineWindow = window;
+
     return X_LINK_SUCCESS;
 }
 
@@ -262,12 +282,10 @@ XLinkError_t DispatcherStartImpl(xLinkDesc_t *link, bool server)
     schedulerState[idx].schedulerId = idx;
 
     schedulerState[idx].lQueue.cur = schedulerState[idx].lQueue.q;
-    schedulerState[idx].lQueue.curProc = schedulerState[idx].lQueue.q;
     schedulerState[idx].lQueue.base = schedulerState[idx].lQueue.q;
     schedulerState[idx].lQueue.end = &schedulerState[idx].lQueue.q[MAX_EVENTS];
 
     schedulerState[idx].rQueue.cur = schedulerState[idx].rQueue.q;
-    schedulerState[idx].rQueue.curProc = schedulerState[idx].rQueue.q;
     schedulerState[idx].rQueue.base = schedulerState[idx].rQueue.q;
     schedulerState[idx].rQueue.end = &schedulerState[idx].rQueue.q[MAX_EVENTS];
 
@@ -396,13 +414,19 @@ xLinkEvent_t* DispatcherAddEvent_(xLinkEventOrigin_t origin, xLinkEvent_t *event
         event->header.flags.raw = 0;
         event->header.flags.bitField.moveSemantic = tmpMoveSem;
         ev = addNextQueueElemToProc_(curr, &curr->lQueue, event, sem, origin, outTime);
+        if (ev == NULL) {
+            mvLog(MVLOG_ERROR, "Local event queue is full, event %s is not added",
+                  TypeToStr(event->header.type));
+        }
     } else {
         ev = addNextQueueElemToProc_(curr, &curr->rQueue, event, NULL, origin, outTime);
     }
     if (XLink_sem_post(&curr->addEventSem)) {
         mvLog(MVLOG_ERROR,"can't post semaphore\n");
     }
-    if (XLink_sem_post(&curr->notifyDispatcherSem)) {
+    // One post for each event in a queue. A post without an event makes
+    // dispatcherGetNextEvent() return NULL, which stops the scheduler.
+    if (ev != NULL && XLink_sem_post(&curr->notifyDispatcherSem)) {
         mvLog(MVLOG_ERROR, "can't post semaphore\n");
     }
     return ev;
@@ -595,6 +619,37 @@ int DispatcherServeEvent(eventId_t id, xLinkEventType_t type, streamId_t stream,
     return 0;
 }
 
+int DispatcherLocalPipelineWindow(void)
+{
+    return localPipelineWindow;
+}
+
+void DispatcherSetPeerPipelineWindow(void* xLinkFD, int peerWindow)
+{
+    xLinkSchedulerState_t* curr = findCorrespondingScheduler(xLinkFD);
+    if (curr == NULL) {
+        return;
+    }
+
+    // peerWindow is 0 for an old peer (no "pipelining" flag)
+    int window = DispatcherLocalPipelineWindow();
+    if (peerWindow < window) {
+        window = peerWindow;
+    }
+    if (window < 0) {
+        window = 0;
+    }
+
+    if (pthread_mutex_lock(&(curr->queueMutex)) != 0) {
+        return;
+    }
+    curr->pipelineWindow = window;
+    if (pthread_mutex_unlock(&(curr->queueMutex)) != 0) {
+        mvLog(MVLOG_ERROR, "Failed to unlock queueMutex");
+    }
+    mvLog(MVLOG_INFO, "Pipelining window %d (peer announced %d)", window, peerWindow);
+}
+
 // ------------------------------------
 // XLinkDispatcher.h implementation. End.
 // ------------------------------------
@@ -716,7 +771,35 @@ static void* eventReader(void* ctx)
             continue;
         }
 
-        DispatcherAddEvent(EVENT_REMOTE, &event);
+        if (isPipelinedResponse(event.header.type)) {
+            // The remote handler does nothing for these responses. Serve them here:
+            // they do not use the remote queue, and they do not wait while the
+            // scheduler sends a large packet.
+            xLinkEventPriv_t response;
+            memset(&response, 0, sizeof(response));
+            response.packet = event;
+            response.origin = EVENT_REMOTE;
+            XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
+            dispatcherResponseServe(&response, curr);
+            XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, NULL);
+            continue;
+        }
+
+        // Do not drop a remote event when the remote queue is full: the stream
+        // credit or a waiting caller of the peer is then lost. Wait until the
+        // scheduler frees a slot. The peer waits on the link meanwhile.
+        int queueFullLogged = 0;
+        while (DispatcherAddEvent(EVENT_REMOTE, &event) == NULL && !curr->resetXLink) {
+            if (!queueFullLogged) {
+                mvLog(MVLOG_WARN, "Remote event queue is full, waiting for a free slot");
+                queueFullLogged = 1;
+            }
+#if (defined(_WIN32) || defined(_WIN64) )
+            Sleep(1);
+#else
+            usleep(1000);
+#endif
+        }
 
         if (event.header.type == XLINK_RESET_REQ) {
             curr->resetXLink = 1;
@@ -805,6 +888,20 @@ static int isEventTypeRequest(xLinkEventPriv_t* event)
     return (event->packet.header.type < XLINK_STATIC_REQUEST_LAST ||
 	   (event->packet.header.type >= XLINK_READ_REL_SPEC_REQ &&
 	    event->packet.header.type < XLINK_REQUEST_LAST));
+}
+
+// Requests whose caller can return after the send (pipelining). Their remote
+// response has no data for the caller: it is always an ACK.
+static int isPipelinedRequest(xLinkEventType_t type)
+{
+    return type == XLINK_WRITE_REQ || type == XLINK_WRITE_FD_REQ ||
+           type == XLINK_READ_REL_REQ || type == XLINK_READ_REL_SPEC_REQ;
+}
+
+static int isPipelinedResponse(xLinkEventType_t type)
+{
+    return type == XLINK_WRITE_RESP || type == XLINK_WRITE_FD_RESP ||
+           type == XLINK_READ_REL_RESP || type == XLINK_READ_REL_SPEC_RESP;
 }
 
 static void postAndMarkEventServed(xLinkEventPriv_t *event)
@@ -919,6 +1016,13 @@ static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState
             break;
         }
     }
+    if (i == MAX_EVENTS && isPipelinedResponse(event->packet.header.type) &&
+        curr->pipelineInFlight > 0) {
+        // Response to a pipelined request: its caller returned after the send
+        // and its slot is free already
+        curr->pipelineInFlight--;
+        return 0;
+    }
     if (i == MAX_EVENTS) {
         mvLog(MVLOG_FATAL,"no request for this response: %s %d\n", TypeToStr(event->packet.header.type), event->origin);
         mvLog(MVLOG_DEBUG,"#### (i == MAX_EVENTS) %s %d %d\n", TypeToStr(event->packet.header.type), event->origin, (int)event->packet.header.id);
@@ -966,11 +1070,17 @@ static xLinkEventPriv_t* searchForReadyEvent(xLinkSchedulerState_t* curr)
 }
 
 static xLinkEventPriv_t* getNextQueueElemToProc(eventQueueHandler_t *q ){
+    // Take the oldest allocated event. The free slots are not in order (blocked
+    // and pending events stay in the queue), so a new event can be in a slot
+    // before an older one. A scan from the last processed slot can then take
+    // the new event first, or miss the old one.
     xLinkEventPriv_t* event = NULL;
-    if (q->cur != q->curProc) {
-        event = getNextElementWithState(q->base, q->end, q->curProc, EVENT_ALLOCATED);
-        q->curProc = event;
-        CIRCULAR_INCREMENT_BASE(q->curProc, q->end, q->base);
+    xLinkEventPriv_t* it;
+    for (it = q->base; it < q->end; it++) {
+        if (it->isServed == EVENT_ALLOCATED &&
+            (event == NULL || (int32_t)(it->seq - event->seq) < 0)) {
+            event = it;
+        }
     }
     return event;
 }
@@ -987,7 +1097,7 @@ static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
     xLinkEventPriv_t* eventP = getNextElementWithState(q->base, q->end, q->cur, EVENT_SERVED);
     if (eventP == NULL) {
-        mvLog(MVLOG_ERROR, "getNextElementWithState returned NULL");
+        // The queue is full. The caller logs it.
         XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, NULL);
         return NULL;
     }
@@ -997,6 +1107,7 @@ static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
     eventP->sem = sem;
     eventP->packet = *event;
     eventP->origin = o;
+    eventP->seq = q->nextSeq++;
     if (o == EVENT_LOCAL) {
         // XLink API caller provided buffer for return the final result to
         eventP->retEv = event;
@@ -1248,6 +1359,20 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
                     dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
                     XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
                     mvLog(MVLOG_ERROR, "Event sending failed");
+                } else if (event->origin == EVENT_LOCAL && isPipelinedRequest(toSend->header.type)) {
+                    // Pipelining: the request is sent, so its caller can return now and
+                    // reuse its buffer. The slot is freed too; the response only lowers
+                    // pipelineInFlight. The order of one caller stays the same: it adds
+                    // its next event only after this point.
+                    XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
+                    // The reader thread can serve the response before this point. Then the
+                    // event is not pending any more (only this thread sets EVENT_PENDING).
+                    if (event->isServed == EVENT_PENDING &&
+                        curr->pipelineInFlight < curr->pipelineWindow) {
+                        curr->pipelineInFlight++;
+                        postAndMarkEventServed(event);
+                    }
+                    XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
                 }
             } else {
                 XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);

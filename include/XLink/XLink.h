@@ -297,6 +297,10 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId);
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream
  * @warning Actual size of the written data is ALIGN_UP(size, 64)
+ * @note The buffer can be reused when the function returns. When both ends
+ *       support pipelining (agreed at connect), the write functions and the
+ *       release functions return when the request is sent, not when the remote
+ *       confirms it. The order on one stream does not change.
  * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
  * @param[in] buffer - data buffer to be transmitted
  * @param[in] size - size of the data to be transmitted
@@ -406,6 +410,7 @@ void XLinkDeallocateMoveData(void* const data, const uint32_t length);
 /**
  * @brief Releases data from stream - This should be called after the data obtained from
  *  XlinkReadData is processed
+ * @note With pipelining, it returns when the release is sent (see XLinkWriteData)
  * @param[in] streamId - stream link Id obtained from XLinkOpenStream call
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success
  */
