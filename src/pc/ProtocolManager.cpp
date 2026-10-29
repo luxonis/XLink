@@ -9,7 +9,7 @@ extern "C" void xlinkSetProtocolInitialized(const XLinkProtocol_t protocol, int 
     }
 }
 
-int XLinkIsProtocolInitialized(const XLinkProtocol_t protocol) {
+extern "C" int XLinkIsProtocolInitialized(const XLinkProtocol_t protocol) {
     if(protocol >= 0 && protocol < X_LINK_NMB_OF_PROTOCOLS) {
         return protocolInitialized[protocol];
     }

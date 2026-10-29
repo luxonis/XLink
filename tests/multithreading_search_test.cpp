@@ -41,7 +41,7 @@ int main() {
             suitableDevice.protocol = X_LINK_ANY_PROTOCOL;
             suitableDevice.platform = X_LINK_ANY_PLATFORM;
 
-            auto status = XLinkFindAllSuitableDevices(suitableDevice, deviceDescAll.data(), deviceDescAll.size(), &numdev);
+            auto status = XLinkFindAllSuitableDevices(suitableDevice, deviceDescAll.data(), deviceDescAll.size(), &numdev, XLINK_DEVICE_DEFAULT_SEARCH_TIMEOUT_MS);
             if(status != X_LINK_SUCCESS) throw std::runtime_error("Couldn't retrieve all connected devices");
 
             // Print device details
