@@ -54,6 +54,7 @@ static const int statuswaittimeout = 5;
 #include <netinet/tcp.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <errno.h>
 #endif
 
 #endif /* USE_TCP_IP */
@@ -305,12 +306,12 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 #if (defined(_WIN32) || defined(_WIN64) )
     if(sock == INVALID_SOCKET)
     {
-        return TCPIP_HOST_ERROR;
+        return X_LINK_PLATFORM_ERROR;
     }
 #else
     if(sock < 0)
     {
-        return TCPIP_HOST_ERROR;
+        return X_LINK_PLATFORM_ERROR;
     }
 #endif
 
@@ -324,11 +325,15 @@ int tcpipPlatformConnect(const char *devPathRead, const char *devPathWrite, void
 
     const size_t maxlen = 255;
     size_t len = strnlen(devPathWrite, maxlen + 1);
-    if (len == 0 || len >= maxlen + 1)
+    if (len == 0 || len >= maxlen + 1) {
+        tcpip_close_socket(sock);
         return X_LINK_PLATFORM_INVALID_PARAMETERS;
+    }
     char *const serv_ip = (char *)malloc(len + 1);
-    if (!serv_ip)
+    if (!serv_ip) {
+        tcpip_close_socket(sock);
         return X_LINK_PLATFORM_ERROR;
+    }
     serv_ip[0] = 0;
     // Parse port if specified, or use default
     int port = TCPIP_LINK_SOCKET_PORT;
@@ -431,13 +436,20 @@ int tcpipPlatformClose(void *fdKey)
     TCPIP_SOCKET sock = (TCPIP_SOCKET) (uintptr_t) tmpsockfd;
 
 #ifdef _WIN32
-    status = shutdown(sock, SD_BOTH);
-    if (status == 0) { status = closesocket(sock); }
+    if(sock != INVALID_SOCKET)
+    {
+        if(shutdown(sock, SD_BOTH)) {
+            mvLog(MVLOG_DEBUG, "Error shutting down socket: %d", WSAGetLastError());
+        }
+        status = closesocket(sock);
+    }
 #else
     if(sock != -1)
     {
-        status = shutdown(sock, SHUT_RDWR);
-        if (status == 0) { status = close(sock); }
+        if(shutdown(sock, SHUT_RDWR)) {
+            mvLog(MVLOG_DEBUG, "Error shutting down socket: %d", errno);
+        }
+        status = close(sock);
     }
 #endif
 

@@ -17,12 +17,14 @@
 
 // std
 #include <mutex>
+#include <atomic>
 #include <unordered_map>
 #include <algorithm>
 #include <string>
 #include <thread>
 #include <chrono>
 #include <cstring>
+#include <cstdlib>
 
 constexpr static int MAXIMUM_PORT_NUMBERS = 7;
 using VidPid = std::pair<uint16_t, uint16_t>;
@@ -614,8 +616,17 @@ static int send_file(libusb_device_handle* h, uint8_t endpoint, const void* tx_b
         rc = libusb_bulk_transfer(h, endpoint, p, wb, &wbr, write_timeout);
         if((rc || (wb != wbr)) && (wb != 0)) // Don't check the return code for ZLP
         {
-            if(rc == LIBUSB_ERROR_NO_DEVICE)
+            if(rc == LIBUSB_ERROR_NO_DEVICE) {
+                // The device leaves the bus when it boots, so NO_DEVICE right after the last bytes
+                // is expected. Before that it means the upload was interrupted (link reset or
+                // disconnect): the device did not get the whole image and will not boot from it.
+                twb += wbr;
+                if((unsigned)twb < filesize) {
+                    mvLog(MVLOG_ERROR, "bulk write: device disconnected after %d of %u bytes", twb, filesize);
+                    return USB_BOOT_ERROR;
+                }
                 break;
+            }
             mvLog(MVLOG_WARN, "bulk write: %s (%d bytes written, %d bytes to write)", xlink_libusb_strerror(rc), wbr, wb);
             if(rc == LIBUSB_ERROR_TIMEOUT)
                 return USB_BOOT_TIMEOUT;
@@ -955,16 +966,41 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 }
 
 
+// Start with 8 MiB bulk read chunks and drop down to 4 MiB or 1 MiB if OS refuses it
+static constexpr int USB_READ_CHUNK_START = 8 * 1024 * 1024;
+static constexpr int USB_READ_CHUNK_STEP = 4 * 1024 * 1024;
+static constexpr int USB_READ_CHUNK_MIN = DEFAULT_CHUNKSZ;
+
+static int usb_read_chunk_start()
+{
+    const char* value = std::getenv("XLINK_USB_READ_CHUNK_MIB");
+    const int mib = value ? std::atoi(value) : 0;
+    if(mib <= 0)
+        return USB_READ_CHUNK_START;
+    return std::min(mib, USB_READ_CHUNK_START / (1024 * 1024)) * 1024 * 1024;
+}
+
+static std::atomic<int> usb_read_chunk{usb_read_chunk_start()};
 
 int usb_read(libusb_device_handle *f, void *data, size_t size)
 {
-    const int chunk_size = DEFAULT_CHUNKSZ;
     while(size > 0)
     {
-        int bt, ss = (int)size;
+        int chunk_size = usb_read_chunk.load();
+        int bt = 0, ss = (int)size;
         if(ss > chunk_size)
             ss = chunk_size;
         int rc = libusb_bulk_transfer(f, USB_ENDPOINT_IN,(unsigned char *)data, ss, &bt, XLINK_USB_DATA_TIMEOUT);
+        if(rc == LIBUSB_ERROR_NO_MEM && bt == 0 && chunk_size > USB_READ_CHUNK_MIN)
+        {
+            // The transfer was refused before any data moved: read the same bytes again in smaller reads
+            const int smaller = chunk_size > USB_READ_CHUNK_STEP ? USB_READ_CHUNK_STEP : USB_READ_CHUNK_MIN;
+            if(usb_read_chunk.compare_exchange_strong(chunk_size, smaller))
+            {
+                mvLog(MVLOG_WARN, "bulk read of %d bytes: %s, using reads of %d bytes", ss, xlink_libusb_strerror(rc), smaller);
+            }
+            continue;
+        }
         if(rc)
             return rc;
         data = ((char *)data) + bt;
