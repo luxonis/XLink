@@ -88,6 +88,8 @@ xlink_add_test(rtt_test rtt_test.cpp)
 
 xlink_add_test(data_allocator_test data_allocator_test.cpp)
 xlink_add_test(stream_half_close_test stream_half_close_test.cpp)
+target_include_directories(data_allocator_test PRIVATE ${XLINK_PLATFORM_INCLUDE})
+target_include_directories(stream_half_close_test PRIVATE ${XLINK_PLATFORM_INCLUDE})
 set_tests_properties(stream_half_close_test PROPERTIES TIMEOUT 10)
 
 if(UNIX AND NOT APPLE AND NOT BUILD_SHARED_LIBS)
