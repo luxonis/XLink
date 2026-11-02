@@ -177,8 +177,22 @@ int XLinkPlatformGateRead(const char *name, void *data, int size, int timeout)
 
 
 
+static void* (*data_allocate)(uint32_t, uint32_t, void*);
+static void (*data_deallocate)(void*, uint32_t, uint32_t, void*);
+static void* data_allocator_context;
+
+void XLinkPlatformSetDataAllocator(void* (*allocate)(uint32_t, uint32_t, void*),
+                                  void (*deallocate)(void*, uint32_t, uint32_t, void*),
+                                  void* context)
+{
+    data_allocate = allocate;
+    data_deallocate = deallocate;
+    data_allocator_context = context;
+}
+
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment)
 {
+    if (data_allocate) return data_allocate(size, alignment, data_allocator_context);
     void* ret = NULL;
 #if (defined(_WIN32) || defined(_WIN64) )
     ret = _aligned_malloc(size, alignment);
@@ -194,6 +208,10 @@ void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment)
 {
     if (!ptr)
         return;
+    if (data_deallocate) {
+        data_deallocate(ptr, size, alignment, data_allocator_context);
+        return;
+    }
 #if (defined(_WIN32) || defined(_WIN64) )
     _aligned_free(ptr);
 #else

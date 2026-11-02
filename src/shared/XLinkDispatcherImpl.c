@@ -705,14 +705,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
                     }
 
                     if (!stream->writeSize) {
-                        stream->id = INVALID_STREAM_ID;
-                        stream->name[0] = '\0';
-                    }
-
-                    // TODO(themarpe) - TBD
-                    if(server) {
-                        if(XLink_sem_destroy(&stream->sem))
-                            perror("Can't destroy semaphore");
+                        XLinkStreamReset(stream);
                     }
                 }
                 else
@@ -768,6 +761,9 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
         }
         case XLINK_CLOSE_STREAM_RESP:
         {
+            if (!event->header.flags.bitField.ack || event->header.flags.bitField.nack) {
+                break;
+            }
             streamDesc_t* stream = getStreamById(event->deviceHandle.xLinkFD,
                                                  event->header.streamId);
 
@@ -777,10 +773,7 @@ int dispatcherRemoteEventGetResponse(xLinkEvent_t* event, xLinkEvent_t* response
             }
             stream->writeSize = 0;
             if (!stream->readSize) {
-                XLINK_EVENT_NOT_ACKNOWLEDGE(response);
-                stream->id = INVALID_STREAM_ID;
-                stream->name[0] = '\0';
-                break;
+                XLinkStreamReset(stream);
             }
             releaseStream(stream);
             break;
@@ -823,29 +816,30 @@ void dispatcherCloseLink(void* fd, int fullClose)
         return;
     }
 
-    link->id = INVALID_LINK_ID;
+    if (pthread_mutex_lock(&availableXLinksMutex)) return;
     link->deviceHandle.xLinkFD = NULL;
     link->peerState = XLINK_NOT_INIT;
-    link->nextUniqueStreamId = 0;
+    pthread_mutex_unlock(&availableXLinksMutex);
 
     for (int index = 0; index < XLINK_MAX_STREAMS; index++) {
         streamDesc_t* stream = &link->availableStreams[index];
 
-        // TODO integrate pending changes
-        // * use move semantic, this prevents the memset(0) from causing leak/crash
-        // * make new xlink-specific semaphore and wait on it during xlink lookup, create, etc.
-
+        if (XLink_sem_wait(&stream->sem)) return;
         while (getPacketFromStream(stream) || stream->blockedPackets) {
             releasePacketFromStream(stream, NULL);
         }
 
-        // XLink reset stream
         XLinkStreamReset(stream);
+        releaseStream(stream);
     }
 
     if(XLink_sem_destroy(&link->dispatcherClosedSem)) {
         mvLog(MVLOG_DEBUG, "Cannot destroy dispatcherClosedSem\n");
     }
+    if (pthread_mutex_lock(&availableXLinksMutex)) return;
+    link->nextUniqueStreamId = 0;
+    link->id = INVALID_LINK_ID;
+    pthread_mutex_unlock(&availableXLinksMutex);
 }
 
 void dispatcherCloseDeviceFd(xLinkDeviceHandle_t* deviceHandle)
@@ -1037,8 +1031,14 @@ int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive) {
           event->header.streamId, event->header.size, stream->localFillLevel, stream->readSize, stream->writeSize);
 
     void* buffer = XLinkPlatformAllocateData(ALIGN_UP(event->header.size, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
-    XLINK_OUT_WITH_LOG_IF(buffer == NULL,
-        mvLog(MVLOG_FATAL,"out of memory to receive data of size = %zu\n", event->header.size));
+    if(buffer == NULL) {
+        stream->localFillLevel -= event->header.size;
+        releaseStream(stream);
+        mvLog(MVLOG_FATAL,"out of memory to receive data of size = %u\n", event->header.size);
+        DispatcherDeviceFdDown(&event->deviceHandle);
+        XLINK_EVENT_NOT_ACKNOWLEDGE(event);
+        return -1;
+    }
 
     long fd = -1;
     const int sc = XLinkPlatformRead(&event->deviceHandle, buffer, event->header.size, &fd);

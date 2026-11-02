@@ -128,13 +128,15 @@ XLinkError_t getNextAvailableStreamIndex(xLinkDesc_t* link, int* out_id)
     ASSERT_XLINK(link);
 
     *out_id = XLINK_MAX_STREAMS;
+    XLINK_RET_IF(pthread_mutex_lock(&availableXLinksMutex));
     for (int idx = 0; idx < XLINK_MAX_STREAMS; idx++) {
         if (link->availableStreams[idx].id == INVALID_STREAM_ID) {
             *out_id = idx;
-            return X_LINK_SUCCESS;
+            break;
         }
     }
-
+    pthread_mutex_unlock(&availableXLinksMutex);
+    if (*out_id < XLINK_MAX_STREAMS) return X_LINK_SUCCESS;
     mvLog(MVLOG_DEBUG,"No next available stream!\n");
     return X_LINK_ERROR;
 }
@@ -142,6 +144,7 @@ XLinkError_t getNextAvailableStreamIndex(xLinkDesc_t* link, int* out_id)
 streamId_t getNextStreamUniqueId(xLinkDesc_t *link)
 {
     XLINK_RET_ERR_IF(link == NULL, INVALID_STREAM_ID);
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&availableXLinksMutex), INVALID_STREAM_ID);
     uint32_t start = link->nextUniqueStreamId;
     uint32_t curr = link->nextUniqueStreamId;
     do
@@ -149,22 +152,17 @@ streamId_t getNextStreamUniqueId(xLinkDesc_t *link)
         int i;
         for (i = 0; i < XLINK_MAX_STREAMS; i++)
         {
-            if (link->availableStreams[i].id != INVALID_STREAM_ID &&
-                link->availableStreams[i].id == curr)
-                break;
+            if (link->availableStreams[i].id == curr) break;
         }
         if (i >= XLINK_MAX_STREAMS)
         {
-            link->nextUniqueStreamId = curr;
+            link->nextUniqueStreamId = (curr + 1) & STREAM_ID_MASK;
+            pthread_mutex_unlock(&availableXLinksMutex);
             return curr;
         }
-        curr++;
-
-        if (curr == INVALID_STREAM_ID)
-        {
-            curr = 0;
-        }
+        curr = (curr + 1) & STREAM_ID_MASK;
     } while (start != curr);
+    pthread_mutex_unlock(&availableXLinksMutex);
     mvLog(MVLOG_ERROR, "%s():- no next available stream unique id!\n", __func__);
     return INVALID_STREAM_ID;
 }

@@ -34,9 +34,11 @@ typedef struct{
     XLink_sem_t sem;
 }streamDesc_t;
 
+// The slot semaphore lives for the process lifetime. Initialize returns it acquired.
 XLinkError_t XLinkStreamInitialize(
     streamDesc_t* stream, streamId_t id, const char* name);
 
+// Reset requires an acquired slot and preserves its semaphore for queued callers.
 void XLinkStreamReset(streamDesc_t* stream);
 
 #endif //_XLINKSTREAM_H

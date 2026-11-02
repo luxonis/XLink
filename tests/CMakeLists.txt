@@ -85,3 +85,21 @@ xlink_add_test(rtt_test rtt_test.cpp)
 # WIP
 # Throughput test
 # xlink_add_test(throughput_test throughput_test.cpp)
+
+xlink_add_test(data_allocator_test data_allocator_test.cpp)
+xlink_add_test(stream_half_close_test stream_half_close_test.cpp)
+set_tests_properties(stream_half_close_test PROPERTIES TIMEOUT 10)
+
+if(UNIX AND NOT APPLE AND NOT BUILD_SHARED_LIBS)
+    xlink_add_test(receive_allocator_test receive_allocator_test.cpp)
+    target_link_libraries(receive_allocator_test -Wl,--wrap=XLinkPlatformRead)
+    add_test(NAME receive_allocator_failure_test COMMAND receive_allocator_test failure)
+    add_test(NAME receive_allocator_server_failure_test COMMAND receive_allocator_test failure server)
+    set_tests_properties(receive_allocator_test receive_allocator_failure_test receive_allocator_server_failure_test PROPERTIES TIMEOUT 10)
+    xlink_add_test(stream_close_waiter_test stream_close_waiter_test.cpp)
+    target_link_libraries(stream_close_waiter_test -Wl,--wrap=XLinkStreamReset -Wl,--wrap=sem_wait)
+    set_tests_properties(stream_close_waiter_test PROPERTIES TIMEOUT 10)
+    xlink_add_test(stream_lookup_progress_test stream_lookup_progress_test.cpp)
+    target_link_libraries(stream_lookup_progress_test -Wl,--wrap=XLinkPlatformRead)
+    set_tests_properties(stream_lookup_progress_test PROPERTIES TIMEOUT 10)
+endif()

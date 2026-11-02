@@ -30,6 +30,18 @@ extern "C"
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler);
 
 /**
+ * Select receive-payload storage before the first successful XLinkInitialize.
+ * Both callbacks must be provided, or both null to restore the default allocator.
+ * Allocation must return at least size bytes at the requested alignment, or null.
+ * A null allocation terminates the receiving connection.
+ * Callbacks can run concurrently. Their context must remain valid for the process
+ * lifetime, including payloads retained after a connection closes.
+ */
+XLinkError_t XLinkSetDataAllocator(void* (*allocate)(uint32_t size, uint32_t alignment, void* context),
+                                 void (*deallocate)(void* data, uint32_t size, uint32_t alignment, void* context),
+                                 void* context);
+
+/**
  * @brief Initializes XLink Server and detached discovery service
  * @param globalHandler[in] XLink global communication parameters
  * @return Status code of the operation: X_LINK_SUCCESS (0) for success

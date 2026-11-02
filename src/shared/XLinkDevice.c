@@ -71,6 +71,20 @@ static XLinkError_t parsePlatformError(xLinkPlatformErrorCode_t rc);
 // API implementation. Begin.
 // ------------------------------------
 
+XLinkError_t XLinkSetDataAllocator(void* (*allocate)(uint32_t, uint32_t, void*),
+                                 void (*deallocate)(void*, uint32_t, uint32_t, void*),
+                                 void* context)
+{
+    if ((allocate == NULL) != (deallocate == NULL)) return X_LINK_ERROR;
+    XLINK_RET_ERR_IF(pthread_mutex_lock(&init_mutex), X_LINK_ERROR);
+    if (init_once) {
+        pthread_mutex_unlock(&init_mutex);
+        return X_LINK_ALREADY_OPEN;
+    }
+    XLinkPlatformSetDataAllocator(allocate, deallocate, context);
+    return pthread_mutex_unlock(&init_mutex) == 0 ? X_LINK_SUCCESS : X_LINK_ERROR;
+}
+
 XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
 {
     XLINK_RET_IF(globalHandler == NULL);
@@ -129,8 +143,17 @@ XLinkError_t XLinkInitialize(XLinkGlobalHandler_t* globalHandler)
         link->deviceHandle.xLinkFD = NULL;
         link->peerState = XLINK_NOT_INIT;
         int stream;
-        for (stream = 0; stream < XLINK_MAX_STREAMS; stream++)
+        for (stream = 0; stream < XLINK_MAX_STREAMS; stream++) {
             link->availableStreams[stream].id = INVALID_STREAM_ID;
+            if (XLink_sem_init(&link->availableStreams[stream].sem, 0, 1)) {
+                for (int initialized = 0; initialized < i * XLINK_MAX_STREAMS + stream; ++initialized) {
+                    XLink_sem_destroy(&availableXLinks[initialized / XLINK_MAX_STREAMS]
+                                           .availableStreams[initialized % XLINK_MAX_STREAMS].sem);
+                }
+                pthread_mutex_unlock(&init_mutex);
+                return X_LINK_ERROR;
+            }
+        }
     }
 
     init_once = 1;
@@ -438,8 +461,11 @@ XLinkError_t XLinkResetAll()
             xLinkDesc_t* link = &availableXLinks[i];
             int stream;
             for (stream = 0; stream < XLINK_MAX_STREAMS; stream++) {
-                if (link->availableStreams[stream].id != INVALID_STREAM_ID) {
-                    streamId_t streamId = link->availableStreams[stream].id;
+                streamDesc_t* slot = &link->availableStreams[stream];
+                XLINK_RET_IF(pthread_mutex_lock(&availableXLinksMutex));
+                streamId_t streamId = slot->id;
+                pthread_mutex_unlock(&availableXLinksMutex);
+                if (streamId != INVALID_STREAM_ID) {
                     mvLog(MVLOG_DEBUG,"%s() Closing stream (stream = %d) %d on link %d\n",
                           __func__, stream, (int) streamId, (int) link->id);
                     COMBINE_IDS(streamId, link->id);
