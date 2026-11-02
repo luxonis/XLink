@@ -95,6 +95,9 @@ int XLinkPlatformGateWrite(const char *name, void *data, int size, int timeout);
 int XLinkPlatformGateRead(const char *name, void *data, int size, int timeout);
 
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment);
+void XLinkPlatformSetDataAllocator(void* (*allocate)(uint32_t, uint32_t, void*),
+                                  void (*deallocate)(void*, uint32_t, uint32_t, void*),
+                                  void* context);
 void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment);
 
 // ------------------------------------
