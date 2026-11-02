@@ -1,5 +1,6 @@
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 #include <stdexcept>
 
 extern "C" {
