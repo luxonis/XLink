@@ -1,7 +1,9 @@
+#include "tcpip_retained_send_support.h"
+
+#if XLINK_LINUX_TCP_RETAINED_SEND
 #include "tcpip_host.h"
 #include "../src/pc/PlatformDeviceFd.h"
 
-#include <linux/errqueue.h>
 #include <poll.h>
 
 #include <array>
@@ -256,3 +258,8 @@ int main() {
         std::_Exit(1);
     }
 }
+#else
+int main() {
+    return 77;
+}
+#endif

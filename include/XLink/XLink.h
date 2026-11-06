@@ -357,7 +357,9 @@ XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, int bu
  * Writes an immutable payload and an optional copied trailer.
  *
  * With a non-null release callback, this call takes ownership of owner even
- * on error. It calls release(owner) exactly once, possibly after returning.
+ * on error. It calls release(owner) once, possibly after returning. If Linux
+ * has not reported a TCP send completion after disconnect, XLink keeps the
+ * owner until completion arrives so the kernel can still use the payload.
  * The callback may run on an XLink thread and must not call back into XLink.
  * The payload must remain readable and unchanged until that callback.
  */

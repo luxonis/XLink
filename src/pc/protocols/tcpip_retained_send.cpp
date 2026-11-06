@@ -1,11 +1,11 @@
 #include "tcpip_host.h"
+#include "tcpip_retained_send_support.h"
 #include "../PlatformDeviceFd.h"
 
 #define MVLOG_UNIT_NAME tcpip_host
 #include "XLinkLog.h"
 
 #ifdef __linux__
-#include <linux/errqueue.h>
 #include <poll.h>
 
 #include <algorithm>
@@ -36,7 +36,7 @@ int copyEvent(xLinkEvent_t* event) {
 namespace {
 std::mutex connectionMutex;
 
-#if defined(SO_ZEROCOPY) && defined(MSG_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY)
+#if XLINK_LINUX_TCP_RETAINED_SEND
 using Clock = std::chrono::steady_clock;
 constexpr size_t maxSendBytes = 1024 * 1024;
 constexpr size_t maxPinnedBytes = 4 * 1024 * 1024;
@@ -254,7 +254,6 @@ private:
 };
 
 std::unordered_map<void*, std::shared_ptr<TcpRetainedSender>> retainedConnections;
-#define XLINK_LINUX_TCP_RETAINED_SEND 1
 #endif
 }
 

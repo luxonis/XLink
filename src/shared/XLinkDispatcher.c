@@ -918,6 +918,12 @@ static void postAndMarkEventServed(xLinkEventPriv_t *event, RetiredLeases* retir
     event->isServed = EVENT_SERVED;
 }
 
+static void dropEvent(xLinkEventPriv_t* event, RetiredLeases* retired)
+{
+    if (event->packet.payloadLease) XLINK_EVENT_NOT_ACKNOWLEDGE(&event->packet);
+    postAndMarkEventServed(event, retired);
+}
+
 static int createUniqueID()
 {
     static eventId_t id = 0xa;
@@ -1175,7 +1181,7 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
               TypeToStr(event->packet.header.type), event->isServed);
 
         XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, 1);
-        postAndMarkEventServed(event, &retired);
+        dropEvent(event, &retired);
         XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
         releaseRetiredLeases(&retired);
         event = dispatcherGetNextEvent(curr);
@@ -1205,8 +1211,9 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     if(pthread_mutex_unlock(&clean_mutex) != 0) {
         mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
     }
-    XLINK_RET_ERR_IF(pthread_mutex_destroy(&(curr->queueMutex)) != 0, 1);
+    const int destroyResult = pthread_mutex_destroy(&(curr->queueMutex));
     releaseRetiredLeases(&retired);
+    XLINK_RET_ERR_IF(destroyResult != 0, 1);
     return 0;
 }
 
@@ -1344,14 +1351,13 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
                     }
                 }
 
-                xLinkEvent_t retainedSend;
+                xLinkEvent_t sendSnapshot;
                 XLinkPayloadLease* lease = toSend->payloadLease;
                 const int retained = lease != NULL;
                 if (retained) {
-                    // The reader can recycle the queue slot after a socket failure.
-                    retainedSend = *toSend;
+                    sendSnapshot = *toSend;
                     XLinkPayloadLeaseRetain(lease);
-                    toSend = &retainedSend;
+                    toSend = &sendSnapshot;
                 }
                 XLinkTimespec* sendTime = event->sendTime;
                 XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
@@ -1395,8 +1401,7 @@ static void dispatcherFreeEvents(eventQueueHandler_t *queue, xLinkEventState_t s
     xLinkEventPriv_t* event = getNextElementWithState(queue->base, queue->end, queue->base, state);
     while (event != NULL) {
         mvLog(MVLOG_DEBUG, "Event is %s, size is %d, Mark it served\n", TypeToStr(event->packet.header.type), event->packet.header.size);
-        if (event->packet.payloadLease) XLINK_EVENT_NOT_ACKNOWLEDGE(&event->packet);
-        postAndMarkEventServed(event, retired);
+        dropEvent(event, retired);
         event = getNextElementWithState(queue->base, queue->end, queue->base, state);
     }
 }
