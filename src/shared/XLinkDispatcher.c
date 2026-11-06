@@ -78,6 +78,17 @@ typedef struct{
     XLINK_ALIGN_TO_BOUNDARY(64) xLinkEventPriv_t q[MAX_EVENTS];
 
 }eventQueueHandler_t;
+
+typedef struct {
+    XLinkPayloadLease* leases[MAX_EVENTS];
+    size_t count;
+} RetiredLeases;
+
+static void releaseRetiredLeases(RetiredLeases* retired) {
+    for (size_t i = 0; i < retired->count; ++i) XLinkPayloadLeaseRelease(retired->leases[i]);
+    retired->count = 0;
+}
+
 /**
  * @brief Scheduler for each device
  */
@@ -150,13 +161,13 @@ static void* eventSchedulerRun(void* ctx);
 #endif
 
 static int isEventTypeRequest(xLinkEventPriv_t* event);
-static void postAndMarkEventServed(xLinkEventPriv_t *event);
+static void postAndMarkEventServed(xLinkEventPriv_t *event, RetiredLeases* retired);
 static int createUniqueID();
 static int findAvailableScheduler();
 static xLinkSchedulerState_t* findCorrespondingScheduler(void* xLinkFD);
 
-static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr);
-static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr);
+static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr, RetiredLeases* retired);
+static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr, RetiredLeases* retired);
 
 static inline xLinkEventPriv_t* getNextElementWithState(xLinkEventPriv_t* base, xLinkEventPriv_t* end,
                                                         xLinkEventPriv_t* start, xLinkEventState_t state);
@@ -179,7 +190,7 @@ static int dispatcherClean(xLinkSchedulerState_t* curr);
 static int dispatcherReset(xLinkSchedulerState_t* curr);
 static int dispatcherDeviceFdDown(xLinkSchedulerState_t* curr);
 
-static void dispatcherFreeEvents(eventQueueHandler_t *queue, xLinkEventState_t state);
+static void dispatcherFreeEvents(eventQueueHandler_t *queue, xLinkEventState_t state, RetiredLeases* retired);
 
 static XLinkError_t sendEvents(xLinkSchedulerState_t* curr);
 
@@ -609,6 +620,7 @@ int DispatcherCancelEvent(xLinkDeviceHandle_t *deviceHandle, xLinkEvent_t *event
 
         int found = 0;
         int inProgress = 0;
+        RetiredLeases retired = { .count = 0 };
         xLinkEventPriv_t* queuedEvent;
         XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, 1);
         for (queuedEvent = curr->lQueue.q;
@@ -637,11 +649,11 @@ int DispatcherCancelEvent(xLinkDeviceHandle_t *deviceHandle, xLinkEvent_t *event
             queuedEvent->retEv = NULL;
             queuedEvent->sem = NULL;
             if (queuedEvent->isServed == EVENT_BLOCKED) {
-                // Event is not in progress, remove it from the queue
-                queuedEvent->isServed = EVENT_SERVED;
+                postAndMarkEventServed(queuedEvent, &retired);
             }
         }
         XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
+        releaseRetiredLeases(&retired);
 
         if (!found) {
             // The event was served after the wait stopped. postAndMarkEventServed()
@@ -784,10 +796,12 @@ static void* eventReader(void* ctx)
                 XLink_sem_post(&curr->notifyDispatcherSem);
             }
             XLINK_RET_ERR_IF(pthread_mutex_unlock(&reset_mutex), NULL);
+            RetiredLeases retired = { .count = 0 };
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
-            dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
-            dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
+            dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING, &retired);
+            dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED, &retired);
             XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, NULL);
+            releaseRetiredLeases(&retired);
             continue;
         }
 
@@ -882,8 +896,13 @@ static int isEventTypeRequest(xLinkEventPriv_t* event)
 	    event->packet.header.type < XLINK_REQUEST_LAST));
 }
 
-static void postAndMarkEventServed(xLinkEventPriv_t *event)
+static void postAndMarkEventServed(xLinkEventPriv_t *event, RetiredLeases* retired)
 {
+    if (event->packet.payloadLease) {
+        assert(retired->count < MAX_EVENTS);
+        retired->leases[retired->count++] = event->packet.payloadLease;
+        event->packet.payloadLease = NULL;
+    }
     if (event->retEv){
         // the xLinkEventPriv_t slot pointed by "event" will be
         // re-cycled as soon as we mark it as EVENT_SERVED,
@@ -947,7 +966,7 @@ static xLinkSchedulerState_t* findCorrespondingScheduler(void* xLinkFD)
     return NULL;
 }
 
-static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr){
+static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr, RetiredLeases* retired){
     XLINK_RET_IF(curr == NULL);
     XLINK_RET_IF(!isEventTypeRequest(event));
     xLinkEventHeader_t *header = &event->packet.header;
@@ -956,7 +975,7 @@ static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_
     } else if(header->flags.bitField.localServe == 1 ||
               (header->flags.bitField.ack == 0
                && header->flags.bitField.nack == 1)){ //this event is served locally, or it is failed
-        postAndMarkEventServed(event);
+        postAndMarkEventServed(event, retired);
     } else if (header->flags.bitField.ack == 1
               && header->flags.bitField.nack == 0){
         event->isServed = EVENT_PENDING;
@@ -968,7 +987,7 @@ static int dispatcherRequestServe(xLinkEventPriv_t * event, xLinkSchedulerState_
     return 0;
 }
 
-static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr)
+static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState_t* curr, RetiredLeases* retired)
 {
     XLINK_RET_ERR_IF(curr == NULL, 1);
     XLINK_RET_ERR_IF(isEventTypeRequest(event), 1);
@@ -990,7 +1009,7 @@ static int dispatcherResponseServe(xLinkEventPriv_t * event, xLinkSchedulerState
             header->tsecLsb = evHeader->tsecLsb;
             header->tsecMsb = evHeader->tsecMsb;
             header->tnsec = evHeader->tnsec;
-            postAndMarkEventServed(&curr->lQueue.q[i]);
+            postAndMarkEventServed(&curr->lQueue.q[i], retired);
             break;
         }
     }
@@ -1060,6 +1079,10 @@ static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
                                             XLinkTimespec* outTime) {
     xLinkEvent_t* ev;
     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, NULL);
+    if (event->payloadLease && curr->resetXLink) {
+        pthread_mutex_unlock(&(curr->queueMutex));
+        return NULL;
+    }
     xLinkEventPriv_t* eventP = getNextElementWithState(q->base, q->end, q->cur, EVENT_SERVED);
     if (eventP == NULL) {
         mvLog(MVLOG_ERROR, "getNextElementWithState returned NULL");
@@ -1071,6 +1094,7 @@ static xLinkEvent_t* addNextQueueElemToProc_(xLinkSchedulerState_t* curr,
 
     eventP->sem = sem;
     eventP->packet = *event;
+    XLinkPayloadLeaseRetain(eventP->packet.payloadLease);
     eventP->origin = o;
     if (o == EVENT_LOCAL) {
         // XLink API caller provided buffer for return the final result to
@@ -1140,6 +1164,7 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
     }
 
     mvLog(MVLOG_INFO, "Start Clean Dispatcher...");
+    RetiredLeases retired = { .count = 0 };
 
     if (XLink_sem_post(&curr->notifyDispatcherSem)) {
         mvLog(MVLOG_ERROR,"can't post semaphore\n"); //to allow us to get a NULL event
@@ -1150,15 +1175,16 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
               TypeToStr(event->packet.header.type), event->isServed);
 
         XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, 1);
-        postAndMarkEventServed(event);
+        postAndMarkEventServed(event, &retired);
         XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, 1);
+        releaseRetiredLeases(&retired);
         event = dispatcherGetNextEvent(curr);
     }
 
     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, 1);
 
-    dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
-    dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
+    dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING, &retired);
+    dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED, &retired);
 
     curr->schedulerId = -1;
     curr->resetXLink = 1;
@@ -1180,6 +1206,7 @@ static int dispatcherClean(xLinkSchedulerState_t* curr)
         mvLog(MVLOG_ERROR, "Failed to unlock clean_mutex after clearing dispatcher");
     }
     XLINK_RET_ERR_IF(pthread_mutex_destroy(&(curr->queueMutex)) != 0, 1);
+    releaseRetiredLeases(&retired);
     return 0;
 }
 
@@ -1252,7 +1279,8 @@ static int dispatcherReset(xLinkSchedulerState_t* curr)
 static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
     int res;
     xLinkEventPriv_t* event;
-    xLinkEventPriv_t response;
+    xLinkEventPriv_t response = {0};
+    RetiredLeases retired = { .count = 0 };
 
     while (!curr->resetXLink) {
         event = dispatcherGetNextEvent(curr);
@@ -1273,18 +1301,20 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
 
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
             if (event->origin == EVENT_LOCAL){
-                dispatcherRequestServe(event, curr);
+                dispatcherRequestServe(event, curr, &retired);
             } else {
-                dispatcherResponseServe(event, curr);
+                dispatcherResponseServe(event, curr, &retired);
             }
             XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
+            releaseRetiredLeases(&retired);
 
             continue;
         }
 
+        const xLinkEventOrigin_t origin = event->origin;
         getRespFunction getResp;
         xLinkEvent_t* toSend;
-        if (event->origin == EVENT_LOCAL){
+        if (origin == EVENT_LOCAL){
             getResp = glControlFunc->localGetResponse;
             toSend = &event->packet;
         }else{
@@ -1296,7 +1326,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
         if (isEventTypeRequest(event)) {
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
             if (event->origin == EVENT_LOCAL) { //we need to do this for locals only
-                if(dispatcherRequestServe(event, curr)) {
+                if(dispatcherRequestServe(event, curr, &retired)) {
                     mvLog(MVLOG_ERROR, "Failed to serve local event. "
                                        "Event: id=%d, type=%s, streamId=%u, streamName=%s",
                                        event->packet.header.id,  TypeToStr(event->packet.header.type),
@@ -1314,14 +1344,27 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
                     }
                 }
 
+                xLinkEvent_t retainedSend;
+                XLinkPayloadLease* lease = toSend->payloadLease;
+                const int retained = lease != NULL;
+                if (retained) {
+                    // The reader can recycle the queue slot after a socket failure.
+                    retainedSend = *toSend;
+                    XLinkPayloadLeaseRetain(lease);
+                    toSend = &retainedSend;
+                }
+                XLinkTimespec* sendTime = event->sendTime;
                 XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
-                if (glControlFunc->eventSend(toSend, event->sendTime) != 0) {
+                const int sendResult = glControlFunc->eventSend(toSend, sendTime);
+                XLinkPayloadLeaseRelease(lease);
+                if (sendResult != 0) {
                     // Error out
                     curr->resetXLink = 1;
                     XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
-                    dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING);
-                    dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED);
+                    dispatcherFreeEvents(&curr->lQueue, EVENT_PENDING, &retired);
+                    dispatcherFreeEvents(&curr->lQueue, EVENT_BLOCKED, &retired);
                     XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
+                    if (retained) dispatcherDeviceFdDown(curr);
                     mvLog(MVLOG_ERROR, "Event sending failed");
                 }
             } else {
@@ -1330,12 +1373,13 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
         } else {
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
             if (event->origin == EVENT_REMOTE){ // match remote response with the local request
-                dispatcherResponseServe(event, curr);
+                dispatcherResponseServe(event, curr, &retired);
             }
             XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
         }
 
-        if (event->origin == EVENT_REMOTE){
+        releaseRetiredLeases(&retired);
+        if (origin == EVENT_REMOTE){
             event->isServed = EVENT_SERVED;
         }
     }
@@ -1343,7 +1387,7 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
     return X_LINK_SUCCESS;
 }
 
-static void dispatcherFreeEvents(eventQueueHandler_t *queue, xLinkEventState_t state) {
+static void dispatcherFreeEvents(eventQueueHandler_t *queue, xLinkEventState_t state, RetiredLeases* retired) {
     if(queue == NULL) {
         return;
     }
@@ -1351,7 +1395,8 @@ static void dispatcherFreeEvents(eventQueueHandler_t *queue, xLinkEventState_t s
     xLinkEventPriv_t* event = getNextElementWithState(queue->base, queue->end, queue->base, state);
     while (event != NULL) {
         mvLog(MVLOG_DEBUG, "Event is %s, size is %d, Mark it served\n", TypeToStr(event->packet.header.type), event->packet.header.size);
-        postAndMarkEventServed(event);
+        if (event->packet.payloadLease) XLINK_EVENT_NOT_ACKNOWLEDGE(&event->packet);
+        postAndMarkEventServed(event, retired);
         event = getNextElementWithState(queue->base, queue->end, queue->base, state);
     }
 }

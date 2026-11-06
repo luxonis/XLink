@@ -60,6 +60,14 @@ typedef enum{
     X_LINK_INIT_PCIE_ERROR,
 } XLinkError_t;
 
+typedef struct {
+    uint64_t zeroCopyBytes;  /**< Payload bytes accepted with MSG_ZEROCOPY. */
+    uint64_t fallbackBytes;
+    uint64_t submittedSends;
+    uint64_t completedSends;
+    uint64_t copiedCompletions;  /**< Completed send IDs reported in ranges marked copied by Linux. */
+} XLinkRetainedSendStats_t;
+
 typedef enum{
     X_LINK_USB_VSC = 0,
     X_LINK_USB_CDC,

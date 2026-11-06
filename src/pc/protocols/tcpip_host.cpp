@@ -1167,6 +1167,9 @@ xLinkPlatformErrorCode_t tcpipPlatformBootBootloader(const char *name)
 
 int tcpipPlatformClose(void *fdKey)
 {
+#ifdef __linux__
+    return tcpipCloseLinuxSocket(fdKey);
+#else
     int status = 0;
 
     void* tmpsockfd = NULL;
@@ -1197,6 +1200,7 @@ int tcpipPlatformClose(void *fdKey)
     }
 
     return status;
+#endif
 }
 
 

@@ -89,6 +89,8 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
 // ------------------------------------
 
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size);
+int XLinkPlatformWriteRetained(xLinkEvent_t* event);
+XLinkError_t XLinkPlatformGetRetainedSendStats(xLinkDeviceHandle_t* deviceHandle, XLinkRetainedSendStats_t* stats);
 int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void *data2, int size2);
 int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, long *fd);
 int XLinkPlatformGateWrite(const char *name, void *data, int size, int timeout);

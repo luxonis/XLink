@@ -110,6 +110,17 @@ int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size)
     }
 }
 
+int XLinkPlatformWriteRetained(xLinkEvent_t* event)
+{
+    return tcpipPlatformWriteRetained(event);
+}
+
+XLinkError_t XLinkPlatformGetRetainedSendStats(xLinkDeviceHandle_t* deviceHandle, XLinkRetainedSendStats_t* stats)
+{
+    if (deviceHandle->protocol != X_LINK_TCP_IP) return X_LINK_NOT_IMPLEMENTED;
+    return tcpipPlatformGetRetainedSendStats(deviceHandle->xLinkFD, stats);
+}
+
 int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void *data2, int size2)
 {
     if(!XLinkIsProtocolInitialized(deviceHandle->protocol)) {
