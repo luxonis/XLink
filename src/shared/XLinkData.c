@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
+#include "limits.h"
 #include "string.h"
 #include "stdlib.h"
 #include "time.h"
@@ -286,6 +287,52 @@ XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, int bu
     }
 
     return X_LINK_SUCCESS;
+}
+
+XLinkError_t XLinkWriteDataRetained(streamId_t streamId,
+                                  const uint8_t* payload, int payloadSize,
+                                  const uint8_t* trailer, int trailerSize,
+                                  void* owner, void (*release)(void*))
+{
+    if (!release) return X_LINK_ERROR;
+    if (!payload || payloadSize <= 0 || trailerSize < 0 ||
+        (trailerSize && !trailer) || payloadSize > INT_MAX - trailerSize) {
+        release(owner);
+        return X_LINK_ERROR;
+    }
+
+    xLinkDesc_t* link = NULL;
+    XLinkError_t result = getLinkByStreamId(streamId, &link);
+    if (result != X_LINK_SUCCESS) {
+        release(owner);
+        return result;
+    }
+
+    XLinkPayloadLease* lease = XLinkPayloadLeaseCreate(owner, release, trailer, trailerSize);
+    if (!lease) return X_LINK_OUT_OF_MEMORY;
+    int size = payloadSize + trailerSize;
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, EXTRACT_STREAM_ID(streamId), XLINK_WRITE_REQ, size, (void*)payload, link->deviceHandle);
+    event.data2 = (void*)XLinkPayloadLeaseTrailer(lease);
+    event.data2Size = trailerSize;
+    event.payloadLease = lease;
+
+    float opTime = 0;
+    result = addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT);
+    XLinkPayloadLeaseRelease(lease);
+    if (result == X_LINK_SUCCESS && glHandler->profEnable) {
+        glHandler->profilingData.totalWriteBytes += size;
+        glHandler->profilingData.totalWriteTime += opTime;
+    }
+    return result;
+}
+
+XLinkError_t XLinkGetRetainedSendStats(streamId_t streamId, XLinkRetainedSendStats_t* stats)
+{
+    if (!stats) return X_LINK_ERROR;
+    xLinkDesc_t* link = NULL;
+    XLINK_RET_IF_FAIL(getLinkByStreamId(streamId, &link));
+    return XLinkPlatformGetRetainedSendStats(&link->deviceHandle, stats);
 }
 
 XLinkError_t XLinkReadData(streamId_t const streamId, streamPacketDesc_t** packet)
@@ -600,6 +647,7 @@ XLinkError_t addEvent_(xLinkEvent_t *event, unsigned int timeoutMs, XLinkTimespe
     {
         if (DispatcherWaitEventComplete(&event->deviceHandle, timeoutMs))
         {
+            if (event->payloadLease) DispatcherCancelEvent(&event->deviceHandle, event);
             return X_LINK_TIMEOUT;
         }
     }

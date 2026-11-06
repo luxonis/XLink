@@ -354,6 +354,24 @@ XLinkError_t XLinkWriteFdData(streamId_t streamId, const long fd, const uint8_t*
 XLinkError_t XLinkWriteData2(streamId_t streamId, const uint8_t* buffer1, int buffer1Size, const uint8_t* buffer2, int buffer2Size);
 
 /**
+ * Writes an immutable payload and an optional copied trailer.
+ *
+ * With a non-null release callback, this call takes ownership of owner even
+ * on error. It calls release(owner) once, possibly after returning. If Linux
+ * has not reported a TCP send completion after disconnect, XLink keeps the
+ * owner until completion arrives so the kernel can still use the payload.
+ * The callback may run on an XLink thread and must not call back into XLink.
+ * The payload must remain readable and unchanged until that callback.
+ */
+XLinkError_t XLinkWriteDataRetained(streamId_t streamId,
+                                  const uint8_t* payload, int payloadSize,
+                                  const uint8_t* trailer, int trailerSize,
+                                  void* owner, void (*release)(void*));
+
+/** Returns the Linux TCP connection totals for retained payload sends. */
+XLinkError_t XLinkGetRetainedSendStats(streamId_t streamId, XLinkRetainedSendStats_t* stats);
+
+/**
  * @brief Sends a package to initiate the writing of data to a remote stream
  * @warning Actual size of the written data is ALIGN_UP(size, 64)
  * @param[in] streamId – stream link Id obtained from XLinkOpenStream call
