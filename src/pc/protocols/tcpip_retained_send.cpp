@@ -15,7 +15,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
-#include <cstdio>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -105,12 +104,11 @@ public:
         if (drained) worker.join();
         else worker.detach();
 
-        std::fprintf(stdout,
-                     "Retained TCP payload: zeroCopyBytes=%llu fallbackBytes=%llu submittedSends=%llu completedSends=%llu copiedCompletions=%llu\n",
-                     static_cast<unsigned long long>(totals.zeroCopyBytes), static_cast<unsigned long long>(totals.fallbackBytes),
-                     static_cast<unsigned long long>(totals.submittedSends), static_cast<unsigned long long>(totals.completedSends),
-                     static_cast<unsigned long long>(totals.copiedCompletions));
-        std::fflush(stdout);
+        mvLog(MVLOG_DEBUG,
+              "Retained TCP payload: zeroCopyBytes=%llu fallbackBytes=%llu submittedSends=%llu completedSends=%llu copiedCompletions=%llu",
+              static_cast<unsigned long long>(totals.zeroCopyBytes), static_cast<unsigned long long>(totals.fallbackBytes),
+              static_cast<unsigned long long>(totals.submittedSends), static_cast<unsigned long long>(totals.completedSends),
+              static_cast<unsigned long long>(totals.copiedCompletions));
         return result;
     }
 
