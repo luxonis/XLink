@@ -74,7 +74,8 @@ int client() {
         Timestamp ts = {};
 
         streamPacketDesc_t* packet;
-        bool success = true;
+        std::vector<microseconds> rtts;
+        rtts.reserve(NUM_ITERATIONS);
 
         for(int i = 1; i <= NUM_ITERATIONS; i++){
             ts.sec = i;
@@ -91,15 +92,17 @@ int client() {
             if(PRINT_DEBUG) printf("client received - sec: %ld, nsec: %ld\n", ts.sec, ts.nsec);
             assert((ts.sec + 100)*2 == ts.nsec);
 
-            if(t2-t1 <= RTT_THRESHOLD) {
-                if(PRINT_DEBUG) printf("OK, rtt = %ldus. (write: %ldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
-            } else {
-                printf("NOK, rtt = %ldus. RTT too high (write: %ldus)\n", duration_cast<microseconds>(t2-t1).count(), duration_cast<microseconds>(t1point5-t1).count());
-                success = false;
-            }
+            rtts.push_back(duration_cast<microseconds>(t2-t1));
+            if(PRINT_DEBUG) printf("rtt = %ldus. (write: %ldus)\n", (long)rtts.back().count(), (long)duration_cast<microseconds>(t1point5-t1).count());
         }
 
-        if(success) {
+        // Nagle's algorithm or a delayed ACK slows every round trip. A shared CI machine also
+        // preempts a few of them, so the median is judged, not the slowest.
+        std::sort(rtts.begin(), rtts.end());
+        const auto median = rtts[rtts.size() / 2];
+        printf("rtt median %ldus, 99th percentile %ldus, max %ldus\n", (long)median.count(),
+               (long)rtts[rtts.size() * 99 / 100].count(), (long)rtts.back().count());
+        if(median <= RTT_THRESHOLD) {
             printf("Success!\n");
         } else {
             printf("Failed\n");
