@@ -315,6 +315,10 @@ int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
     event->header.tsecLsb = (uint32_t)stime.tv_sec;
     event->header.tsecMsb = (uint32_t)(stime.tv_sec >> 32);
     event->header.tnsec = (uint32_t)stime.tv_nsec;
+    if (event->payloadLease && event->deviceHandle.protocol == X_LINK_TCP_IP) {
+        return XLinkPlatformWriteRetained(event);
+    }
+
     int rc = XLinkPlatformWrite(&event->deviceHandle,
         &event->header, sizeof(event->header));
 

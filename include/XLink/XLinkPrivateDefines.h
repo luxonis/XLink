@@ -161,12 +161,20 @@ typedef struct xLinkEventHeader_t{
     }flags;
 }xLinkEventHeader_t;
 
+typedef struct XLinkPayloadLease XLinkPayloadLease;
+XLinkPayloadLease* XLinkPayloadLeaseCreate(void* owner, void (*release)(void*),
+                                           const uint8_t* trailer, int trailerSize);
+const uint8_t* XLinkPayloadLeaseTrailer(XLinkPayloadLease* lease);
+void XLinkPayloadLeaseRetain(XLinkPayloadLease* lease);
+void XLinkPayloadLeaseRelease(XLinkPayloadLease* lease);
+
 typedef struct xLinkEvent_t {
     XLINK_ALIGN_TO_BOUNDARY(64) xLinkEventHeader_t header;
     xLinkDeviceHandle_t deviceHandle;
     void* data;
     void* data2;
     int data2Size;
+    XLinkPayloadLease* payloadLease;
 }xLinkEvent_t;
 
 #define XLINK_INIT_EVENT(event, in_streamId, in_type, in_size, in_data, in_deviceHandle) do { \

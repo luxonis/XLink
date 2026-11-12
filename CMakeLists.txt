@@ -194,6 +194,8 @@ endif()
 
 # Tests
 if(XLINK_BUILD_TESTS)
+    # At the top level, so that ctest in the build directory finds the tests.
+    enable_testing()
     add_subdirectory(tests)
 endif()
 
