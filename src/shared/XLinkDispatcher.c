@@ -1377,11 +1377,17 @@ static XLinkError_t sendEvents(xLinkSchedulerState_t* curr) {
                 XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
             }
         } else {
+            int resetAcknowledged = 0;
             XLINK_RET_ERR_IF(pthread_mutex_lock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
             if (event->origin == EVENT_REMOTE){ // match remote response with the local request
-                dispatcherResponseServe(event, curr, &retired);
+                resetAcknowledged = dispatcherResponseServe(event, curr, &retired) == 0
+                                    && event->packet.header.type == XLINK_RESET_RESP;
             }
             XLINK_RET_ERR_IF(pthread_mutex_unlock(&(curr->queueMutex)) != 0, X_LINK_ERROR);
+            if (resetAcknowledged) {
+                curr->resetXLink = 1;
+                dispatcherDeviceFdDown(curr);
+            }
         }
 
         releaseRetiredLeases(&retired);

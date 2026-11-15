@@ -54,8 +54,14 @@ int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const char* firmware
 
 int usbPlatformRead(XLinkProtocol_t protocol, void *fd, void *data, int size);
 int usbPlatformWrite(XLinkProtocol_t protocol, void *fd, void *data, int size);
+int usbPlatformSupportsDmaBuf(void* fd);
+int usbPlatformWriteDmaBuf(xLinkEvent_t* event);
 
 int usbPlatformGateRead(const char *name, void *data, int size, int timeout);
+int usbPlatformGateBegin(const char* name, XLinkGateTransaction** transaction);
+int usbPlatformGateTransactionWrite(XLinkGateTransaction* transaction, const void* data, int size, int timeout);
+int usbPlatformGateTransactionRead(XLinkGateTransaction* transaction, void* data, int size, int timeout);
+int usbPlatformGateEnd(XLinkGateTransaction* transaction, XLinkGateOutcome outcome);
 int usbPlatformGateWrite(const char *name, void *data, int size, int timeout);
 
 #else
@@ -71,8 +77,14 @@ static inline int usbPlatformBootFirmware(const deviceDesc_t* deviceDesc, const 
 
 static inline int usbPlatformRead(XLinkProtocol_t protocol, void *fd, void *data, int size) { return -1; }
 static inline int usbPlatformWrite(XLinkProtocol_t protocol, void *fd, void *data, int size) { return -1; }
+static inline int usbPlatformSupportsDmaBuf(void* fd) { return 0; }
+static inline int usbPlatformWriteDmaBuf(xLinkEvent_t* event) { return -1; }
 
 static inline int usbPlatformGateRead(const char *name, void *data, int size, int timeout) { return -1; }
+static inline int usbPlatformGateBegin(const char* name, XLinkGateTransaction** transaction) { if(transaction) *transaction = NULL; return -1; }
+static inline int usbPlatformGateTransactionWrite(XLinkGateTransaction* transaction, const void* data, int size, int timeout) { return -1; }
+static inline int usbPlatformGateTransactionRead(XLinkGateTransaction* transaction, void* data, int size, int timeout) { return -1; }
+static inline int usbPlatformGateEnd(XLinkGateTransaction* transaction, XLinkGateOutcome outcome) { return -1; }
 static inline int usbPlatformGateWrite(const char *name, void *data, int size, int timeout) { return -1; }
 
 static inline xLinkPlatformErrorCode_t getUSBDevices(const deviceDesc_t in_deviceRequirements,

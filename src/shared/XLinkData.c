@@ -118,6 +118,26 @@ XLinkError_t XLinkCloseStream(streamId_t const streamId)
     return X_LINK_SUCCESS;
 }
 
+XLinkError_t XLinkGateBegin(const char* name, XLinkGateTransaction** transaction)
+{
+    return XLinkPlatformGateBegin(name, transaction) == 0 ? X_LINK_SUCCESS : X_LINK_ERROR;
+}
+
+XLinkError_t XLinkGateTransactionWrite(XLinkGateTransaction* transaction, const void* data, int size, int timeout)
+{
+    return XLinkPlatformGateTransactionWrite(transaction, data, size, timeout) == 0 ? X_LINK_SUCCESS : X_LINK_ERROR;
+}
+
+XLinkError_t XLinkGateTransactionRead(XLinkGateTransaction* transaction, void* data, int size, int timeout)
+{
+    return XLinkPlatformGateTransactionRead(transaction, data, size, timeout) == 0 ? X_LINK_SUCCESS : X_LINK_ERROR;
+}
+
+XLinkError_t XLinkGateEnd(XLinkGateTransaction* transaction, XLinkGateOutcome outcome)
+{
+    return XLinkPlatformGateEnd(transaction, outcome) == 0 ? X_LINK_SUCCESS : X_LINK_ERROR;
+}
+
 XLinkError_t XLinkGateWrite(const char *name, void *data, int size, int timeout)
 {
     int rc = XLinkPlatformGateWrite(name, data, size, timeout);
@@ -324,6 +344,44 @@ XLinkError_t XLinkWriteDataRetained(streamId_t streamId,
         glHandler->profilingData.totalWriteBytes += size;
         glHandler->profilingData.totalWriteTime += opTime;
     }
+    return result;
+}
+
+int XLinkSupportsDmaBuf(streamId_t streamId)
+{
+    xLinkDesc_t* link = NULL;
+    return getLinkByStreamId(streamId, &link) == X_LINK_SUCCESS &&
+           XLinkPlatformSupportsDmaBuf(&link->deviceHandle);
+}
+
+XLinkError_t XLinkWriteDmaBuf(streamId_t streamId, int fd, int payloadSize,
+                            const uint8_t* trailer, int trailerSize,
+                            void* owner, void (*release)(void*))
+{
+    if (!release) return X_LINK_ERROR;
+    if (fd < 0 || payloadSize <= 0 || trailerSize < 0 ||
+        (trailerSize && !trailer) || payloadSize > INT_MAX - trailerSize) {
+        release(owner);
+        return X_LINK_ERROR;
+    }
+    xLinkDesc_t* link = NULL;
+    XLinkError_t result = getLinkByStreamId(streamId, &link);
+    if (result != X_LINK_SUCCESS || !XLinkPlatformSupportsDmaBuf(&link->deviceHandle)) {
+        release(owner);
+        return result == X_LINK_SUCCESS ? X_LINK_NOT_IMPLEMENTED : result;
+    }
+    XLinkPayloadLease* lease = XLinkPayloadLeaseCreate(owner, release, trailer, trailerSize);
+    if (!lease) return X_LINK_OUT_OF_MEMORY;
+    xLinkEvent_t event = {0};
+    XLINK_INIT_EVENT(event, EXTRACT_STREAM_ID(streamId), XLINK_WRITE_REQ,
+                     payloadSize + trailerSize, (void*)(intptr_t)fd, link->deviceHandle);
+    event.dmaBuf = true;
+    event.data2 = (void*)XLinkPayloadLeaseTrailer(lease);
+    event.data2Size = trailerSize;
+    event.payloadLease = lease;
+    float opTime = 0;
+    result = addEventWithPerf(&event, &opTime, XLINK_NO_RW_TIMEOUT);
+    XLinkPayloadLeaseRelease(lease);
     return result;
 }
 

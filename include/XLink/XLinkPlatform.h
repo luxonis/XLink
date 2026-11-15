@@ -10,6 +10,7 @@
 #define _XLINK_LINKPLATFORM_H
 
 #include "XLinkPrivateDefines.h"
+#include "XLink.h"
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -90,13 +91,20 @@ xLinkPlatformErrorCode_t XLinkPlatformCloseRemote(xLinkDeviceHandle_t* deviceHan
 
 int XLinkPlatformWrite(xLinkDeviceHandle_t *deviceHandle, void *data, int size);
 int XLinkPlatformWriteRetained(xLinkEvent_t* event);
+int XLinkPlatformSupportsDmaBuf(xLinkDeviceHandle_t* deviceHandle);
+int XLinkPlatformWriteDmaBuf(xLinkEvent_t* event);
 XLinkError_t XLinkPlatformGetRetainedSendStats(xLinkDeviceHandle_t* deviceHandle, XLinkRetainedSendStats_t* stats);
 int XLinkPlatformWriteFd(xLinkDeviceHandle_t *deviceHandle, const long fd, void *data2, int size2);
 int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, long *fd);
 int XLinkPlatformGateWrite(const char *name, void *data, int size, int timeout);
 int XLinkPlatformGateRead(const char *name, void *data, int size, int timeout);
+int XLinkPlatformGateBegin(const char* name, XLinkGateTransaction** transaction);
+int XLinkPlatformGateTransactionWrite(XLinkGateTransaction* transaction, const void* data, int size, int timeout);
+int XLinkPlatformGateTransactionRead(XLinkGateTransaction* transaction, void* data, int size, int timeout);
+int XLinkPlatformGateEnd(XLinkGateTransaction* transaction, XLinkGateOutcome outcome);
 
 void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment);
+void* XLinkPlatformAllocateReadData(xLinkDeviceHandle_t* deviceHandle, uint32_t size, uint32_t alignment);
 void XLinkPlatformSetDataAllocator(void* (*allocate)(uint32_t, uint32_t, void*),
                                   void (*deallocate)(void*, uint32_t, uint32_t, void*),
                                   void* context);

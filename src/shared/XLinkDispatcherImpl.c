@@ -315,6 +315,7 @@ int dispatcherEventSend(xLinkEvent_t *event, XLinkTimespec* sendTime)
     event->header.tsecLsb = (uint32_t)stime.tv_sec;
     event->header.tsecMsb = (uint32_t)(stime.tv_sec >> 32);
     event->header.tnsec = (uint32_t)stime.tv_nsec;
+    if (event->dmaBuf) return XLinkPlatformWriteDmaBuf(event);
     if (event->payloadLease && event->deviceHandle.protocol == X_LINK_TCP_IP) {
         return XLinkPlatformWriteRetained(event);
     }
@@ -1034,7 +1035,7 @@ int handleIncomingEvent(xLinkEvent_t* event, XLinkTimespec treceive) {
     mvLog(MVLOG_DEBUG,"S%u: Got write of %u, current local fill level is %u out of %u %u\n",
           event->header.streamId, event->header.size, stream->localFillLevel, stream->readSize, stream->writeSize);
 
-    void* buffer = XLinkPlatformAllocateData(ALIGN_UP(event->header.size, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
+    void* buffer = XLinkPlatformAllocateReadData(&event->deviceHandle, ALIGN_UP(event->header.size, __CACHE_LINE_SIZE), __CACHE_LINE_SIZE);
     if(buffer == NULL) {
         stream->localFillLevel -= event->header.size;
         releaseStream(stream);

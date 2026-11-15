@@ -175,6 +175,7 @@ typedef struct xLinkEvent_t {
     void* data2;
     int data2Size;
     XLinkPayloadLease* payloadLease;
+    bool dmaBuf;
 }xLinkEvent_t;
 
 #define XLINK_INIT_EVENT(event, in_streamId, in_type, in_size, in_data, in_deviceHandle) do { \
