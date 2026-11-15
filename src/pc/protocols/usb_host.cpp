@@ -735,7 +735,7 @@ struct XLinkGateTransaction {
         int rc = LIBUSB_ERROR_TIMEOUT;
         std::array<unsigned char, READ_SIZE + 23> buffer;
         for(unsigned attempt = 0; attempt < 4; ++attempt) {
-            const auto attemptDeadline = std::min(deadline, std::chrono::steady_clock::now() + std::chrono::seconds(2));
+            const auto attemptDeadline = (std::min)(deadline, std::chrono::steady_clock::now() + std::chrono::seconds(2));
             auto remaining = [&]() {
                 return std::chrono::duration_cast<std::chrono::milliseconds>(attemptDeadline - std::chrono::steady_clock::now()).count();
             };
@@ -780,7 +780,7 @@ struct XLinkGateTransaction {
                 const auto end = buffer.begin() + size;
                 const auto found = std::search(buffer.begin(), end, marker.begin(), marker.end());
                 if(found != end) return found + marker.size() == end ? LIBUSB_SUCCESS : LIBUSB_ERROR_IO;
-                retained = std::min(size, marker.size() - 1);
+                retained = (std::min)(size, marker.size() - 1);
                 std::memmove(buffer.data(), buffer.data() + size - retained, retained);
             }
         }
