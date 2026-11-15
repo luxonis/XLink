@@ -12,6 +12,7 @@
 #include "XLinkPlatformErrorUtils.h"
 #include "XLinkStringUtils.h"
 #include "usb_host.h"
+#include "usb_host_memory.h"
 #include "pcie_host.h"
 #include "tcpip_host.h"
 #include "local_memshd.h"
@@ -115,6 +116,16 @@ int XLinkPlatformWriteRetained(xLinkEvent_t* event)
     return tcpipPlatformWriteRetained(event);
 }
 
+int XLinkPlatformSupportsDmaBuf(xLinkDeviceHandle_t* deviceHandle)
+{
+    return deviceHandle->protocol == X_LINK_USB_EP && usbPlatformSupportsDmaBuf(deviceHandle->xLinkFD);
+}
+
+int XLinkPlatformWriteDmaBuf(xLinkEvent_t* event)
+{
+    return usbPlatformWriteDmaBuf(event);
+}
+
 XLinkError_t XLinkPlatformGetRetainedSendStats(xLinkDeviceHandle_t* deviceHandle, XLinkRetainedSendStats_t* stats)
 {
     if (deviceHandle->protocol != X_LINK_TCP_IP) return X_LINK_NOT_IMPLEMENTED;
@@ -168,6 +179,30 @@ int XLinkPlatformRead(xLinkDeviceHandle_t *deviceHandle, void *data, int size, l
     }
 }
 
+int XLinkPlatformGateBegin(const char* name, XLinkGateTransaction** transaction)
+{
+    if(transaction) *transaction = NULL;
+    if(!XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
+        return X_LINK_PLATFORM_DRIVER_NOT_LOADED + X_LINK_USB_EP;
+    }
+    return usbPlatformGateBegin(name, transaction);
+}
+
+int XLinkPlatformGateTransactionWrite(XLinkGateTransaction* transaction, const void* data, int size, int timeout)
+{
+    return usbPlatformGateTransactionWrite(transaction, data, size, timeout);
+}
+
+int XLinkPlatformGateTransactionRead(XLinkGateTransaction* transaction, void* data, int size, int timeout)
+{
+    return usbPlatformGateTransactionRead(transaction, data, size, timeout);
+}
+
+int XLinkPlatformGateEnd(XLinkGateTransaction* transaction, XLinkGateOutcome outcome)
+{
+    return usbPlatformGateEnd(transaction, outcome);
+}
+
 int XLinkPlatformGateWrite(const char *name, void *data, int size, int timeout)
 {
     if(!XLinkIsProtocolInitialized(X_LINK_USB_EP)) {
@@ -215,10 +250,20 @@ void* XLinkPlatformAllocateData(uint32_t size, uint32_t alignment)
     return ret;
 }
 
+void* XLinkPlatformAllocateReadData(xLinkDeviceHandle_t* deviceHandle, uint32_t size, uint32_t alignment)
+{
+    if (!data_allocate && (deviceHandle->protocol == X_LINK_USB_EP || deviceHandle->protocol == X_LINK_USB_VSC)) {
+        void* mapped = usbAllocateReadBuffer(deviceHandle->xLinkFD, size, alignment);
+        if (mapped) return mapped;
+    }
+    return XLinkPlatformAllocateData(size, alignment);
+}
+
 void XLinkPlatformDeallocateData(void *ptr, uint32_t size, uint32_t alignment)
 {
     if (!ptr)
         return;
+    if (usbFreeReadBuffer(ptr)) return;
     if (data_deallocate) {
         data_deallocate(ptr, size, alignment, data_allocator_context);
         return;
