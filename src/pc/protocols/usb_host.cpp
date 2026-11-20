@@ -96,6 +96,16 @@ static UsbSetupPacket bootBootloaderPacket{
 
 
 static std::mutex mutex;
+
+// Handles lent out by XLinkGetUsbDeviceHandle: closing one while it is lent (the link went down) waits for the last
+// XLinkReleaseUsbDeviceHandle, so the borrower never uses a freed handle
+struct LentUsbHandle {
+    int count = 0;
+    bool closeDeferred = false;
+    XLinkProtocol_t protocol = X_LINK_USB_VSC;
+};
+static std::mutex lentMutex;
+static std::unordered_map<libusb_device_handle*, LentUsbHandle> lentHandles;
 static libusb_context* context;
 
 int usbInitialize(void* options){
@@ -1214,7 +1224,17 @@ int usbPlatformClose(XLinkProtocol_t protocol, void *fdKey)
         mvLog(MVLOG_FATAL, "Cannot find USB Handle by key: %" PRIxPTR, (uintptr_t) fdKey);
         return -1;
     }
-    usbLinkClose(protocol, (libusb_device_handle *) tmpUsbHandle);
+    bool lent = false;
+    {
+        std::lock_guard<std::mutex> lock(lentMutex);
+        auto it = lentHandles.find((libusb_device_handle *) tmpUsbHandle);
+        if(it != lentHandles.end()) {
+            it->second.closeDeferred = true;
+            it->second.protocol = protocol;
+            lent = true;
+        }
+    }
+    if(!lent) usbLinkClose(protocol, (libusb_device_handle *) tmpUsbHandle);
 
     if(destroyPlatformDeviceFdKey(fdKey)){
         mvLog(MVLOG_FATAL, "Cannot destroy USB Handle key: %" PRIxPTR, (uintptr_t) fdKey);
@@ -1700,6 +1720,7 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
 
 XLinkError_t XLinkGetUsbDeviceHandle(linkId_t id, void** handle, int* interfaceNumber) {
     if(isServer || handle == nullptr || interfaceNumber == nullptr) return X_LINK_ERROR;
+    std::lock_guard<std::mutex> l(mutex);  // not while usbPlatformClose runs
     xLinkDesc_t* link = getLinkById(id);
     if(link == nullptr) return X_LINK_ERROR;
     int intf = -1;
@@ -1712,7 +1733,27 @@ XLinkError_t XLinkGetUsbDeviceHandle(linkId_t id, void** handle, int* interfaceN
     }
     void* h = nullptr;
     if(getPlatformDeviceFdFromKey(link->deviceHandle.xLinkFD, &h) != 0 || h == nullptr) return X_LINK_ERROR;
+    {
+        std::lock_guard<std::mutex> lock(lentMutex);
+        lentHandles[static_cast<libusb_device_handle*>(h)].count++;
+    }
     *handle = h;
     *interfaceNumber = intf;
     return X_LINK_SUCCESS;
+}
+
+void XLinkReleaseUsbDeviceHandle(void* handle) {
+    auto* h = static_cast<libusb_device_handle*>(handle);
+    LentUsbHandle last;
+    {
+        std::lock_guard<std::mutex> lock(lentMutex);
+        auto it = lentHandles.find(h);
+        if(it == lentHandles.end() || --it->second.count > 0) return;
+        last = it->second;
+        lentHandles.erase(it);
+    }
+    if(last.closeDeferred) {
+        std::lock_guard<std::mutex> l(mutex);  // as in usbPlatformClose
+        usbLinkClose(last.protocol, h);
+    }
 }
