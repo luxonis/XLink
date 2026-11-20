@@ -222,6 +222,17 @@ UsbSpeed_t XLinkGetUSBSpeed(linkId_t id);
 const char* XLinkGetMxSerial(linkId_t id);
 
 /**
+ * @brief Returns the libusb device handle under a USB link (host side) and the interface XLink claimed on it, so the
+ *        caller can use that interface's other endpoints next to XLink's own (its first bulk IN/OUT pair)
+ * @note Only in builds with libusb (XLINK_ENABLE_LIBUSB)
+ * @param[in] id - link Id obtained from XLinkConnect in the handler parameter
+ * @param[out] handle - the libusb_device_handle*, owned by XLink and valid until the link is closed
+ * @param[out] interfaceNumber - the claimed interface
+ * @return X_LINK_SUCCESS, or X_LINK_ERROR when the link is not a host USB link
+ */
+XLinkError_t XLinkGetUsbDeviceHandle(linkId_t id, void** handle, int* interfaceNumber);
+
+/**
  * @brief Returns enum string value
  * @return Pointer to null terminated string
  */

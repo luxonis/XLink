@@ -23,6 +23,10 @@
 #include "usb_mx_id.h"
 #include "usb_host.h"
 #include "../PlatformDeviceFd.h"
+#include "XLink/XLink.h"
+extern "C" {
+#include "XLink/XLinkPrivateFields.h"
+}
 
 // std
 #include <mutex>
@@ -1693,3 +1697,22 @@ std::string getWinUsbMxId(VidPid vidpid, libusb_device* dev) {
     return deviceId;
 }
 #endif
+
+XLinkError_t XLinkGetUsbDeviceHandle(linkId_t id, void** handle, int* interfaceNumber) {
+    if(isServer || handle == nullptr || interfaceNumber == nullptr) return X_LINK_ERROR;
+    xLinkDesc_t* link = getLinkById(id);
+    if(link == nullptr) return X_LINK_ERROR;
+    int intf = -1;
+    if(link->deviceHandle.protocol == X_LINK_USB_VSC) {
+        intf = USB_VSC_INTERFACE;
+    } else if(link->deviceHandle.protocol == X_LINK_USB_EP) {
+        intf = USB_EP_INTERFACE_DEVICE;
+    } else {
+        return X_LINK_ERROR;
+    }
+    void* h = nullptr;
+    if(getPlatformDeviceFdFromKey(link->deviceHandle.xLinkFD, &h) != 0 || h == nullptr) return X_LINK_ERROR;
+    *handle = h;
+    *interfaceNumber = intf;
+    return X_LINK_SUCCESS;
+}
