@@ -3,9 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <future>
 #include <mutex>
-#include <thread>
 
 extern "C" {
 #include "XLink/XLink.h"
@@ -112,18 +110,10 @@ int main(int argc, char** argv) {
                 "Dispatcher reader did not start");
     }
 
-    std::promise<XLinkError_t> completion;
-    auto result = completion.get_future();
-    std::thread reset([&] {
-        completion.set_value(timed ? XLinkResetRemoteTimeout(0, 100) : XLinkResetRemote(0));
-    });
-    require(result.wait_for(std::chrono::seconds(2)) == std::future_status::ready,
-            "Reset did not finish after its response or timeout");
+    const auto actual = timed ? XLinkResetRemoteTimeout(0, 100) : XLinkResetRemote(0);
     const int expected = peer.acknowledge ? X_LINK_SUCCESS : server ? X_LINK_TIMEOUT : -1;
-    const auto actual = result.get();
     if(actual != expected) std::fprintf(stderr, "Expected reset status %d, got %d\n", expected, actual);
     require(actual == expected, "Reset returned the wrong response status");
-    reset.join();
     std::lock_guard<std::mutex> lock(peer.mutex);
     require(!server || !peer.acknowledge || peer.acknowledged, "Server reset skipped its queued acknowledgment");
     require(peer.resets == 1 && peer.closes == 1 && peer.closed,

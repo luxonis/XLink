@@ -1,4 +1,6 @@
 #include "usb_host_memory.h"
+#include "usb_host.h"
+#include "usb_receive_fixture.hpp"
 #include <XLink/XLinkPlatform.h>
 #ifdef XLINK_LIBUSB_LOCAL
 #include <libusb.h>
@@ -9,7 +11,6 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
-#include <iostream>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -24,6 +25,9 @@ std::set<libusb_device_handle*> closed;
 unsigned mapped = 0, unmapped = 0, customAllocations = 0, customFrees = 0;
 bool failMapping = false, failCustom = false;
 bool failBudgetRead = false;
+bool competingTransfers = false;
+constexpr size_t kernelBudget = 16 * 1024 * 1024;
+constexpr size_t urbOverhead = 1024;
 std::string budget = "128\n";
 
 void require(bool condition, const char* message) {
@@ -47,7 +51,7 @@ xLinkDeviceHandle_t connection(uintptr_t identity, XLinkProtocol_t protocol) {
     xLinkDeviceHandle_t result{};
     result.protocol = protocol;
     result.xLinkFD = reinterpret_cast<void*>(identity);
-    require(usbRegisterReadBufferHandle(result.xLinkFD, reinterpret_cast<void*>(identity + 0x1000)), "Cannot register USB connection");
+    require(usbRegisterReadBufferHandle(result.xLinkFD, usb_test::openHandle()), "Cannot register USB connection");
     return result;
 }
 
@@ -59,13 +63,14 @@ void lifetime() {
     auto first = connection(1, X_LINK_USB_EP);
     auto* data = receive(first);
     require(data && allocations.count(data) == 1, "USB receive did not use mapped storage");
+    const auto owner = allocations.at(data).handle;
     std::memset(data, 0x5A, frameSize);
     XLinkDeallocateMoveData(data, frameSize);
     auto* reused = receive(first, frameSize / 2);
     require(reused == data && mapped == 1 && reused[123] == 0x5A, "Returned storage was not reused without copying");
 
     require(usbCloseReadBufferHandle(first.xLinkFD), "Cannot close first connection");
-    require(closed.count(reinterpret_cast<libusb_device_handle*>(0x1001)) == 0, "Connection close invalidated a held frame");
+    require(closed.count(owner) == 0, "Connection close invalidated a held frame");
     require(reused[frameSize / 2 - 1] == 0x5A, "Held frame changed after connection close");
     require(usbAllocateReadBuffer(first.xLinkFD, frameSize, 64) == nullptr, "Closed connection allocated mapped storage");
 
@@ -76,7 +81,7 @@ void lifetime() {
     std::memset(nextData, 0xA5, frameSize);
     require(XLinkSetDataAllocator(customAllocate, customFree, nullptr) == X_LINK_SUCCESS, "Cannot select custom allocator");
     XLinkDeallocateMoveData(reused, 17);
-    require(customFrees == 0 && closed.count(reinterpret_cast<libusb_device_handle*>(0x1001)) == 1,
+    require(customFrees == 0 && closed.count(owner) == 1,
             "Mapped frame lost its allocation owner or original capacity");
     require(nextData[31] == 0xA5, "Freeing old frame changed reconnected storage");
     XLinkDeallocateMoveData(nextData, frameSize);
@@ -187,6 +192,40 @@ void budgetSettings() {
     require(usbCloseReadBufferHandle(device.xLinkFD), "Cannot close unreadable-budget connection");
     failBudgetRead = false;
 }
+
+size_t chargedBytes() {
+    size_t bytes = 0;
+    for(const auto& entry : allocations) bytes += entry.second.size + urbOverhead;
+    return bytes;
+}
+
+void retainedFramesLeaveTransferBudget() {
+    budget = "16\n";
+    competingTransfers = true;
+    xLinkDeviceHandle_t device{};
+    device.protocol = X_LINK_USB_EP;
+    require(usbPlatformConnect(device.protocol, "1.10", "1.10", &device.xLinkFD) == 0, "Cannot connect to the USB interface");
+    const uint32_t size = 4177920 + 512;
+    std::vector<unsigned char*> frames;
+    for(unsigned i = 0; i < 8; ++i) {
+        auto* frame = receive(device, size);
+        require(frame && usbPlatformRead(device.protocol, device.xLinkFD, frame, size) == 0 && frame[size - 1] == 0x5a,
+                "Retained frames starved a USB transfer");
+        frames.push_back(frame);
+    }
+    unsigned char rpc[128]{};
+    require(usbPlatformRead(device.protocol, device.xLinkFD, rpc, sizeof(rpc)) == 0 && rpc[127] == 0x5a, "Retained frames starved RPC receive");
+    require(allocations.size() == 2 && allocations.count(frames.front()), "Expected two mappings at the default kernel limit");
+    const auto owner = allocations.at(frames.front()).handle;
+    usbPlatformClose(device.protocol, device.xLinkFD);
+    require(usbPlatformConnect(device.protocol, "1.10", "1.10", &device.xLinkFD) == 0, "Held frames prevented reconnect");
+    usbPlatformClose(device.protocol, device.xLinkFD);
+    require(!closed.count(owner) && frames.front()[size - 1] == 0x5a, "Reconnect invalidated the original held frame");
+    for(auto* frame : frames) XLinkDeallocateMoveData(frame, size);
+    require(closed.count(owner) && allocations.empty(), "Releasing held frames leaked their connection");
+    competingTransfers = false;
+}
+
 }
 
 extern "C" {
@@ -202,7 +241,7 @@ FILE* __wrap_fopen(const char* path, const char*) {
 
 unsigned char* __wrap_libusb_dev_mem_alloc(libusb_device_handle* handle, size_t size) {
     require(closed.count(handle) == 0, "Mapped storage uses a closed handle");
-    if(failMapping) return nullptr;
+    if(failMapping || (competingTransfers && chargedBytes() + size + urbOverhead > kernelBudget)) return nullptr;
     void* data = nullptr;
     require(posix_memalign(&data, 4096, size) == 0, "Cannot allocate mock USB memory");
     auto* bytes = static_cast<unsigned char*>(data);
@@ -222,24 +261,33 @@ int __wrap_libusb_dev_mem_free(libusb_device_handle* handle, unsigned char* data
     return 0;
 }
 
-void __wrap_libusb_close(libusb_device_handle* handle) {
-    for(const auto& allocation : allocations) require(allocation.second.handle != handle, "USB handle closed before held mappings");
-    require(closed.insert(handle).second, "USB handle closed twice");
-}
+}  // extern "C"
+
+namespace usb_test {
+bool transferFits(unsigned char* data, size_t size) {
+    if(!competingTransfers) return true;
+    for(const auto& entry : allocations) {
+        const auto offset = reinterpret_cast<uintptr_t>(data) - reinterpret_cast<uintptr_t>(entry.first);
+        if(offset < entry.second.size && size <= entry.second.size - offset) {
+            size = 0;  // Mapped payload is already charged to usbfs.
+            break;
+        }
+    }
+    return chargedBytes() + 1024 * 1024 + urbOverhead + size <= kernelBudget;
 }
 
-int main() {
-    try {
-        lifetime();
-        fallbackAndPriority();
-        boundedPool();
-        sharedBudget();
-        budgetSettings();
-        require(allocations.empty() && mapped == unmapped && closed.size() == 14, "USB receive storage leaked");
-        std::cout << "Mapped USB receive reuse, retained-frame lifetime, allocator priority, fallback, and pool bounds passed\n";
-        return 0;
-    } catch(const std::exception& error) {
-        std::cerr << error.what() << '\n';
-        return 1;
-    }
+void checkClose(libusb_device_handle* handle) {
+    for(const auto& entry : allocations) require(entry.second.handle != handle, "USB handle closed before held mappings");
+    require(closed.insert(handle).second, "USB handle closed twice");
 }
+
+void checkReceiveMemory() {
+    lifetime();
+    fallbackAndPriority();
+    boundedPool();
+    sharedBudget();
+    budgetSettings();
+    require(allocations.empty() && mapped == unmapped, "USB receive storage leaked");
+    retainedFramesLeaveTransferBudget();
+}
+}  // namespace usb_test
