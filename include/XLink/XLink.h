@@ -329,6 +329,26 @@ XLinkError_t XLinkWriteData_(streamId_t streamId, const uint8_t* buffer, int siz
 XLinkError_t XLinkGateWrite(const char *name, void *data, int size, int timeout);
 XLinkError_t XLinkGateRead(const char *name, void *data, int size, int timeout);
 
+/** A Gate exchange owns the USB interface until XLinkGateEnd. Not thread-safe. */
+typedef struct XLinkGateTransaction XLinkGateTransaction;
+typedef enum {
+    XLINK_GATE_COMPLETE,
+    XLINK_GATE_ABORTED
+} XLinkGateOutcome;
+
+/** Claims Gate and completes its synchronization barrier when the interface advertises one. */
+XLinkError_t XLinkGateBegin(const char* name, XLinkGateTransaction** transaction);
+XLinkError_t XLinkGateTransactionWrite(XLinkGateTransaction* transaction, const void* data, int size, int timeout);
+XLinkError_t XLinkGateTransactionRead(XLinkGateTransaction* transaction, void* data, int size, int timeout);
+/**
+ * Releases and destroys the transaction. COMPLETE requires a fully consumed response.
+ * ABORTED after traffic clears queued endpoint data on the claimed interface.
+ * It cannot cancel an accepted command or prevent a late response. Never retry a
+ * mutation solely because its response was lost. A transfer error takes precedence
+ * over a reset error in the return value.
+ */
+XLinkError_t XLinkGateEnd(XLinkGateTransaction* transaction, XLinkGateOutcome outcome);
+
 /**
  * @brief Sends a package to initiate the writing of a file descriptor
  * @warning Actual size of the written data is ALIGN_UP(size, 64)
@@ -370,6 +390,21 @@ XLinkError_t XLinkWriteDataRetained(streamId_t streamId,
 
 /** Returns the Linux TCP connection totals for retained payload sends. */
 XLinkError_t XLinkGetRetainedSendStats(streamId_t streamId, XLinkRetainedSendStats_t* stats);
+
+/** True for a device-side Linux USB stream accepting DMA-BUF payloads.
+ * The OS must provide the FunctionFS DMA-BUF API. Other transports return false.
+ */
+int XLinkSupportsDmaBuf(streamId_t streamId);
+
+/** Send the first payloadSize bytes of a DMA-BUF, followed by copied metadata.
+ * The caller ends CPU access before calling and keeps the allocation immutable.
+ * Ownership is transferred on every return path, including errors. release is
+ * called only after USB has stopped reading the allocation. The host receives
+ * an ordinary XLink data packet; no file descriptor crosses the wire.
+ */
+XLinkError_t XLinkWriteDmaBuf(streamId_t streamId, int fd, int payloadSize,
+                            const uint8_t* trailer, int trailerSize,
+                            void* owner, void (*release)(void*));
 
 /**
  * @brief Sends a package to initiate the writing of data to a remote stream

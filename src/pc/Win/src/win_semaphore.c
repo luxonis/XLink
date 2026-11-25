@@ -80,8 +80,9 @@ int sem_timedwait(sem_t *sem, const struct timespec *ts) {
     unsigned long long t = (ts->tv_sec - cts.tv_sec) * 1000;
     t += (ts->tv_nsec - cts.tv_nsec) / 1000000;
 
-    if (WaitForSingleObject(s->handle, (DWORD)t) != WAIT_OBJECT_0) {
-        return ls_set_errno(EINVAL);
+    const DWORD result = WaitForSingleObject(s->handle, (DWORD)t);
+    if (result != WAIT_OBJECT_0) {
+        return ls_set_errno(result == WAIT_TIMEOUT ? ETIMEDOUT : EINVAL);
     }
 
     return 0;
